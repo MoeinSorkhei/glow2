@@ -1,0 +1,19 @@
+{
+  "iter": 200000,
+  "n_flow": 32,
+  "n_block": 4,
+  "lu": true,
+  "affine": true,
+  "n_bits": 5,
+  "lr": 1e-4,
+  "temperature": 0.7,
+  "n_samples": 30,
+
+
+  "datasets": {
+    "cityscapes_segmentation": "data/cityscapes/gtFine_trainvaltest/gtFine/train",
+    "celeba": "something..."
+  }
+}
+
+

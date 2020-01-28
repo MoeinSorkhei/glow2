@@ -11,28 +11,17 @@ logabs = lambda x: torch.log(torch.abs(x))
 
 
 class ActNorm(nn.Module):
-    """
-    Todo:
-        - check the functions in test cases
-        - document the code
-        - is the parameter 'return_logdet=True' really needed?we should always return log determinant.
-    """
     def __init__(self, in_channel, return_logdet=True):
         super().__init__()
 
         self.return_logdet = return_logdet
         self.loc = nn.Parameter(torch.zeros(1, in_channel, 1, 1))  # this operation is done channel-wise
-        self.scale = nn.Parameter(torch.ones(1, in_channel, 1, 1))  # loc, scale: vectors of shape [1, in_channel, 1, 1]
+        self.scale = nn.Parameter(torch.ones(1, in_channel, 1, 1))  # loc, scale: vectors applied to all channels
         self.register_buffer('initialized', torch.tensor(0, dtype=torch.uint8))
 
     def initialize(self, inp):
-        # NOT VERIFIED
         with torch.no_grad():
             flatten = inp.permute(1, 0, 2, 3).contiguous().view(inp.shape[1], -1)
-            # print(flatten.size())
-            # print(flatten, '\n\n')
-            # print(flatten.mean(1))
-
             mean = (
                 flatten.mean(1)
                     .unsqueeze(1)
@@ -48,17 +37,13 @@ class ActNorm(nn.Module):
                     .permute(1, 0, 2, 3)
             )
 
-            #print("In ActNorm initialize: found \n mean={}, size: {} \n\n std={}, size: {}".
-             #     format(mean, std, mean.shape, std.size()))
             # data dependent initialization
             self.loc.data.copy_(-mean)
             self.scale.data.copy_(1 / (std + 1e-6))
 
-    def forward(self, inp):  # GLOW FORWARD IS PYTORCH FORWARD???
-        # print('In [ActNorm] forward')
+    def forward(self, inp):
         _, _, height, width = inp.shape  # input of shape [bsize, in_channel, h, w]
 
-        # print(type(self.initialized.item()))
         if self.initialized.item() == 0:  # to be initialized the first time
             self.initialize(inp)
             self.initialized.fill_(1)
@@ -67,7 +52,6 @@ class ActNorm(nn.Module):
         scale_logabs = logabs(self.scale)
         log_det = height * width * torch.sum(scale_logabs)
 
-        # print('In [ActNorm] forward: done')
         if self.return_logdet:
             return self.scale * (inp + self.loc), log_det
         else:
@@ -78,27 +62,23 @@ class ActNorm(nn.Module):
 
 
 class InvConv1x1(nn.Module):
-    """
-    Todo:
-        - add LU decomposition
-    """
     def __init__(self, in_channel):
         super().__init__()
-        q, _ = torch.qr(torch.randn(in_channel, in_channel))  # why initialize orthogonal?
-        w = q.unsqueeze(2).unsqueeze(3)  # why not unsqueeze(0).unsqueeze(1)?
+        q, _ = torch.qr(torch.randn(in_channel, in_channel))
+        w = q.unsqueeze(2).unsqueeze(3)  # why not unsqueeze(0).unsqueeze(1)? (ablation)
         self.weight = nn.Parameter(w)  # the weight matrix
 
     def forward(self, inp):
         _, _, height, width = inp.shape
-        out = F.conv2d(inp, self.weight)  # applying 1x1 convolution - why not nn.Conv2D?
+        out = F.conv2d(inp, self.weight)
 
-        log_w = torch.slogdet(self.weight.squeeze().double())[1].float()  # use of double() and float()?
+        log_w = torch.slogdet(self.weight.squeeze().double())[1].float()  # use of double() and float()? (ablation)
         log_det = height * width * log_w
         return out, log_det
 
     def reverse(self, output):
-        return F.conv2d(  # why not nn.Conv2D?
-            output, self.weight.squeeze().inverse().unsqueeze(2).unsqueeze(3)  # how to make sure W is invertible?
+        return F.conv2d(
+            output, self.weight.squeeze().inverse().unsqueeze(2).unsqueeze(3)
         )
 
 
@@ -131,19 +111,18 @@ class InvConv1x1LU(nn.Module):
         self.w_s = nn.Parameter(logabs(w_s))
         self.w_u = nn.Parameter(w_u)
 
-    def forward(self, input):
-        # print('In [InvConv1x1LU] forward')
-        _, _, height, width = input.shape
+    def forward(self, inp):
+        _, _, height, width = inp.shape
 
         weight = self.calc_weight()
 
-        out = F.conv2d(input, weight)
+        out = F.conv2d(inp, weight)
         logdet = height * width * torch.sum(self.w_s)
 
-        # print('In [InvConv1x1LU] forward: done')
         return out, logdet
 
     def calc_weight(self):
+        # ablation: doing the following
         # why torch.exp(self.w_s)?
         # w_s is a matrix not a vector here?
         # s_sign changes while s is optimized, but is assumed to be fixed by register buffer. Why?
@@ -165,71 +144,62 @@ class ZeroInitConv2d(nn.Module):
     """
     To be used in the Affine Coupling step:
     The last convolution of each NN(), according to the paper is initialized with zeros, such that the each affine layer
-    initially performs an identity function (I have difficulty understanding this at the moment)
-
-    Todo:
-        - is the constructor defined in the best way?
-        - addressing the questions in the form of comments in the code
+    initially performs an identity function (at the moment, I have difficulty understanding why this is helpful)
     """
     def __init__(self, in_channel, out_channel, padding=1):
-        # padding: how many padding layes should be added to the sides of the input
         super().__init__()
 
         self.conv = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=3)  # why kernels_size = 3?
         self.conv.weight.data.zero_()
         self.conv.bias.data.zero_()
-        self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))  # why incorporating learnable scale?
+        self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))  # why incorporating learnable scale? (ablation)
 
     def forward(self, inp):
         # padding with additional 1 in each side to keep the spatial dimension unchanged after the convolution operation
-        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)  # why value=1?
+        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)  # why padding=1 each side and value=1 (ablation)?
         out = self.conv(out)
-        out = out * torch.exp(self.scale * 3)  # what is this for?
+        out = out * torch.exp(self.scale * 3)  # what is this for (ablation)?
         return out
 
 
 class AffineCoupling(nn.Module):
     """
-    Todo:
-        - document the code
-        - can the NN() be written as a more complex network such as ResNet?
+    This transforms part of the input tensor in a way that half of the output tensor in a way that half of the output
+    tensor is a non-linear function of the other half. This non-linearity is obtained through the stacking some CNNs.
     """
     def __init__(self, in_channel, n_filters=512, do_affine=True):
         super().__init__()
 
         self.do_affine = do_affine
         self.net = nn.Sequential(  # NN() in affine coupling
-            nn.Conv2d(in_channels=in_channel // 2, out_channels=n_filters, kernel_size=3, padding=1),  # why such params?
+            nn.Conv2d(in_channels=in_channel // 2, out_channels=n_filters, kernel_size=3, padding=1),  # why such params? (ablation study)
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
             nn.ReLU(inplace=True),
-            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channel)  # output channels size = input channels size
+            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channel)  # out_channel equal to in_channel
         )
 
-        # Initializing the params - ZeroConv2d has its won way of initialization and is initialized once created
-        self.net[0].weight.data.normal_(0, 0.05)  # other ways of initialization??
+        # Initializing the params
+        self.net[0].weight.data.normal_(0, 0.05)  # other ways of initialization?? (ablation study)
         self.net[0].bias.data.zero_()
 
         self.net[2].weight.data.normal_(0, 0.05)
         self.net[2].bias.data.zero_()
 
     def forward(self, inp):
-        # print('In [AffineCoupling] forward')
         inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
-        if self.do_affine:  # make out_b a non-linear function of inp_a
-            # passing inp_a through non-linearity (dimensions unchanged)
-            # when initializing AffineCoupling in_channel should be (in_b channels * 2)??
+        if self.do_affine:
             log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
-            s = F.sigmoid(log_s + 2)  # why not exp(.)? why + 2?
+            s = F.sigmoid(log_s + 2)  # why not exp(.)? why + 2? (ablation study)
 
-            out_b = (inp_b + t) * s  # why first + then *??  # are the channels equal after chunk??
-            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # CHECK THIS!
+            out_b = (inp_b + t) * s  # why first + then *??  (ablation study)
+            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # print and check shape (ablation)
 
-        else:  # note: ZeroConv2d(in_channel=n_filters, out_channel=in_channel) should also be changed in this case
+        else:
+            # note: ZeroConv2d(in_channel=n_filters, out_channel=in_channel) should also be changed for additive
             print('Not implemented... Use --affine')
             out_b, log_det = None, None
 
-        # print('In [AffineCoupling] forward: done')
         return torch.cat(tensors=[inp_a, out_b], dim=1), log_det
 
     def reverse(self, output):
@@ -248,8 +218,6 @@ class AffineCoupling(nn.Module):
 
 class Flow(nn.Module):
     """
-    Todo:
-        - change conv_lu parameter to True and implement it
     The Flow module does not change the dimensionality of its input.
     """
     def __init__(self, in_channel, do_affine=True, conv_lu=True):
@@ -260,14 +228,11 @@ class Flow(nn.Module):
         self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine)
 
     def forward(self, inp):
-        # print('In [Flow] forward')
         out, act_logdet = self.act_norm(inp)
         out, conv_logdet = self.inv_conv(out)
         out, affine_logdet = self.coupling(out)
 
         log_det = act_logdet + conv_logdet + affine_logdet
-
-        # print('In [Flow] forward: done')
         return out, log_det
 
     def reverse(self, output):
@@ -277,52 +242,36 @@ class Flow(nn.Module):
         return inp
 
 
-def gaussian_log_p(x, mean, log_sd): # gives the log density of a point according to the mean and sd of the Gaussian
+def gaussian_log_p(x, mean, log_sd):  # computes the log density of a point according to the mean and sd of the Gaussian
     return -0.5 * log(2 * pi) - log_sd - 0.5 * (x - mean) ** 2 / torch.exp(2 * log_sd)
 
 
-def gaussian_sample(eps, mean, log_sd):  # not sure what it does
+def gaussian_sample(eps, mean, log_sd):
     return mean + torch.exp(log_sd) * eps
 
 
 class Block(nn.Module):
     """
-    Todo:
-        - is the constructor defined in the best way?
-        - squeeze should be a function which takes the squeeze ratio
-            - lines to change:
-                - squeeze_dim = in_channel * 4
-                - self.gaussian = ZeroInitConv2d(in_channel=in_channel * 2, out_channel=in_channel * 4)
-                - squeezed = input.view(b_size, n_channel, height // 2, 2, width // 2, 2)
-
-    Note on the dimensionality: the input channel of each ZeroInitConv2d (which learns the mean and std of the
-    Gaussian) is in_channel * 2 because of the split operation before that, and the output channels is
-    in_channel * 4 because it should output the mean and std which are obtained by separating the ZeroInitConv2d output
-    along the channel.
+    Each of the Glow block.
     """
     def __init__(self, in_channel, n_flow, do_split=True, do_affine=True, conv_lu=True):
         super().__init__()
 
-        squeeze_dim = in_channel * 4  # channels after the Squeeze operation - why * 4?
-        self.do_split = do_split  # if the Block should split its output
+        squeeze_dim = in_channel * 4
+        self.do_split = do_split
 
         self.flows = nn.ModuleList()
-        for i in range(n_flow):  # note: each Flow is applied after Squeeze
+        for i in range(n_flow):
             self.flows.append(Flow(in_channel=squeeze_dim, do_affine=do_affine, conv_lu=conv_lu))
 
-        # gaussian: the density according to which zi (z corresponding to this Block) is distributed
+        # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
         if self.do_split:
             self.gaussian = ZeroInitConv2d(in_channel=in_channel * 2, out_channel=in_channel * 4)
         else:
             self.gaussian = ZeroInitConv2d(in_channel=in_channel * 4, out_channel=in_channel * 8)
 
-        # the mean and log_sd of gaussian is computed through the ZeroInitConv2d networks
-
     def forward(self, inp):
-        # print('In [Block] forward')
         b_size, in_channel, height, width = inp.shape
-        # print(...)
-        # squeeze operation
         squeezed = inp.view(b_size, in_channel, height // 2, 2, width // 2, 2)  # squeezing height and width
         squeezed = squeezed.permute(0, 1, 3, 5, 2, 4)  # putting 3, 5 at first to index the height and width easily
         out = squeezed.contiguous().view(b_size, in_channel * 4, height // 2, width // 2)  # squeeze into extra channels
@@ -333,11 +282,12 @@ class Block(nn.Module):
             out, log_det = flow(out)  # each flow step keeps the dimension unchanged
             total_log_det = total_log_det + log_det
 
-        if self.do_split:  # output shape [b_size, n_channel * 4, height // 2, width // 2]
+        # output shape [b_size, n_channel * 4, height // 2, width // 2]
+        if self.do_split:
             out, z_new = out.chunk(chunks=2, dim=1)  # split along the channel dimension
-            mean, log_sd = self.gaussian(out).chunk(chunks=2, dim=1)  # mean, log_sd the same size as z_new, out
-            log_p = gaussian_log_p(z_new, mean, log_sd)  # still cannot understand the goal of this and previous line
-            log_p = log_p.view(b_size, -1).sum(1)  # why view (bsize, -1)? sum(1)? what is dimension of log_p?
+            mean, log_sd = self.gaussian(out).chunk(chunks=2, dim=1)
+            log_p = gaussian_log_p(z_new, mean, log_sd)
+            log_p = log_p.view(b_size, -1).sum(1)  # why view (bsize, -1)? sum(1)? what is dimension of log_p? I should print it.
 
         else:
             zeros = torch.zeros_like(out)  # making zero output - why??
@@ -346,10 +296,18 @@ class Block(nn.Module):
             log_p = log_p.view(b_size, -1).sum(1)
             z_new = out
 
-        # print('In [Block] forward: done')
         return out, total_log_det, log_p, z_new
 
-    def reverse(self, output, eps=None, reconstruct=False):  # what are eps=None, reconstruct=False
+    def reverse(self, output, eps=None, reconstruct=False):
+        """
+        The reverse operation in each Block.
+        :param output: the input to the reverse function, latent variable from the previous Block.
+        :param eps: could be the latent variable already extracted in the forward pass. It is used for reconstruction of
+        an image with its extracted latent vectors. Otherwise (in the cases I uses) it is simply a sample of the unit
+        Gaussian (with temperature).
+        :param reconstruct: If true, eps is used for reconstruction.
+        :return: -
+        """
         inp = output
         if reconstruct:
             if self.split:
@@ -358,14 +316,13 @@ class Block(nn.Module):
                 inp = eps
         else:
             if self.do_split:
-                # does it mean for each input, z is distributed with a different gaussinan?
                 mean, log_sd = self.gaussian(inp).chunk(chunks=2, dim=1)
-                z = gaussian_sample(eps, mean, log_sd)  # what is eps??  # esp is None??
+                z = gaussian_sample(eps, mean, log_sd)
                 inp = torch.cat(tensors=[output, z], dim=1)
             else:
                 zeros = torch.zeros_like(inp)
                 mean, log_sd = self.gaussian(zeros).chunk(chunks=2, dim=1)
-                z = gaussian_sample(eps, mean, log_sd)  # esp is None??
+                z = gaussian_sample(eps, mean, log_sd)
                 inp = z
 
         for flow in self.flows[::-1]:
@@ -395,11 +352,11 @@ class Glow(nn.Module):
                                  conv_lu=conv_lu))
 
     def forward(self, inp):
-        # print('In [Glow] forward')
         """
         The forward functions take as input an image and performs all the operations to obtain z's: x->z
-        :param inp:
-        :return:
+        :param inp: the image to be encoded
+        :return: the extracted z's, log_det, and log_p_sum, the last two used to compute the log p(x) according to the
+        change of variables theorem.
         """
         log_p_sum = 0
         log_det = 0
@@ -412,18 +369,17 @@ class Glow(nn.Module):
             log_det = log_det + det
             log_p_sum = log_p_sum + log_p  # I am avoiding the if None condition as I do not know why it may be None
 
-        # print('In [Glow] forward: done')
         return log_p_sum, log_det, z_outs
 
     def reverse(self, z_list, reconstruct=False):
         """
-        The reverse function performs the operations in the path z->x.
-        :param z_list:
-        :param reconstruct:
-        :return:
+        The reverse function performs the operations in the direction z->x.
+        :param z_list: the list of z'a sampled from unit Gaussian (with temperature) for different Blocks.
+        :param reconstruct: is set to True if one wants to reconstruct the image with its extracted latent variables.
+        :return: the generated image.
         """
         inp = None
-        for i, block in enumerate(self.blocks[::-1]):  # NOT SURE WHAT IT DOES
+        for i, block in enumerate(self.blocks[::-1]):  # print to see what us ::-1
             if i == 0:
                 inp = block.reverse(output=z_list[-1], eps=z_list[-1], reconstruct=reconstruct)
             else:

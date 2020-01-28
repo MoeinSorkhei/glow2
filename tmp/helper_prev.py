@@ -2,28 +2,6 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 
-def calc_z_shapes(n_channel, input_size, n_flow, n_block):
-    """
-    This function calculates z shapes given the desired number of blocks in the Glow model. After each block, the
-    spatial dimension is halved and the number of channels is doubled.
-    :param n_channel:
-    :param input_size:
-    :param n_flow:
-    :param n_block:
-    :return:
-    """
-    z_shapes = []
-    for i in range(n_block - 1):
-        input_size //= 2
-        n_channel *= 2
-        z_shapes.append((n_channel, input_size, input_size))
-
-    # for the very last block where we have no split operation
-    input_size //= 2
-    z_shapes.append((n_channel * 4, input_size, input_size))
-    return z_shapes
-
-
 def sample_data(path, batch_size, image_size):
     """
     Todo:

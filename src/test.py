@@ -1,7 +1,5 @@
 import torch
-import model
-
-import data_handler
+from src import model, data_handler
 
 
 def test_actnorm(which_fn):

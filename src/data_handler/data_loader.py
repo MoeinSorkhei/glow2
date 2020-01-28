@@ -42,12 +42,6 @@ class Dataset(data.Dataset):
         # removing the alpha channel by throwing away the fourth channels
         if self.remove_alpha:
             img_tensor = img_tensor[0:3, :, :]
-
-        '''for i in range(3):
-            print(img_tensor[i, :, :])
-        print(img_tensor.shape)
-        input()'''
-
         return img_tensor
 
 

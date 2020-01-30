@@ -1,5 +1,6 @@
 from math import log
-from src import data_handler
+# from src import data_handler
+import data_handler
 import os
 import torch
 from torchvision import utils
@@ -42,15 +43,23 @@ def calc_z_shapes(n_channel, input_size, n_flow, n_block):
     return z_shapes
 
 
-def train(args, params, model, model_single, optimizer, in_channels, device, comet_tracker=None, resume=False, last_optim_step=0):
-    loader_params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 4}
-    data_loader = data_handler.init_data_loader(data_folder=params['datasets'][args.dataset],
-                                                dataset_name=args.dataset,
-                                                image_size=args.img_size,
-                                                remove_alpha=True,  # removing the alpha channel not used for generation
-                                                loader_params=loader_params)
+def train(args, params, model, model_single, optimizer, in_channels,
+          device, comet_tracker=None, resume=False, last_optim_step=0):
+    loader_params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 0}
+
+    if args.dataset == 'cityscapes_segmentation' or args.dataset == 'cityscapes_leftImg8bit':
+        data_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
+                                                    dataset_name=args.dataset,
+                                                    image_size=args.img_size,
+                                                    remove_alpha=True,  # removing the alpha channel
+                                                    loader_params=loader_params)
+    else:  # MNIST
+        data_loader = data_handler.init_mnist_loader(mnist_folder=params['data_folder'],
+                                                     img_size=args.img_size,
+                                                     loader_params=loader_params)
+
     n_bins = 2. ** params['n_bits']
-    z_sample = []
+    z_sample = []  # sampled z's used to show evolution of the generated images during training
     z_shapes = calc_z_shapes(in_channels, args.img_size, params['n_flow'], params['n_block'])
 
     for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
@@ -98,7 +107,7 @@ def train(args, params, model, model_single, optimizer, in_channels, device, com
                     print('In [train]: created path "samples"...')
 
                 with torch.no_grad():
-                    sampled_images = model_single.reverse(z_sample).cpu().data  # why .CPU?
+                    sampled_images = model_single.reverse(z_sample).cpu().data  # why .CPU?, why model_single?
                     utils.save_image(sampled_images, f'samples/{str(optim_step).zfill(6)}.png', nrow=10)
 
                     '''utils.save_image(

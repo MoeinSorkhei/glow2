@@ -1,6 +1,6 @@
-from src.model import Glow
-from src.helper import init_comet
-from src.train import train, resume_training
+from model import Glow
+from helper import init_comet
+from train import train, resume_training
 
 import argparse
 import json
@@ -23,7 +23,7 @@ def read_params_and_args():
 
     # reading params from the json file
     with open('params.json', 'r') as f:
-        parameters = json.load(f)
+        parameters = json.load(f)[arguments.dataset]  # parameters related to the wanted dataset
 
     return arguments, parameters
 
@@ -34,7 +34,7 @@ def main():
 
     # initializing the model and the optimizer
     # RGB images, if image is PNG, the alpha channel will be removed
-    in_channels = 3
+    in_channels = params['channels']
     model_single = Glow(
         in_channels, params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
     )

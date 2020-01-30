@@ -6,7 +6,7 @@ import os
 from PIL import Image
 
 
-class Dataset(data.Dataset):
+class CityDataset(data.Dataset):
     def __init__(self, data_folder, dataset_name, img_size, remove_alpha):
         """
         Initializes a dataset to be given to a DataLoader.
@@ -45,7 +45,7 @@ class Dataset(data.Dataset):
         return img_tensor
 
 
-def init_data_loader(data_folder, dataset_name, image_size, remove_alpha, loader_params):
+def init_city_loader(data_folder, dataset_name, image_size, remove_alpha, loader_params):
     """
     Initializes and returns a data loader based on the data_folder and dataset_name.
     :param data_folder: the folder to read the images from
@@ -53,7 +53,7 @@ def init_data_loader(data_folder, dataset_name, image_size, remove_alpha, loader
     :param loader_params: a dictionary containing the DataLoader parameters such batch_size and so on.
     :return: the initialized data loader
     """
-    dataset = Dataset(data_folder, dataset_name, image_size, remove_alpha)
+    dataset = CityDataset(data_folder, dataset_name, image_size, remove_alpha)
     data_loader = data.DataLoader(dataset, **loader_params)
     return data_loader
 

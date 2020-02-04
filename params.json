@@ -10,7 +10,8 @@
     "temperature": 0.7,
     "n_samples": 30,
     "channels": 1,
-    "data_folder": "data/mnist"
+    "data_folder": "../data/mnist",
+    "checkpoints_path": "../checkpoints/mnist"
   },
 
   "cityscapes_segmentation": {
@@ -24,7 +25,7 @@
     "temperature": 0.7,
     "n_samples": 30,
     "channels": 3,
-    "data_folder": "data/cityscapes/gtFine_trainvaltest/gtFine/train"
+    "data_folder": "../data/cityscapes/gtFine_trainvaltest/gtFine/train",
+    "checkpoints_path": "../checkpoints/cityscapes_segmentation"
   }
 }
-

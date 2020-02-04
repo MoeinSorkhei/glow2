@@ -5,6 +5,8 @@ import numpy as np
 from torchvision import transforms
 from PIL import Image
 
+from helper import translate_address
+
 
 class MnistDataset(data.Dataset):
     def __init__(self, data_folder, img_size):
@@ -33,6 +35,7 @@ def init_mnist_loader(mnist_folder, img_size, loader_params):
 
 
 def read_mnist(mnist_folder, verbose=False):
+    # mnist_folder = translate_address(mnist_folder, 'data_handler')  # address readable from this package
     imgs_path = mnist_folder + '/train-images-idx3-ubyte'
     labels_path = mnist_folder + '/train-labels-idx1-ubyte'
 

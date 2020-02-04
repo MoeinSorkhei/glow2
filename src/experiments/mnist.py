@@ -1,4 +1,4 @@
-from src import data_handler
+from .. import data_handler
 import matplotlib.pyplot as plt
 import numpy as np
 import os

@@ -1,10 +1,11 @@
 import torch
-from src import model, data_handler
-from src import experiments
+from . import model, data_handler, train
+from . import experiments
+import json
 
 
 def test_actnorm(which_fn):
-    act = model.ActNorm(in_channel=2, return_logdet=False)
+    act = model.ActNorm(in_channel=2)
     mu, std = act.loc + 1, act.scale
 
     tens = torch.zeros((1, 2, 1, 1)) + 5
@@ -45,12 +46,23 @@ def test_save_mnist():
     experiments.save_mnist_rgb('data/mnist', 'data/mnist/images')
 
 
+def test_resume_train():
+    # reading params from the json file
+    with open('params.json', 'r') as f:
+        parameters = json.load(f)['mnist']  # parameters related to the wanted dataset
+
+    optim_step = 9000
+    device = torch.device('cpu')
+    train.resume_train(optim_step, parameters, device)
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
     # test_read_cityscapes()
     # test_read_mnist()
-    test_save_mnist()
+    # test_save_mnist()
+    test_resume_train()
 
 
 if __name__ == '__main__':
@@ -58,4 +70,6 @@ if __name__ == '__main__':
 
 
 # --dataset mnist --batch 128 --img_size 24
+# --dataset mnist --batch 128 --img_size 24 --resume_train --last_optim_step 9000
+
 # --dataset cityscapes_segmentation

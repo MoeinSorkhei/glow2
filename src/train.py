@@ -1,6 +1,6 @@
 from math import log
-# from src import data_handler
 import data_handler
+import helper
 import os
 import torch
 from torchvision import utils
@@ -66,13 +66,13 @@ def train(args, params, model, model_single, optimizer, in_channels,
         z_new = torch.randn(params['n_samples'], *z) * params['temperature']
         z_sample.append(z_new.to(device))
 
-    optim_step = last_optim_step if resume else 0
+    optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
 
     if resume:
         print(f'In [train]: resuming training from optim_step={optim_step}')
 
-    print(f'In [train]: sarting training with a data loader of size: {len(data_loader)}')
+    print(f'In [train]: training with a data loader of size: {len(data_loader)}')
     while optim_step < max_optim_steps:
         for i_batch, batch in enumerate(data_loader):
             batch = batch.to(device)
@@ -124,28 +124,41 @@ def train(args, params, model, model_single, optimizer, in_channels,
                     os.mkdir('checkpoints')
                     print('In [train]: created path "checkpoints"...')
 
-                torch.save(model.state_dict(), f'checkpoints/model_{str(optim_step).zfill(6)}.pt')
-                torch.save(optimizer.state_dict(), f'checkpoints/optim_{str(optim_step).zfill(6)}.pt')
+                # torch.save(model.state_dict(), f'checkpoints/model_{str(optim_step).zfill(6)}.pt')
+                # torch.save(optimizer.state_dict(), f'checkpoints/optim_{str(optim_step).zfill(6)}.pt')
+
+                helper.save_checkpoint(params['checkpoints_path'], model, optimizer, optim_step, loss)
                 print("Checkpoint saved at iteration", optim_step, '\n')
 
             optim_step += 1
 
 
-def resume_training(glow, opt, optim_step, arguments, parameters, input_channels, comet_tracker):
-    model_path = f'checkpoints/model_{str(optim_step).zfill(6)}.pt'
-    optim_path = f'checkpoints/optim_{str(optim_step).zfill(6)}.pt'
-
-    glow.load_state_dict(torch.load(model_path))
-    glow = nn.DataParallel(glow)
-    # print('model load')
-    # input()
-
-    opt.load_state_dict(torch.load(optim_path))
-
-    # print('optim load')
-    # input()
-
-    # need to also save the z variables if we want to resume with exactly the same samples +
-    # optim_step, or epoch + last train loss
-    glow.train()  # set to train mode
-    train(arguments, parameters, glow, opt, input_channels, comet_tracker, resume=True, last_optim_step=optim_step)
+# def resume_train(optim_step, arguments, params, device):
+#     # optim_step = 9000
+#     model_path = f'checkpoints/model_{str(optim_step).zfill(6)}.pt'
+#     optim_path = f'checkpoints/optim_{str(optim_step).zfill(6)}.pt'
+#     model_single, model, optimizer = \
+#         helper.load_model_and_optimizer(model_path, optim_path, params, device, resume_train=True)
+#
+#     train(arguments, params, model, model_single, optimizer, params['channels'],
+#           device, comet_tracker=None, resume=True, last_optim_step=optim_step)
+#
+#
+# def resume_training_prev(glow, opt, optim_step, arguments, parameters, input_channels, comet_tracker):
+#     model_path = f'checkpoints/model_{str(optim_step).zfill(6)}.pt'
+#     optim_path = f'checkpoints/optim_{str(optim_step).zfill(6)}.pt'
+#
+#     glow.load_state_dict(torch.load(model_path))
+#     glow = nn.DataParallel(glow)
+#     # print('model load')
+#     # input()
+#
+#     opt.load_state_dict(torch.load(optim_path))
+#
+#     # print('optim load')
+#     # input()
+#
+#     # need to also save the z variables if we want to resume with exactly the same samples +
+#     # optim_step, or epoch + last train loss
+#     glow.train()  # set to train mode
+#     train(arguments, parameters, glow, opt, input_channels, comet_tracker, resume=True, last_optim_step=optim_step)

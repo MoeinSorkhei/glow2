@@ -1,6 +1,6 @@
 from model import Glow
-from helper import init_comet
-from train import train, resume_training
+from helper import load_checkpoint, init_comet
+from train import train
 
 import argparse
 import json
@@ -19,10 +19,11 @@ def read_params_and_args():
     parser.add_argument('--img_size', default=256, type=int, help='image size')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
+    parser.add_argument('--last_optim_step', type=int)
     arguments = parser.parse_args()
 
     # reading params from the json file
-    with open('params.json', 'r') as f:
+    with open('../params.json', 'r') as f:
         parameters = json.load(f)[arguments.dataset]  # parameters related to the wanted dataset
 
     return arguments, parameters
@@ -51,8 +52,19 @@ def main():
 
     # resume training
     if args.resume_train:
-        optim_step = 6000
-        resume_training(model, optimizer, optim_step, args, params, in_channels, tracker)
+        optim_step = args.last_optim_step
+        model_path = f'checkpoints/model_{str(optim_step).zfill(6)}.pt'
+        optim_path = f'checkpoints/optim_{str(optim_step).zfill(6)}.pt'
+
+        # model_single, model, optimizer = \
+        #     load_model_and_optimizer(model, model_single, optimizer, model_path, optim_path, device)
+
+        # resume_train(optim_step, args, params, device)
+        # resume_train(model, optimizer, optim_step, args, params, in_channels, tracker)
+        # save_checkpoint('checkpoints', optim_step, model, optimizer, loss=5.994)
+        model, optimizer, _ = load_checkpoint(params['checkpoints_path'], optim_step, model, optimizer, device)
+        train(args, params, model, model_single, optimizer, params['channels'],
+              device, tracker, resume=True, last_optim_step=optim_step)
 
     # train from scratch
     else:

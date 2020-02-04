@@ -10,3 +10,4 @@ tmp/
 sample
 samples
 checkpoints
+tmp/checkpoints

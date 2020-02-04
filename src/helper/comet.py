@@ -1,6 +1,15 @@
 from comet_ml import Experiment
 
 
+class CometTracker:
+    def __init__(self, comet_params, run_params):
+        self.experiment = Experiment(**comet_params)
+        self.experiment.log_parameters(run_params)
+
+    def track_metric(self, metric, value, step):
+        self.experiment.log_metric(metric, value, step)
+
+
 def init_comet(run_params):
     """
     This function uses the comet_ml package to track the experiment.
@@ -14,12 +23,3 @@ def init_comet(run_params):
     }
     tracker = CometTracker(comet_params, run_params)
     return tracker
-
-
-class CometTracker:
-    def __init__(self, comet_params, run_params):
-        self.experiment = Experiment(**comet_params)
-        self.experiment.log_parameters(run_params)
-
-    def track_metric(self, metric, value, step):
-        self.experiment.log_metric(metric, value, step)

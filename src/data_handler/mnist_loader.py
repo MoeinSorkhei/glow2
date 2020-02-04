@@ -5,12 +5,13 @@ import numpy as np
 from torchvision import transforms
 from PIL import Image
 
-from helper import translate_address
+from helper import label_to_tensor
 
 
 class MnistDataset(data.Dataset):
     def __init__(self, data_folder, img_size):
         # self.data_folder = data_folder
+        self.img_size = img_size
         self.imgs, self.labels = read_mnist(data_folder)
         self.transforms = transforms.Compose([transforms.Resize((img_size, img_size)),
                                               transforms.ToTensor()])
@@ -25,7 +26,7 @@ class MnistDataset(data.Dataset):
         # returning the torch tensors
         img_tensor = self.transforms(Image.fromarray(img))
         # return torch.from_numpy(img).unsqueeze(dim=0)  # adding the channel dimension
-        return img_tensor
+        return {'image': img_tensor, 'label': label_to_tensor(label, self.img_size, self.img_size), 'label2': label}
 
 
 def init_mnist_loader(mnist_folder, img_size, loader_params):
@@ -35,7 +36,6 @@ def init_mnist_loader(mnist_folder, img_size, loader_params):
 
 
 def read_mnist(mnist_folder, verbose=False):
-    # mnist_folder = translate_address(mnist_folder, 'data_handler')  # address readable from this package
     imgs_path = mnist_folder + '/train-images-idx3-ubyte'
     labels_path = mnist_folder + '/train-labels-idx1-ubyte'
 

@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
@@ -29,30 +30,6 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_t
     return model, optimizer, loss
 
 
-# def load_model_and_optimizer(model, model_single, optimizer, model_path, optim_path, device, resume_train=True):
-#     """
-#     I believe this function is not longer gonna be used.
-#     :param model:
-#     :param model_single:
-#     :param optimizer:
-#     :param model_path:
-#     :param optim_path:
-#     :param device:
-#     :param resume_train:
-#     :return:
-#     """
-#     # model_single.load_state_dict(torch.load(model_path, map_location=device))
-#     model.load_state_dict(torch.load(model_path, map_location=device))
-#     optimizer.load_state_dict(torch.load(optim_path, map_location=device))
-#     print('In [load_model_and_optimizer]: load state dict done')
-#
-#     # putting the model in the correct mode
-#     model.train() if resume_train else model.eval()  # model or model_single?
-#     model_single.train() if resume_train else model_single.eval()
-#
-#     return model_single, model, optimizer
-
-
 def translate_address(path, package):
     """
     This function changes a path which is from the project directory to a path readable by a specific package in the
@@ -68,3 +45,15 @@ def translate_address(path, package):
         return '../' + path
     else:
         raise NotImplementedError('NOT IMPLEMENTED...')
+
+
+def label_to_tensor(label, height, width, count=0):
+    if count == 0:
+        arr = np.zeros((10, height, width))
+        arr[label] = 1
+
+    else:
+        arr = np.zeros((count, 10, height, width))
+        arr[:, label, :, :] = 1
+
+    return torch.from_numpy(arr.astype(np.float32))

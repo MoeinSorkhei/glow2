@@ -17,6 +17,7 @@ def read_params_and_args():
     parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
     parser.add_argument('--dataset', type=str, help='the name of the dataset')
     parser.add_argument('--img_size', default=256, type=int, help='image size')
+    parser.add_argument('--conditional', action='store_true')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
@@ -36,11 +37,22 @@ def main():
     # initializing the model and the optimizer
     # RGB images, if image is PNG, the alpha channel will be removed
     in_channels = params['channels']
-    model_single = Glow(
+
+    if args.resume_train:
+        raise NotImplementedError('Need to take care of model single.')
+
+    '''if args.resume_train:
+        model_single = Glow(
+            in_channels, params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
+        )
+        model = nn.DataParallel(model_single)'''
+
+    model = Glow(
         in_channels, params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
     )
-    model = nn.DataParallel(model_single)
-    model = model.to(device)
+
+    # model = nn.DataParallel(model)
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
 
     tracker = None
@@ -50,12 +62,11 @@ def main():
         tracker = init_comet(run_params)
         print("Comet experiment initialized...")
 
+    reverse_cond = ('mnist', 1, params['n_samples']) if args.conditional else None
+
     # resume training
     if args.resume_train:
         optim_step = args.last_optim_step
-        model_path = f'checkpoints/model_{str(optim_step).zfill(6)}.pt'
-        optim_path = f'checkpoints/optim_{str(optim_step).zfill(6)}.pt'
-
         # model_single, model, optimizer = \
         #     load_model_and_optimizer(model, model_single, optimizer, model_path, optim_path, device)
 
@@ -63,12 +74,12 @@ def main():
         # resume_train(model, optimizer, optim_step, args, params, in_channels, tracker)
         # save_checkpoint('checkpoints', optim_step, model, optimizer, loss=5.994)
         model, optimizer, _ = load_checkpoint(params['checkpoints_path'], optim_step, model, optimizer, device)
-        train(args, params, model, model_single, optimizer, params['channels'],
-              device, tracker, resume=True, last_optim_step=optim_step)
+        train(args, params, model, optimizer,
+              device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
 
     # train from scratch
     else:
-        train(args, params, model, model_single, optimizer, in_channels, device, tracker)
+        train(args, params, model, optimizer, device, tracker, reverse_cond=reverse_cond)
 
 
 if __name__ == '__main__':

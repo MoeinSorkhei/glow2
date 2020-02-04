@@ -1,0 +1,16 @@
+NOTES:
+For running:
+    - We should be in the 'src' folder to run the. Do not run 'main.py' from any other folder.
+
+
+
+OBSERVATIONS:
+1. A very interesting observation I had during training the model on MNIST was that when I trained the model using the
+raw values provided in the dataset (gray-scale images where each pixel has a value from 0-255), the model had difficulty
+to produce any meaningful digit, all it was producing was simply meaningless noise.
+However, when I normalized the 8-bit value of each pixel to the 0-1 interval (by dividing by 255) it was able to produce
+digits very well. Interestingly, it seems that the huge variation between the pixel values in the case of the raw values
+disabled the model to learn the patterns, while the normalized values help the model better understand and generate the
+patterns.
+
+2. num_workers=4 is problematic on T4 as well

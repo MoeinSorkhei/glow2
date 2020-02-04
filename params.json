@@ -11,7 +11,8 @@
     "n_samples": 30,
     "channels": 1,
     "data_folder": "../data/mnist",
-    "checkpoints_path": "../checkpoints/mnist"
+    "checkpoints_path": "../checkpoints/mnist",
+    "samples_path": "../samples/mnist"
   },
 
   "cityscapes_segmentation": {
@@ -26,6 +27,7 @@
     "n_samples": 30,
     "channels": 3,
     "data_folder": "../data/cityscapes/gtFine_trainvaltest/gtFine/train",
-    "checkpoints_path": "../checkpoints/cityscapes_segmentation"
+    "checkpoints_path": "../checkpoints/cityscapes_segmentation",
+    "samples_path": "../samples/cityscapes/cityscapes_segmentation"
   }
 }

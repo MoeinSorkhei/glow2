@@ -5,6 +5,7 @@ from math import log, pi
 
 import numpy as np
 from scipy import linalg as la
+from helper import label_to_tensor
 
 
 logabs = lambda x: torch.log(torch.abs(x))
@@ -164,12 +165,13 @@ class AffineCoupling(nn.Module):
     This transforms part of the input tensor in a way that half of the output tensor in a way that half of the output
     tensor is a non-linear function of the other half. This non-linearity is obtained through the stacking some CNNs.
     """
-    def __init__(self, in_channel, n_filters=512, do_affine=True):
+    def __init__(self, in_channel, n_filters=512, do_affine=True, conditional=True):
         super().__init__()
 
+        conv_channels = (in_channel // 2) + 10 if conditional else in_channel // 2  # extra 10 for class conditions
         self.do_affine = do_affine
         self.net = nn.Sequential(  # NN() in affine coupling
-            nn.Conv2d(in_channels=in_channel // 2, out_channels=n_filters, kernel_size=3, padding=1),  # why such params? (ablation study)
+            nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),  # why such params? (ablation study)
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
             nn.ReLU(inplace=True),
@@ -187,12 +189,17 @@ class AffineCoupling(nn.Module):
         inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
         if self.do_affine:
             if cond is not None:  # conditional
-                if cond[0] == 'MNIST':
+                if cond[0] == 'mnist':
                     # expects the cond to be of shape (B, 10, H, W) - B: batch size
-                    print('In [Block].[forward]: inp_a shape:', inp_a.shape)
+                    # print('In [Block].[forward]: inp_a shape:', inp_a.shape)
                     # concatenate condition along channel: C -> C+10
-                    inp_a_conditional = torch.cat(tensors=[inp_a, cond[1]], dim=1)
-                    print('In [Block].[forward]: inp_a_conditional shape:', inp_a_conditional.shape)
+                    # cond_tensor = label_to_tensor(label=cond[1], height=inp_a.shape[2], width=inp_a.shape[3])
+                    cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]  # truncate spatial dimension (more explanation)
+
+                    # print('cond_tensor shape:', cond_tensor.shape)
+                    inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)
+                    # print('In [Block].[forward]: inp_a_conditional shape:', inp_a_conditional.shape)
+                    # input()
 
                     log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
 
@@ -217,11 +224,16 @@ class AffineCoupling(nn.Module):
         out_a, out_b = output.chunk(chunks=2, dim=1)  # here we know that out_a = inp_a (see the forward fn)
         if self.do_affine:
             if cond is not None:
-                if cond[0] == 'MNIST':
+                if cond[0] == 'mnist':
                     # concatenate with the same condition as in the forward pass
-                    print('In [Block].[reverse]: out_a shape:', out_a.shape)
-                    out_a_conditional = torch.cat(tensors=[out_a, cond[1]], dim=1)
-                    print('In [Block].[reverse]: out_a_conditional shape:', out_a_conditional.shape)
+                    # print('In [Block].[reverse]: out_a shape:', out_a.shape)
+                    # cond_tensor = label_to_tensor(label=cond[1], height=out_a.shape[2], width=out_a.shape[3])
+                    label, n_samples = cond[1], cond[2]
+                    cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples)
+                    # cond_tensor = cond[1][:, :, :out_a.shape[2], :out_a.shape[3]]
+                    out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
+                    # print('In [Block].[reverse]: out_a_conditional shape:', out_a_conditional.shape)
+                    # input()
 
                     log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
                 else:
@@ -333,7 +345,7 @@ class Block(nn.Module):
         """
         inp = output
         if reconstruct:
-            if self.split:
+            if self.do_split:
                 inp = torch.cat([output, eps], 1)
             else:
                 inp = eps

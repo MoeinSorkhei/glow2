@@ -1,6 +1,8 @@
 import torch
-from . import model, data_handler, train
-from . import experiments
+import model
+import data_handler
+import train
+import experiments
 import json
 
 
@@ -56,13 +58,21 @@ def test_resume_train():
     train.resume_train(optim_step, parameters, device)
 
 
+def test_label_mnist():
+    label = 1
+    h, w = 20, 20
+    t = train.label_to_tensor(1, h, w)
+    print(t)
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
     # test_read_cityscapes()
     # test_read_mnist()
     # test_save_mnist()
-    test_resume_train()
+    # test_resume_train()
+    test_label_mnist()
 
 
 if __name__ == '__main__':
@@ -72,4 +82,5 @@ if __name__ == '__main__':
 # --dataset mnist --batch 128 --img_size 24
 # --dataset mnist --batch 128 --img_size 24 --resume_train --last_optim_step 9000
 
+# --dataset mnist --batch 128 --img_size 24 --conditional
 # --dataset cityscapes_segmentation

@@ -1,5 +1,5 @@
+from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from model import Glow
-from helper import load_checkpoint, init_comet
 from train import train
 
 import argparse
@@ -58,8 +58,9 @@ def main():
     tracker = None
     if args.use_comet:
         # experiment = Experiment(api_key="QLZmIFugp5kqZjA4XE2yNS0iZ", project_name="glow", workspace="moeinsorkhei")
-        run_params = {'data_folder': params['datasets'][args.dataset]}
-        tracker = init_comet(run_params)
+        # run_params = {'data_folder': params['datasets'][args.dataset]}
+        # tracker = init_comet(run_params)
+        tracker = init_comet(params)
         print("Comet experiment initialized...")
 
     reverse_cond = ('mnist', 1, params['n_samples']) if args.conditional else None

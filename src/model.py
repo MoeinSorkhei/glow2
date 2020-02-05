@@ -8,6 +8,9 @@ from scipy import linalg as la
 from helper import label_to_tensor
 
 
+# this device is accessible in all the functions in this file
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 logabs = lambda x: torch.log(torch.abs(x))
 
 
@@ -229,7 +232,7 @@ class AffineCoupling(nn.Module):
                     # print('In [Block].[reverse]: out_a shape:', out_a.shape)
                     # cond_tensor = label_to_tensor(label=cond[1], height=out_a.shape[2], width=out_a.shape[3])
                     label, n_samples = cond[1], cond[2]
-                    cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples)
+                    cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
                     # cond_tensor = cond[1][:, :, :out_a.shape[2], :out_a.shape[3]]
                     out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
                     # print('In [Block].[reverse]: out_a_conditional shape:', out_a_conditional.shape)

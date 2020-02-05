@@ -114,8 +114,8 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
             if optim_step % 100 == 0:
                 pth = params['samples_path']
                 if not os.path.exists(pth):
-                    os.mkdir(pth)
-                    print(f'In [train]: created path "{pth}"...')
+                    os.makedirs(pth)
+                    print(f'In [train]: created path "{pth}"')
 
                 with torch.no_grad():
                     sampled_images = model.reverse(z_sample, cond=reverse_cond).cpu().data  # why .CPU?, why model_single?
@@ -133,10 +133,10 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
             if optim_step % 1000 == 0:
                 pth = params['checkpoints_path']
                 if not os.path.exists(pth):
-                    os.mkdir(pth)
-                    print(f'In [train]: created path {pth}...')
+                    os.makedirs(pth)
+                    print(f'In [train]: created path "{pth}"')
 
-                helper.save_checkpoint(pth, model, optimizer, optim_step, loss)
+                helper.save_checkpoint(pth, optim_step, model, optimizer, loss)
                 print("Checkpoint saved at iteration", optim_step, '\n')
 
             optim_step += 1

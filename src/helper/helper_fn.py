@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import os
 
 
 def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
@@ -17,7 +18,10 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_t
     checkpoint = torch.load(name, map_location=device)
 
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
     loss = checkpoint['loss']
 
     print('In [load_checkpoint]: load state dict: done')
@@ -57,3 +61,9 @@ def label_to_tensor(label, height, width, count=0):
         arr[:, label, :, :] = 1
 
     return torch.from_numpy(arr.astype(np.float32))
+
+
+def make_dir_if_not_exists(directory):
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+        print(f'In [make_dir_if_not_exists]: created path "{directory}"')

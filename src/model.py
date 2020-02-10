@@ -66,7 +66,8 @@ class InvConv1x1(nn.Module):
     def __init__(self, in_channel):
         super().__init__()
         q, _ = torch.qr(torch.randn(in_channel, in_channel))
-        w = q.unsqueeze(2).unsqueeze(3)  # why not unsqueeze(0).unsqueeze(1)? (ablation)
+        # making it 1x1 conv: conv2d(in_channels=in_channel, out_channels=in_channel, kernel_size=1, stride=1)
+        w = q.unsqueeze(2).unsqueeze(3)
         self.weight = nn.Parameter(w)  # the weight matrix
 
     def forward(self, inp):
@@ -150,16 +151,16 @@ class ZeroInitConv2d(nn.Module):
     def __init__(self, in_channel, out_channel, padding=1):
         super().__init__()
 
-        self.conv = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=3)  # why kernels_size = 3?
+        self.conv = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=3)
         self.conv.weight.data.zero_()
         self.conv.bias.data.zero_()
-        self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))  # why incorporating learnable scale? (ablation)
+        self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
 
     def forward(self, inp):
         # padding with additional 1 in each side to keep the spatial dimension unchanged after the convolution operation
-        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)  # why padding=1 each side and value=1 (ablation)?
+        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)  # 1. why value=1 (ablation)? OpenAI? [ASKED]
         out = self.conv(out)
-        out = out * torch.exp(self.scale * 3)  # what is this for (ablation)?
+        out = out * torch.exp(self.scale * 3)  # 2. why having learnable scale? why * 3 why torch.exp()? [ASKED]
         return out
 
 
@@ -171,18 +172,20 @@ class AffineCoupling(nn.Module):
     def __init__(self, in_channel, n_filters=512, do_affine=True, conditional=True):
         super().__init__()
 
-        conv_channels = (in_channel // 2) + 10 if conditional else in_channel // 2  # extra 10 for class conditions
+        # conv_channels could have extra 10 for class conditions in MNIST
+        conv_channels = (in_channel // 2) + 10 if conditional else in_channel // 2
         self.do_affine = do_affine
-        self.net = nn.Sequential(  # NN() in affine coupling
-            nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),  # why such params? (ablation study)
+        self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
+            # padding=1 is equivalent to padding=(1, 1), adding extra zeros to both h and w dimensions
+            nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
             nn.ReLU(inplace=True),
-            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channel)  # out_channel equal to in_channel
+            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channel)  # channels dimension same as input
         )
 
         # Initializing the params
-        self.net[0].weight.data.normal_(0, 0.05)  # other ways of initialization?? (ablation study)
+        self.net[0].weight.data.normal_(0, 0.05)
         self.net[0].bias.data.zero_()
 
         self.net[2].weight.data.normal_(0, 0.05)
@@ -193,17 +196,10 @@ class AffineCoupling(nn.Module):
         if self.do_affine:
             if cond is not None:  # conditional
                 if cond[0] == 'mnist':
-                    # expects the cond to be of shape (B, 10, H, W) - B: batch size
-                    # print('In [Block].[forward]: inp_a shape:', inp_a.shape)
-                    # concatenate condition along channel: C -> C+10
-                    # cond_tensor = label_to_tensor(label=cond[1], height=inp_a.shape[2], width=inp_a.shape[3])
-                    cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]  # truncate spatial dimension (more explanation)
-
-                    # print('cond_tensor shape:', cond_tensor.shape)
-                    inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)
-                    # print('In [Block].[forward]: inp_a_conditional shape:', inp_a_conditional.shape)
-                    # input()
-
+                    # expects the cond to be of shape (B, 10, H, W). Concatenate condition along channel: C -> C+10
+                    # truncate spatial dimension so it spatially fits the actual tensor
+                    cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
+                    inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)  # dependent on the label as well
                     log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
 
                 else:
@@ -211,10 +207,10 @@ class AffineCoupling(nn.Module):
             else:
                 log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
 
-            s = F.sigmoid(log_s + 2)  # why not exp(.)? why + 2? (ablation study)
+            s = F.sigmoid(log_s + 2)  # 4. why not exp(.)? why + 2? (ablation study) [ASKED]
 
-            out_b = (inp_b + t) * s  # why first + then *??  (ablation study)
-            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # print and check shape (ablation)
+            out_b = (inp_b + t) * s  # 5. why first + then *?? [ASKED]
+            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # print and check shape for s and inp (lazy)
 
         else:
             # note: ZeroConv2d(in_channel=n_filters, out_channel=in_channel) should also be changed for additive
@@ -229,15 +225,9 @@ class AffineCoupling(nn.Module):
             if cond is not None:
                 if cond[0] == 'mnist':
                     # concatenate with the same condition as in the forward pass
-                    # print('In [Block].[reverse]: out_a shape:', out_a.shape)
-                    # cond_tensor = label_to_tensor(label=cond[1], height=out_a.shape[2], width=out_a.shape[3])
                     label, n_samples = cond[1], cond[2]
                     cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
-                    # cond_tensor = cond[1][:, :, :out_a.shape[2], :out_a.shape[3]]
                     out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
-                    # print('In [Block].[reverse]: out_a_conditional shape:', out_a_conditional.shape)
-                    # input()
-
                     log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
                 else:
                     raise NotImplementedError('In [Block] reverse: Condition not implemented...')
@@ -281,7 +271,7 @@ class Flow(nn.Module):
 
 
 def gaussian_log_p(x, mean, log_sd):  # computes the log density of a point according to the mean and sd of the Gaussian
-    return -0.5 * log(2 * pi) - log_sd - 0.5 * (x - mean) ** 2 / torch.exp(2 * log_sd)
+    return -0.5 * log(2 * pi) - log_sd - 0.5 * (x - mean) ** 2 / torch.exp(2 * log_sd)  # CONFIRMED TO BE UNDERSTOOD
 
 
 def gaussian_sample(eps, mean, log_sd):
@@ -325,7 +315,7 @@ class Block(nn.Module):
             out, z_new = out.chunk(chunks=2, dim=1)  # split along the channel dimension
             mean, log_sd = self.gaussian(out).chunk(chunks=2, dim=1)
             log_p = gaussian_log_p(z_new, mean, log_sd)
-            log_p = log_p.view(b_size, -1).sum(1)  # why view (bsize, -1)? sum(1)? what is dimension of log_p? I should print it.
+            log_p = log_p.view(b_size, -1).sum(1)  # why view (bsize, -1)? sum(1)? what is dimension of log_p? I should print it. (lazy)
 
         else:
             zeros = torch.zeros_like(out)  # making zero output - why??
@@ -417,9 +407,15 @@ class Glow(nn.Module):
         :return: the generated image.
         """
         inp = None
-        for i, block in enumerate(self.blocks[::-1]):  # print to see what us ::-1
+        for i, block in enumerate(self.blocks[::-1]):  # print to see what us ::-1 (lazy)
             if i == 0:
                 inp = block.reverse(output=z_list[-1], eps=z_list[-1], reconstruct=reconstruct, cond=cond)
             else:
                 inp = block.reverse(output=inp, eps=z_list[-(i + 1)], reconstruct=reconstruct, cond=cond)
         return inp
+
+
+def init_glow(params):
+    return Glow(
+        params['channels'], params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
+    )

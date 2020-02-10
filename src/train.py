@@ -44,6 +44,15 @@ def calc_z_shapes(n_channel, input_size, n_flow, n_block):
     return z_shapes
 
 
+def sample_z(z_shapes, n_samples, temperature, device):
+    z_samples = []
+    for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
+        z_new = torch.randn(n_samples, *z) * temperature
+        z_samples.append(z_new.to(device))
+
+    return z_samples
+
+
 def train(args, params, model, optimizer, device, comet_tracker=None,
           resume=False, last_optim_step=0, reverse_cond=None):
     loader_params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 0}
@@ -60,12 +69,10 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                                                      loader_params=loader_params)
     in_channels = params['channels']
     n_bins = 2. ** params['n_bits']
-    z_sample = []  # sampled z's used to show evolution of the generated images during training
     z_shapes = calc_z_shapes(in_channels, args.img_size, params['n_flow'], params['n_block'])
 
-    for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
-        z_new = torch.randn(params['n_samples'], *z) * params['temperature']
-        z_sample.append(z_new.to(device))
+    # sampled z's used to show evolution of the generated images during training
+    z_samples = sample_z(z_shapes, params['n_samples'], params['temperature'], device)
 
     optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
@@ -118,7 +125,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                     print(f'In [train]: created path "{pth}"')
 
                 with torch.no_grad():
-                    sampled_images = model.reverse(z_sample, cond=reverse_cond).cpu().data  # why .CPU?, why model_single?
+                    sampled_images = model.reverse(z_samples, cond=reverse_cond).cpu().data  # why .CPU?, why model_single?
                     utils.save_image(sampled_images, f'{pth}/{str(optim_step).zfill(6)}.png', nrow=10)
 
                     '''utils.save_image(

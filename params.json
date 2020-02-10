@@ -11,8 +11,15 @@
     "n_samples": 30,
     "channels": 1,
     "data_folder": "../data/mnist",
-    "checkpoints_path": "../checkpoints/mnist",
-    "samples_path": "../samples/mnist"
+    "checkpoints_path": {
+      "conditional": "../checkpoints/mnist/conditional",
+      "unconditional": "../checkpoints/mnist/unconditional"
+    },
+
+    "samples_path": {
+      "conditional": "../samples/mnist/conditional",
+      "unconditional": "../samples/mnist/unconditional"
+    }
   },
 
   "cityscapes_segmentation": {

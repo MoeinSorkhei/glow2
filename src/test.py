@@ -41,7 +41,10 @@ def test_read_cityscapes():
 
 
 def test_read_mnist():
-    experiments.visualize_mnist()
+    # do not know why the folder in which test.py runs is the project folder
+    # while the running folder for main.py is the 'src' folder
+    mnist_folder = "data/mnist"
+    experiments.visualize_mnist(mnist_folder, img_index=14)
 
 
 def test_save_mnist():
@@ -65,22 +68,27 @@ def test_label_mnist():
     print(t)
 
 
+def test_list(l):
+    l2 = [l[i] for i in range(len(l))]
+    l2.append('2')
+    print('l2:', l2)
+    print('l:', l)
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
     # test_read_cityscapes()
+
     # test_read_mnist()
     # test_save_mnist()
     # test_resume_train()
-    test_label_mnist()
+    # test_label_mnist()
+
+    l = ['2']
+    test_list(l)
+    print('l:', l)
 
 
 if __name__ == '__main__':
     main()
-
-
-# --dataset mnist --batch 128 --img_size 24
-# --dataset mnist --batch 128 --img_size 24 --resume_train --last_optim_step 9000
-
-# --dataset mnist --batch 128 --img_size 24 --conditional
-# --dataset cityscapes_segmentation

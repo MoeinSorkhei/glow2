@@ -19,28 +19,12 @@ def get_image(img_index, mnist_folder, img_size, ret_type):
     label = data_item['label2']
     label_tensor = data_item['label']
 
-    # img, label = ['image'], mnist_dataset[img_index]['label']
-
     if ret_type == '2d_img':
         return img.squeeze(dim=0), label
     elif ret_type == 'tensor':
         return img, label_tensor
     else:   # return as batch of size 1, determined by ret_type='batch'
         return img.unsqueeze(dim=0), label_tensor.unsqueeze(dim=0)
-
-
-def get_image_prev(mnist_folder, img_index):
-    # mnist_folder = 'data/mnist'
-    imgs, labels = data_handler.read_mnist(mnist_folder)
-
-    # index = 6  # index of the image to be visualized
-    img = imgs[img_index].reshape(28, 28) / 255
-    label = labels[img_index]
-
-    tensor_img = Image.fromarray(img)
-    print(tensor_img.shape)
-    input()
-    return img, label
 
 
 def visualize_mnist(mnist_folder, img_index=0):
@@ -80,64 +64,6 @@ def change_linear(z_samples, model, rev_cond, rep, val, save_path, mode):
 
         sign = '+' if mode == 'increment' else '-'
         utils.save_image(sampled_imgs, f'{save_path}/{sign}{change}.png', nrow=10)
-
-
-def interp_prev(args, params, reverse_cond, optim_step, device, mode='conditional'):
-    """
-    The goal of this experiment is to investigate how different z's in latent space contribute to the style of the
-    generated image. In order to do so, ...
-
-    Some info:
-        - image size: 24x24
-        - Number of blocks (z's): 3
-
-    Experiment 1:
-    Sample all the z's from their corresponding Gaussians. Keeping 2 of the z's constant and change the third by
-    sampling differently or linear change. In order to do, ...
-
-    Experiment 2:
-    Do the same thing as in Experiment 1 with different conditions (digits).
-
-    Experiment 3:
-    Given an new random image, extract its latent vectors and generate a new image using those latent vectors on another
-    digit. The goal is to use the style of an image to generate a new image of another digit (condition)
-    :return:
-
-    Experiment 4:
-    Generate different samples and digits (Fig. 6, 7 of the paper) - think more.
-    """
-
-    # load checkpoint and model
-    # mode = 'conditional' if conditional
-    # checkpoint_pth = \
-    #    params['checkpoints_path']['conditional'] if conditional else params['checkpoints_path']['unconditional']
-
-    checkpoint_pth = params['checkpoints_path'][mode]
-    save_path = params['samples_path'][mode] + f'/interpolation/{str(optim_step)}'
-
-    # create save_path directory
-    if not os.path.isdir(save_path):
-        os.makedirs(save_path)
-        print(f'In [mnist_interpolate]: path "{save_path}" created.')
-
-    # init model and load checkpoint
-    model = init_glow(params)
-    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, device, resume_train=False)
-
-    # sample z1, z2, z3
-    z_shapes = calc_z_shapes(params['channels'], args.img_size, params['n_flow'], params['n_block'])
-    z_samples = sample_z(z_shapes, params['n_samples'], params['temperature'], device)
-
-    # save image with current z samples
-    sampled_imgs = model.reverse(z_samples, cond=reverse_cond).cpu().data
-    utils.save_image(sampled_imgs, f'{save_path}/0.png', nrow=10)  # WHAT IS 0 IN THE IMAGE NAME TO SAVE????????????
-
-    # print(z_samples)
-    # input()
-
-    repetition, change = 10, 0.1
-    change_linear(deepcopy(z_samples), model, reverse_cond, repetition, change, save_path, mode='decrement')
-    change_linear(deepcopy(z_samples), model, reverse_cond, repetition, change, save_path, mode='increment')
 
 
 def interpolate(cond_config, interp_config, params, args, device, mode='conditional'):
@@ -189,9 +115,7 @@ def interpolate(cond_config, interp_config, params, args, device, mode='conditio
         coeff_name = '%.2f' % coeff if interp_config['type'] == 'limited' else round(coeff, 2)
         print(f'In [interpolate]: done for coeff {coeff_name}')
 
-        # utils.save_image(sampled_img, f'{save_path}/{coeff_name}.png', nrow=10)  # WHAT IS NROWS = 10?
-        # print(f'In [interpolate]: done for coeff {coeff_name}')
-    utils.save_image(all_sampled, f'{save_path}/[{interp_config["axis"]}]_{img_index1}-to-{img_index2}.png', nrow=10)
+    utils.save_image(all_sampled, f'{save_path}/{img_index1}-to-{img_index2}_[{interp_config["axis"]}].png', nrow=10)
 
 
 def new_condition(img_list, params, args, device):
@@ -220,5 +144,68 @@ def new_condition(img_list, params, args, device):
             all_sampled.append(sampled_img.squeeze(dim=0))  # removing the batch dimension (=1) for the sampled image
             print(f'In [new_condition]: sample with digit={digit} done.')
 
-        utils.save_image(all_sampled, f'{save_path}/img={img_num}.png')
+        utils.save_image(all_sampled, f'{save_path}/img={img_num}.png', nrow=10)
         print(f'In [new_condition]: done for img_num {img_num}')
+
+
+def resample_latent(img_info, all_resample_lst, params, args, device):
+    model, save_path = prepare_experiment(params, args, device, exp_name='resample_latent')
+    img, label = get_image(img_info['img'], params['data_folder'], args.img_size, ret_type='batch')
+
+    forward_cond = (args.dataset, label)
+    reverse_cond = ('mnist', img_info['label'], 1)
+    _, _, z_lst = model(img, forward_cond)
+    all_sampled_imgs = []
+
+    for resample_lst in all_resample_lst:
+        # reconstruct_lst = [False] * len(resample_lst)
+        z_samples = sample_z([z.squeeze(0).shape for z in z_lst],
+                             1, params['temperature'], device)  # squeeze to remove the batch dimension
+
+        if resample_lst == ['z1']:
+            reconstruct_lst = [False, True, True]
+            z_lst[0] = z_samples[0]  # re-sampling this z
+
+        elif resample_lst == ['z2']:
+            reconstruct_lst = [True, False, True]
+            z_lst[1] = z_samples[1]
+
+        elif resample_lst == ['z3']:
+            reconstruct_lst = [True, True, False]
+            z_lst[2] = z_samples[2]
+
+        elif resample_lst == ['z1', 'z2']:
+            reconstruct_lst = [False, False, True]
+            z_lst[0], z_lst[1] = z_samples[0], z_samples[1]
+
+        elif resample_lst == ['z2', 'z3']:
+            reconstruct_lst = [True, False, False]
+            z_lst[1], z_lst[2] = z_samples[1], z_samples[2]
+
+        elif resample_lst == ['z1', 'z2', 'z3']:
+            reconstruct_lst = [False, False, False]  # sample all again
+            z_lst = z_samples  # use the samples to generate the image
+
+        elif not resample_lst:  # no resampling
+            reconstruct_lst = [True, True, True]  # reconstruct all
+
+        else:
+            raise NotImplementedError
+
+        sampled_img = model.reverse(z_lst, reconstruct=reconstruct_lst, cond=reverse_cond).cpu().data
+        all_sampled_imgs.append(sampled_img.squeeze(0))
+
+    utils.save_image(all_sampled_imgs, f'{save_path}/img={img_info["img"]}.png', nrow=10)
+
+
+def prepare_experiment(params, args, device, exp_name):
+    checkpoint_pth = params['checkpoints_path']['conditional']  # always conditional
+    optim_step = args.last_optim_step
+    save_path = params['samples_path']['conditional'] + f'/{exp_name}'
+    make_dir_if_not_exists(save_path)
+
+    # init model and load checkpoint
+    model = init_glow(params)
+    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, device, resume_train=False)
+
+    return model, save_path

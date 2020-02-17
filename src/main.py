@@ -1,7 +1,7 @@
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from model import Glow, init_glow
 from train import train
-from experiments import interp_prev, interpolate, new_condition
+from experiments import interpolate, new_condition, resample_latent, get_image
 
 import argparse
 import json
@@ -27,6 +27,7 @@ def read_params_and_args():
     parser.add_argument('--exp', action='store_true')
     parser.add_argument('--interp', action='store_true')
     parser.add_argument('--new_cond', action='store_true')
+    parser.add_argument('--resample', action='store_true')
 
     arguments = parser.parse_args()
 
@@ -38,33 +39,16 @@ def read_params_and_args():
 
 
 def run_training(args, params):
-    # initializing the model and the optimizer
-    # RGB images, if image is PNG, the alpha channel will be removed
-    # in_channels = params['channels']
-
     if args.resume_train:
         raise NotImplementedError('Need to take care of model single.')
 
-    '''if args.resume_train:
-        model_single = Glow(
-            in_channels, params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
-        )
-        model = nn.DataParallel(model_single)'''
-
-    # model = Glow(
-    #     in_channels, params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
-    # )
     model = init_glow(params)
-
     # model = nn.DataParallel(model)
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
 
     tracker = None
     if args.use_comet:
-        # experiment = Experiment(api_key="QLZmIFugp5kqZjA4XE2yNS0iZ", project_name="glow", workspace="moeinsorkhei")
-        # run_params = {'data_folder': params['datasets'][args.dataset]}
-        # tracker = init_comet(run_params)
         tracker = init_comet(params)
         print("Comet experiment initialized...")
 
@@ -73,18 +57,9 @@ def run_training(args, params):
     # resume training
     if args.resume_train:
         optim_step = args.last_optim_step
-        # model_single, model, optimizer = \
-        #     load_model_and_optimizer(model, model_single, optimizer, model_path, optim_path, device)
-
-        # resume_train(optim_step, args, params, device)
-        # resume_train(model, optimizer, optim_step, args, params, in_channels, tracker)
-        # save_checkpoint('checkpoints', optim_step, model, optimizer, loss=5.994)
         mode = 'conditional' if args.conditional else 'unconditional'
-
-        # pth = params['checkpoints_path']['conditional'] if args.conditional \
-        #    else params['checkpoints_path']['unconditional']
-
         model, optimizer, _ = load_checkpoint(params['checkpoints_path'][mode], optim_step, model, optimizer, device)
+
         train(args, params, model, optimizer,
               device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
 
@@ -124,14 +99,15 @@ def run_interp_experiments(args, params):
         'img_index2': 58
     }
 
-    interp_conf_limited = {'type': 'limited', 'steps': 20, 'axis': 'z3'}
+    interp_conf_limited = {'type': 'limited', 'steps': 9, 'axis': 'all'}
     interp_conf_unlimited = {'type': 'unlimited', 'steps': 20, 'increment': 0.1, 'axis': 'z3'}
 
     # chosen running configs
-    c_config = cond_config_3
+    # c_config = cond_config_1
     i_config = interp_conf_limited
 
-    interpolate(c_config, i_config, params, args, device)
+    for c_config in [cond_config_0, cond_config_1, cond_config_2, cond_config_3, cond_config_4]:
+        interpolate(c_config, i_config, params, args, device)
 
 
 def run_new_cond_experiments(args, params):
@@ -143,6 +119,17 @@ def run_new_cond_experiments(args, params):
     new_condition(img_list, params, args, device)
 
 
+def run_resample_experiments(args, params):
+    img_indices = range(30)
+    labels = [get_image(idx, params['data_folder'], args.img_size, ret_type='2d_img')[1] for idx in img_indices]
+
+    for i in range(len(img_indices)):
+        img_info = {'img': img_indices[i], 'label': labels[i]}
+
+        all_resample_lst = [[], ['z1'], ['z2'], ['z3'], ['z1', 'z2'], ['z2', 'z3']]
+        resample_latent(img_info, all_resample_lst, params, args, device)
+
+
 def main():
     args, params = read_params_and_args()
     print('In [main]: arguments:', args)
@@ -152,6 +139,9 @@ def main():
 
     elif args.exp and args.new_cond:
         run_new_cond_experiments(args, params)
+
+    elif args.exp and args.resample:
+        run_resample_experiments(args, params)
 
     else:  # training
         run_training(args, params)
@@ -175,3 +165,6 @@ if __name__ == '__main__':
 
 # for new conditioning
 # --dataset mnist --exp --new_cond --img_size 24 --last_optim_step 12000
+
+# for resampling
+# --dataset mnist --exp --resample --img_size 24 --last_optim_step 12000

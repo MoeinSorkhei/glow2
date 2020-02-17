@@ -5,6 +5,7 @@ import train
 import experiments
 import json
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def test_actnorm(which_fn):
     act = model.ActNorm(in_channel=2)
@@ -75,6 +76,14 @@ def test_list(l):
     print('l:', l)
 
 
+def test_resample():
+    # reading params from the json file
+    with open('../params.json', 'r') as f:
+        parameters = json.load(f)['mnist']  # parameters related to the wanted dataset
+
+    experiments.resample_latent(img_index=7, resample_lst=['z1'], params=parameters, args=None, device=device)
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -85,9 +94,7 @@ def main():
     # test_resume_train()
     # test_label_mnist()
 
-    l = ['2']
-    test_list(l)
-    print('l:', l)
+    test_resample()
 
 
 if __name__ == '__main__':

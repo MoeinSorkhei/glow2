@@ -407,11 +407,13 @@ class Glow(nn.Module):
         :return: the generated image.
         """
         inp = None
+        rec_list = [reconstruct] * len(z_list) if reconstruct is True or reconstruct is False else reconstruct
+
         for i, block in enumerate(self.blocks[::-1]):  # print to see what us ::-1 (lazy)
             if i == 0:
-                inp = block.reverse(output=z_list[-1], eps=z_list[-1], reconstruct=reconstruct, cond=cond)
+                inp = block.reverse(output=z_list[-1], eps=z_list[-1], reconstruct=rec_list[-1], cond=cond)
             else:
-                inp = block.reverse(output=inp, eps=z_list[-(i + 1)], reconstruct=reconstruct, cond=cond)
+                inp = block.reverse(output=inp, eps=z_list[-(i + 1)], reconstruct=rec_list[-(i + 1)], cond=cond)
         return inp
 
 

@@ -165,6 +165,8 @@ def interpolate(cond_config, interp_config, params, args, device, mode='conditio
 
     coeff = 0
     steps = interp_config['steps']
+    all_sampled = []
+
     for step in range(steps + 1):
         if interp_config['type'] == 'limited':
             coeff = step / steps  # this is the increment factor: e.g. 1/5, 2/5, ..., 5/5
@@ -176,15 +178,20 @@ def interpolate(cond_config, interp_config, params, args, device, mode='conditio
 
         else:  # interpolation in only the fist axis and keeping others untouched
             axis = 0 if interp_config['axis'] == 'z1' else 1 if interp_config['axis'] == 'z2' else 2
+            # print(f'{interp_config["axis"]} shape: {z_list1[axis].shape}')
+            # input()
             z_list_inter = [z_list1[i] for i in range(len(z_list1))]  # deepcopy not available for these tensors
             z_list_inter[axis] = z_list1[axis] + coeff * z_diff[axis]
 
         sampled_img = model.reverse(z_list_inter, reconstruct=True, cond=rev_cond).cpu().data
+        all_sampled.append(sampled_img.squeeze(dim=0))
         # make naming consistent and easy to sort
         coeff_name = '%.2f' % coeff if interp_config['type'] == 'limited' else round(coeff, 2)
-
-        utils.save_image(sampled_img, f'{save_path}/{coeff_name}.png', nrow=10)  # WHAT IS NROWS = 10?
         print(f'In [interpolate]: done for coeff {coeff_name}')
+
+        # utils.save_image(sampled_img, f'{save_path}/{coeff_name}.png', nrow=10)  # WHAT IS NROWS = 10?
+        # print(f'In [interpolate]: done for coeff {coeff_name}')
+    utils.save_image(all_sampled, f'{save_path}/[{interp_config["axis"]}]_{img_index1}-to-{img_index2}.png', nrow=10)
 
 
 def new_condition(img_list, params, args, device):

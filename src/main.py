@@ -128,7 +128,7 @@ def run_interp_experiments(args, params):
     interp_conf_unlimited = {'type': 'unlimited', 'steps': 20, 'increment': 0.1, 'axis': 'z3'}
 
     # chosen running configs
-    c_config = cond_config_4
+    c_config = cond_config_3
     i_config = interp_conf_limited
 
     interpolate(c_config, i_config, params, args, device)
@@ -137,6 +137,7 @@ def run_interp_experiments(args, params):
 def run_new_cond_experiments(args, params):
     img_list = [2, 9, 26, 58]  # images to be conditioned on separately
     img_list = [14, 12, 23, 34]
+    img_list = [i for i in range(30)]
     # new_cond = ('mnist', 8, 1)
 
     new_condition(img_list, params, args, device)
@@ -160,7 +161,7 @@ if __name__ == '__main__':
     main()
 
 # --dataset mnist --batch 128 --img_size 24
-# --dataset mnist --batch 128 --img_size 24 --resume_train --last_optim_step 9000
+# --dataset mnist --conditional --batch 128 --img_size 24 --resume_train --last_optim_step 21000 --use_comet
 
 # --dataset mnist --batch 128 --img_size 24 --conditional
 # --dataset cityscapes_segmentation

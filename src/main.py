@@ -69,16 +69,16 @@ def run_training(args, params):
 
 
 def run_interp_experiments(args, params):
-    cond_config_1 = {
-        'reverse_cond': ('mnist', 1, 1),
-        'img_index1': 14,  # start of interpolation
-        'img_index2': 6
-    }
-
     cond_config_0 = {
         'reverse_cond': ('mnist', 0, 1),
         'img_index1': 1,
         'img_index2': 51
+    }
+
+    cond_config_1 = {
+        'reverse_cond': ('mnist', 1, 1),
+        'img_index1': 14,  # start of interpolation
+        'img_index2': 6
     }
 
     cond_config_2 = {
@@ -99,6 +99,36 @@ def run_interp_experiments(args, params):
         'img_index2': 58
     }
 
+    cond_config_5 = {
+        'reverse_cond': ('mnist', 5, 1),
+        'img_index1': 0,
+        'img_index2': 35
+    }
+
+    cond_config_6 = {
+        'reverse_cond': ('mnist', 6, 1),
+        'img_index1': 241,
+        'img_index2': 62
+    }
+
+    cond_config_7 = {
+        'reverse_cond': ('mnist', 7, 1),
+        'img_index1': 38,
+        'img_index2': 91
+    }
+
+    cond_config_8 = {
+        'reverse_cond': ('mnist', 8, 1),
+        'img_index1': 31,
+        'img_index2': 144
+    }
+
+    cond_config_9 = {
+        'reverse_cond': ('mnist', 9, 1),
+        'img_index1': 87,
+        'img_index2': 110
+    }
+
     interp_conf_limited = {'type': 'limited', 'steps': 9, 'axis': 'all'}
     interp_conf_unlimited = {'type': 'unlimited', 'steps': 20, 'increment': 0.1, 'axis': 'z3'}
 
@@ -106,14 +136,17 @@ def run_interp_experiments(args, params):
     # c_config = cond_config_1
     i_config = interp_conf_limited
 
-    for c_config in [cond_config_0, cond_config_1, cond_config_2, cond_config_3, cond_config_4]:
+    configs = [cond_config_0, cond_config_1, cond_config_2, cond_config_3, cond_config_4, cond_config_5,
+               cond_config_6, cond_config_7, cond_config_8, cond_config_9]
+    for c_config in configs:
         interpolate(c_config, i_config, params, args, device)
+        print('In [run_interp_experiments]: interpolation done for config with digit:', c_config['reverse_cond'][1])
 
 
 def run_new_cond_experiments(args, params):
-    img_list = [2, 9, 26, 58]  # images to be conditioned on separately
-    img_list = [14, 12, 23, 34]
-    img_list = [i for i in range(30)]
+    # img_list = [2, 9, 26, 58]  # images to be conditioned on separately
+    # img_list = [14, 12, 23, 34]
+    img_list = [i for i in range(30)]  # all the first 30 images
     # new_cond = ('mnist', 8, 1)
 
     new_condition(img_list, params, args, device)

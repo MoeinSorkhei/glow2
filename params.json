@@ -1,5 +1,6 @@
 {
   "mnist": {
+    "batch_size": 128,
     "iter": 100000,
     "n_flow": 32,
     "n_block": 3,
@@ -10,7 +11,9 @@
     "temperature": 0.7,
     "n_samples": 30,
     "channels": 1,
+    "img_size": [24, 24],
     "data_folder": "../data/mnist",
+
     "checkpoints_path": {
       "conditional": "../checkpoints/mnist/conditional",
       "unconditional": "../checkpoints/mnist/unconditional"
@@ -22,19 +25,33 @@
     }
   },
 
-  "cityscapes_segmentation": {
+  "cityscapes": {
+    "batch_size": 10,
     "iter": 200000,
     "n_flow": 32,
     "n_block": 4,
     "lu": true,
     "affine": true,
-    "n_bits": 5,
+    "n_bits": 8,
     "lr": 1e-4,
     "temperature": 0.7,
     "n_samples": 30,
     "channels": 3,
-    "data_folder": "../data/cityscapes/gtFine_trainvaltest/gtFine/train",
-    "checkpoints_path": "../checkpoints/cityscapes_segmentation",
-    "samples_path": "../samples/cityscapes/cityscapes_segmentation"
+    "img_size": [64, 128],
+
+    "data_folder": {
+      "segment": "../data/cityscapes/gtFine_trainvaltest/gtFine/train",
+      "real": "../data/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/train"
+    },
+
+    "checkpoints_path": {
+      "segment": "../checkpoints/city_segment",
+      "real": "../checkpoints/city_real"
+    },
+
+    "samples_path": {
+      "segment": "../samples/city_segment",
+      "real": "../samples/city_real"
+    }
   }
 }

@@ -10,10 +10,14 @@ from helper import label_to_tensor
 
 class MnistDataset(data.Dataset):
     def __init__(self, data_folder, img_size):
+        """
+        :param data_folder:
+        :param img_size: is of type list.
+        """
         # self.data_folder = data_folder
         self.img_size = img_size
         self.imgs, self.labels = read_mnist(data_folder)
-        self.transforms = transforms.Compose([transforms.Resize((img_size, img_size)),
+        self.transforms = transforms.Compose([transforms.Resize(img_size),
                                               transforms.ToTensor()])
 
     def __len__(self):
@@ -26,7 +30,9 @@ class MnistDataset(data.Dataset):
         # returning the torch tensors
         img_tensor = self.transforms(Image.fromarray(img))
         # return torch.from_numpy(img).unsqueeze(dim=0)  # adding the channel dimension
-        return {'image': img_tensor, 'label': label_to_tensor(label, self.img_size, self.img_size), 'label2': label}
+        return {'image': img_tensor,
+                'label': label_to_tensor(label, self.img_size[0], self.img_size[1]),
+                'label2': label}
 
 
 def init_mnist_loader(mnist_folder, img_size, loader_params):

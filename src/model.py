@@ -169,11 +169,19 @@ class AffineCoupling(nn.Module):
     This transforms part of the input tensor in a way that half of the output tensor in a way that half of the output
     tensor is a non-linear function of the other half. This non-linearity is obtained through the stacking some CNNs.
     """
-    def __init__(self, in_channel, n_filters=512, do_affine=True, conditional=True):
+    def __init__(self, in_channel, n_filters=512, do_affine=True, cond_shape=None):
         super().__init__()
 
         # conv_channels could have extra 10 for class conditions in MNIST
-        conv_channels = (in_channel // 2) + 10 if conditional else in_channel // 2
+        # conv_channels = (in_channel // 2) + 10 if conditional else in_channel // 2
+        # if condition == 'mnist':
+        #    conv_channels = (in_channel // 2) + 10  # extra 10 for class conditions in MNIST
+        # elif condition == 'city_segment':
+        #    conv_channels = (in_channel // 2) +
+
+        # adding extra channels for the condition (e.g., 10 for MNIST)
+        conv_channels = in_channel // 2 if cond_shape is None else (in_channel // 2) + cond_shape[0]
+
         self.do_affine = do_affine
         self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
             # padding=1 is equivalent to padding=(1, 1), adding extra zeros to both h and w dimensions
@@ -199,11 +207,16 @@ class AffineCoupling(nn.Module):
                     # expects the cond to be of shape (B, 10, H, W). Concatenate condition along channel: C -> C+10
                     # truncate spatial dimension so it spatially fits the actual tensor
                     cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
-                    inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)  # dependent on the label as well
-                    log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
+
+                elif cond[0] == 'city_segment':  # make it have the same h, w
+                    cond_tensor = cond[1].reshape((inp.shape[0], -1, inp.shape[2], inp.shape[3])).to(device)
 
                 else:
                     raise NotImplementedError('In [Block] forward: Condition not implemented...')
+
+                inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)  # dependent on the cond as well
+                log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
+
             else:
                 log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
 
@@ -227,10 +240,16 @@ class AffineCoupling(nn.Module):
                     # concatenate with the same condition as in the forward pass
                     label, n_samples = cond[1], cond[2]
                     cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
-                    out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
-                    log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
+
+                elif cond[0] == 'city_segment':
+                    cond_tensor = cond[1].reshape((out_a.shape[0], -1, out_a.shape[2], out_a.shape[3])).to(device)
+
                 else:
                     raise NotImplementedError('In [Block] reverse: Condition not implemented...')
+
+                out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
+                log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
+
             else:
                 log_s, t = self.net(out_a).chunk(chunks=2, dim=1)
 
@@ -248,12 +267,12 @@ class Flow(nn.Module):
     """
     The Flow module does not change the dimensionality of its input.
     """
-    def __init__(self, in_channel, do_affine=True, conv_lu=True):
+    def __init__(self, in_channel, do_affine=True, conv_lu=True, cond_shape=None):
         super().__init__()
 
         self.act_norm = ActNorm(in_channel=in_channel)
         self.inv_conv = InvConv1x1LU(in_channel) if conv_lu else InvConv1x1(in_channel)
-        self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine)
+        self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=cond_shape)
 
     def forward(self, inp, cond=None):
         out, act_logdet = self.act_norm(inp)
@@ -282,7 +301,7 @@ class Block(nn.Module):
     """
     Each of the Glow block.
     """
-    def __init__(self, in_channel, n_flow, do_split=True, do_affine=True, conv_lu=True):
+    def __init__(self, in_channel, n_flow, do_split=True, do_affine=True, conv_lu=True, cond_shape=None):
         super().__init__()
 
         squeeze_dim = in_channel * 4
@@ -290,7 +309,7 @@ class Block(nn.Module):
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
-            self.flows.append(Flow(in_channel=squeeze_dim, do_affine=do_affine, conv_lu=conv_lu))
+            self.flows.append(Flow(squeeze_dim, do_affine, conv_lu, cond_shape))
 
         # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
         if self.do_split:
@@ -329,6 +348,7 @@ class Block(nn.Module):
     def reverse(self, output, eps=None, reconstruct=False, cond=None):
         """
         The reverse operation in each Block.
+        :param cond:
         :param output: the input to the reverse function, latent variable from the previous Block.
         :param eps: could be the latent variable already extracted in the forward pass. It is used for reconstruction of
         an image with its extracted latent vectors. Otherwise (in the cases I uses) it is simply a sample of the unit
@@ -367,21 +387,27 @@ class Block(nn.Module):
 
 
 class Glow(nn.Module):
-    def __init__(self, in_channel, n_flows, n_blocks, do_affine=True, conv_lu=True):
+    def __init__(self, in_channel, n_flows, n_blocks, do_affine=True, conv_lu=True, cond_shapes=None):
         super().__init__()
 
         self.blocks = nn.ModuleList()
         n_channel = in_channel
+        cond_shapes = [None] * n_blocks if cond_shapes is None else cond_shapes  # None -> [None, None, ..., None]
+
         for i in range(n_blocks - 1):
-            self.blocks.append(Block(in_channel=n_channel, n_flow=n_flows, do_split=True,
-                                     do_affine=do_affine, conv_lu=conv_lu))
+            self.blocks.append(
+                Block(n_channel, n_flows, True, do_affine, conv_lu, cond_shapes[i])
+            )
             n_channel = n_channel * 2
-        self.blocks.append(Block(in_channel=n_channel, n_flow=n_flows, do_split=False, do_affine=do_affine,
-                                 conv_lu=conv_lu))
+
+        self.blocks.append(
+            Block(n_channel, n_flows, False, do_affine, conv_lu, cond_shapes[-1])
+        )
 
     def forward(self, inp, cond=None):
         """
         The forward functions take as input an image and performs all the operations to obtain z's: x->z
+        :param cond:
         :param inp: the image to be encoded
         :return: the extracted z's, log_det, and log_p_sum, the last two used to compute the log p(x) according to the
         change of variables theorem.
@@ -404,6 +430,7 @@ class Glow(nn.Module):
         The reverse function performs the operations in the direction z->x.
         :param z_list: the list of z'a sampled from unit Gaussian (with temperature) for different Blocks.
         :param reconstruct: is set to True if one wants to reconstruct the image with its extracted latent variables.
+        :param cond
         :return: the generated image.
         """
         inp = None
@@ -417,7 +444,7 @@ class Glow(nn.Module):
         return inp
 
 
-def init_glow(params):
+def init_glow(params, cond_shapes=None):
     return Glow(
-        params['channels'], params['n_flow'], params['n_block'], do_affine=params['affine'], conv_lu=params['lu']
+        params['channels'], params['n_flow'], params['n_block'], params['affine'], params['lu'], cond_shapes
     )

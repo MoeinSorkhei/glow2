@@ -1,7 +1,9 @@
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
+from helper import read_params, calc_cond_shapes
 from model import Glow, init_glow
 from train import train
 from experiments import interpolate, new_condition, resample_latent, get_image
+from data_handler import create_segment_cond
 
 import argparse
 import json
@@ -15,10 +17,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def read_params_and_args():
     parser = argparse.ArgumentParser(description='Glow trainer')
-    parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
+    # parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
     parser.add_argument('--dataset', type=str, help='the name of the dataset')
-    parser.add_argument('--img_size', default=256, type=int, help='image size')
-    parser.add_argument('--conditional', action='store_true')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
@@ -30,10 +30,7 @@ def read_params_and_args():
     parser.add_argument('--resample', action='store_true')
 
     arguments = parser.parse_args()
-
-    # reading params from the json file
-    with open('../params.json', 'r') as f:
-        parameters = json.load(f)[arguments.dataset]  # parameters related to the wanted dataset
+    parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
 
     return arguments, parameters
 
@@ -42,7 +39,17 @@ def run_training(args, params):
     if args.resume_train:
         raise NotImplementedError('Need to take care of model single.')
 
-    model = init_glow(params)
+    if args.dataset == 'mnist':
+        model = init_glow(params)
+        reverse_cond = ('mnist', 1, params['n_samples'])
+
+    else:
+        conditions = create_segment_cond(params['n_samples'], params['data_folder'],
+                                         params['img_size'], save_path=params["samples_path"]["real"])
+        reverse_cond = ('city_segment', conditions)
+        cond_shapes = calc_cond_shapes(conditions.shape[1:], params['channels'], params['img_size'], params['n_block'])
+        model = init_glow(params, cond_shapes)
+
     # model = nn.DataParallel(model)
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
@@ -51,8 +58,6 @@ def run_training(args, params):
     if args.use_comet:
         tracker = init_comet(params)
         print("Comet experiment initialized...")
-
-    reverse_cond = ('mnist', 1, params['n_samples']) if args.conditional else None
 
     # resume training
     if args.resume_train:
@@ -183,21 +188,17 @@ def main():
 if __name__ == '__main__':
     main()
 
-# --dataset mnist --batch 128 --img_size 24
-# --dataset mnist --conditional --batch 128 --img_size 24 --resume_train --last_optim_step 21000 --use_comet
+# ================ training
+# --dataset cityscapes --use_comet
 
-# --dataset mnist --batch 128 --img_size 24 --conditional
-# --dataset cityscapes_segmentation
+# ================ resume training (now throws NotImplementedError)
+# --dataset mnist --resume_train --last_optim_step 21000 --use_comet
 
+# ================ interpolation
+# --dataset mnist --exp --interp --last_optim_step 12000
 
-# for interp_prev
-# --dataset mnist --exp --img_size 24 --last_optim_step 12000 --conditional
+# ================  new conditioning
+# --dataset mnist --exp --new_cond --last_optim_step 12000
 
-# for the second interp
-# --dataset mnist --exp --interp --img_size 24 --last_optim_step 12000
-
-# for new conditioning
-# --dataset mnist --exp --new_cond --img_size 24 --last_optim_step 12000
-
-# for resampling
-# --dataset mnist --exp --resample --img_size 24 --last_optim_step 12000
+# ================  resampling
+# --dataset mnist --exp --resample --last_optim_step 12000

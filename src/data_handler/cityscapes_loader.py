@@ -6,6 +6,7 @@ import os
 from PIL import Image
 from torchvision import utils
 from helper import make_dir_if_not_exists
+from city_utility import *
 
 
 class CityDataset(data.Dataset):
@@ -50,6 +51,11 @@ class CityDataset(data.Dataset):
         real_img = self.transforms(Image.open(real_path))
         segment_img = self.transforms(Image.open(segment_path))
 
+        # getting object IDs with their repetitions in the image
+        json_path = segment_path[:-len('color.png')] + 'polygons.json'
+        id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
+                                        h=segment_img.shape[1], w=segment_img.shape[2])  # tensor of shape (34, h, w)
+
         # removing the alpha channel by throwing away the fourth channels
         if self.remove_alpha:
             real_img = real_img[0:3, :, :]
@@ -58,7 +64,8 @@ class CityDataset(data.Dataset):
         return {'real': real_img,
                 'segment': segment_img,
                 'real_path': self.real_img_paths[index],
-                'segment_path': self.seg_img_paths[index]}
+                'segment_path': self.seg_img_paths[index],
+                'id_repeats': id_repeats}
 
 
 def init_city_loader(data_folder, image_size, remove_alpha, loader_params):
@@ -118,10 +125,18 @@ def create_segment_cond(n_samples, data_folder, img_size, save_path=None):
 
     segmentations= torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
     real_imgs = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
+    id_repeats_batch = torch.zeros((n_samples, 34, img_size[0], img_size[1]))  # 34 different IDs
 
     for i in range(len(segs)):
         segmentations[i] = segs[i]
         real_imgs[i] = reals[i]
+
+    for i in range(id_repeats_batch.shape[0]):
+        json_path = seg_paths[i][:-len('color.png')] + 'polygons.json'
+        id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
+                                        h=img_size[0], w=img_size[1])  # tensor (34, h, w)
+        id_repeats_batch[i] = id_repeats
+        # print('id_repeats:', info_from_json(json_path)['id_repeats'])
 
     if save_path:
         make_dir_if_not_exists(save_path)
@@ -139,4 +154,19 @@ def create_segment_cond(n_samples, data_folder, img_size, save_path=None):
                 f.write("%s\n" % item)
         print('In [create_segment_cond]: saved the image paths')
 
-    return segmentations
+    return segmentations, id_repeats_batch
+
+
+def id_repeats_to_cond(id_repeats, h, w):
+    """
+    Transforms the list containing repetitions of object IDs to a tensor used as conditioning in the network.
+    :param id_repeats: The list containing the repetitions of the object IDs.
+    :param h
+    :param w
+    :return:
+    """
+    cond = torch.zeros((len(id_repeats), h, w))
+    for i in range(len(id_repeats)):
+        cond[i, :, :] = id_repeats[i]
+
+    return cond

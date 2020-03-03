@@ -33,7 +33,8 @@ def sample_z(z_shapes, n_samples, temperature, device):
 
 def train(args, params, model, optimizer, device, comet_tracker=None,
           resume=False, last_optim_step=0, reverse_cond=None):
-    loader_params = {'batch_size': params['batch_size'], 'shuffle': True, 'num_workers': 0}
+    batch_size = params['batch_size'] if args.dataset == 'mnist' else params['batch_size'][args.cond_mode]
+    loader_params = {'batch_size': batch_size, 'shuffle': True, 'num_workers': 0}
 
     if args.dataset == 'cityscapes':
         data_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
@@ -71,7 +72,16 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
             elif args.dataset == 'cityscapes':
                 img_batch = batch['real'].to(device)
                 segment_batch = batch['segment'].to(device)
-                cond = ('city_segment', segment_batch)
+
+                if args.cond_mode == 'segment':
+                    cond = ('city_segment', segment_batch)
+
+                elif args.cond_mode == 'segment_id':
+                    id_repeats_batch = batch['id_repeats'].to(device)
+                    cond = ('city_segment_id', segment_batch, id_repeats_batch)
+
+                    # print('in train: id_repeats_batch shape:', id_repeats_batch.shape, 'segment_batch shape:', segment_batch.shape)
+                    # input()
 
             # unconditional, without using any labels
             else:
@@ -105,7 +115,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             if optim_step % 100 == 0:
                 if args.dataset == 'cityscapes':
-                    pth = params['samples_path']['real']  # only 'real' for now
+                    pth = params['samples_path']['real'][args.cond_mode]  # only 'real' for now
                 else:
                     pth = params['samples_path']['conditional']
 
@@ -128,7 +138,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             if optim_step % 1000 == 0:
                 if args.dataset == 'cityscapes':
-                    pth = params['checkpoints_path']['real']  # only 'real' for now
+                    pth = params['checkpoints_path']['real'][args.cond_mode]  # only 'real' for now
                 else:
                     pth = params['checkpoints_path']['conditional']
 

@@ -211,6 +211,11 @@ class AffineCoupling(nn.Module):
                 elif cond[0] == 'city_segment':  # make it have the same h, w
                     cond_tensor = cond[1].reshape((inp.shape[0], -1, inp.shape[2], inp.shape[3])).to(device)
 
+                elif cond[0] == 'city_segment_id':  # segmentation + id repeats
+                    segment_tensor = cond[1].reshape((inp.shape[0], -1, inp.shape[2], inp.shape[3])).to(device)
+                    ids_tensor = cond[2][:, :, :inp_a.shape[2], :inp_a.shape[3]]
+                    cond_tensor = torch.cat(tensors=[segment_tensor, ids_tensor], dim=1)
+
                 else:
                     raise NotImplementedError('In [Block] forward: Condition not implemented...')
 
@@ -220,7 +225,7 @@ class AffineCoupling(nn.Module):
             else:
                 log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
 
-            s = F.sigmoid(log_s + 2)  # 4. why not exp(.)? why + 2? (ablation study) [ASKED]
+            s = torch.sigmoid(log_s + 2)  # 4. why not exp(.)? why + 2? (ablation study) [ASKED]
 
             out_b = (inp_b + t) * s  # 5. why first + then *?? [ASKED]
             log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # print and check shape for s and inp (lazy)
@@ -244,6 +249,11 @@ class AffineCoupling(nn.Module):
                 elif cond[0] == 'city_segment':
                     cond_tensor = cond[1].reshape((out_a.shape[0], -1, out_a.shape[2], out_a.shape[3])).to(device)
 
+                elif cond[0] == 'city_segment_id':
+                    segment_tensor = cond[1].reshape((out_a.shape[0], -1, out_a.shape[2], out_a.shape[3])).to(device)
+                    ids_tensor = cond[2][:, :, :out_a.shape[2], :out_a.shape[3]].to(device)
+                    cond_tensor = torch.cat(tensors=[segment_tensor, ids_tensor], dim=1)
+
                 else:
                     raise NotImplementedError('In [Block] reverse: Condition not implemented...')
 
@@ -253,7 +263,7 @@ class AffineCoupling(nn.Module):
             else:
                 log_s, t = self.net(out_a).chunk(chunks=2, dim=1)
 
-            s = F.sigmoid(log_s + 2)
+            s = torch.sigmoid(log_s + 2)
             inp_b = (out_b / s) - t
 
         else:

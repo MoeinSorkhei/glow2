@@ -23,6 +23,9 @@ def read_params_and_args():
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
 
+    # args for Cityscapes
+    parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
+
     # args mainly for the experiment mode
     parser.add_argument('--exp', action='store_true')
     parser.add_argument('--interp', action='store_true')
@@ -37,17 +40,28 @@ def read_params_and_args():
 
 def run_training(args, params):
     if args.resume_train:
-        raise NotImplementedError('Need to take care of model single.')
+        raise NotImplementedError('NOTE! Make sure to use the same segmentation images. Should I?.')
 
     if args.dataset == 'mnist':
         model = init_glow(params)
         reverse_cond = ('mnist', 1, params['n_samples'])
 
     else:
-        conditions = create_segment_cond(params['n_samples'], params['data_folder'],
-                                         params['img_size'], save_path=params["samples_path"]["real"])
-        reverse_cond = ('city_segment', conditions)
-        cond_shapes = calc_cond_shapes(conditions.shape[1:], params['channels'], params['img_size'], params['n_block'])
+        segmentations, id_repeats_batch = create_segment_cond(params['n_samples'],
+                                                              params['data_folder'],
+                                                              params['img_size'],
+                                                              params["samples_path"]["real"][args.cond_mode])
+        if args.cond_mode == 'segment':
+            reverse_cond = ('city_segment', segmentations)
+
+        elif args.cond_mode == 'segment_id':
+            reverse_cond = ('city_segment_id', segmentations, id_repeats_batch)
+
+        else:
+            raise NotImplementedError
+
+        cond_shapes = calc_cond_shapes(segmentations.shape[1:], params['channels'], params['img_size'],
+                                       params['n_block'], args.cond_mode)
         model = init_glow(params, cond_shapes)
 
     # model = nn.DataParallel(model)

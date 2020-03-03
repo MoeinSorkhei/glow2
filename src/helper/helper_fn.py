@@ -106,13 +106,21 @@ def calc_z_shapes(n_channel, input_size, n_block):
     return z_shapes
 
 
-def calc_cond_shapes(orig_shape, in_channels, img_size, n_block):
+def calc_cond_shapes(orig_shape, in_channels, img_size, n_block, mode):
     z_shapes = calc_z_shapes(in_channels, img_size, n_block)
     cond_shapes = []
 
     for z_shape in z_shapes:
         h, w = z_shape[1], z_shape[2]
-        channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
+        if mode == 'segment':
+            channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
+
+        elif mode == 'segment_id':
+            channels = 34 + (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)
+
+        else:
+            raise NotImplementedError
+
         cond_shapes.append((channels, h, w))
 
     return cond_shapes

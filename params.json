@@ -26,7 +26,10 @@
   },
 
   "cityscapes": {
-    "batch_size": 10,
+    "batch_size": {
+      "segment": 10,
+      "segment_id": 10
+    },
     "iter": 200000,
     "n_flow": 32,
     "n_block": 4,
@@ -46,12 +49,18 @@
 
     "checkpoints_path": {
       "segment": "../checkpoints/city_segment",
-      "real": "../checkpoints/city_real"
+      "real": {
+        "segment": "../checkpoints/city_real_segment",
+        "segment_id": "../checkpoints/city_real_segment_id"
+      }
     },
 
     "samples_path": {
       "segment": "../samples/city_segment",
-      "real": "../samples/city_real"
+      "real": {
+        "segment": "../samples/city_real_segment",
+        "segment_id": "../samples/city_real_segment_id"
+      }
     }
   }
 }

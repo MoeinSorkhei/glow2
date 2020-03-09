@@ -2,6 +2,18 @@ import torch
 import numpy as np
 import os
 import json
+import matplotlib.pyplot as plt
+
+
+def show_images(img_list):
+    if len(img_list) != 2:
+        raise NotImplementedError('Showing more than two images not implemented yet')
+
+    f, ax_arr = plt.subplots(1, 2)
+    ax_arr[0].imshow(img_list[0].permute(1, 2, 0))  # permute: making it (H, W, channel)
+    ax_arr[1].imshow(img_list[1].permute(1, 2, 0))
+
+    plt.show()
 
 
 def read_params(params_path):
@@ -108,8 +120,19 @@ def calc_z_shapes(n_channel, input_size, n_block):
 
 def calc_cond_shapes(orig_shape, in_channels, img_size, n_block, mode):
     z_shapes = calc_z_shapes(in_channels, img_size, n_block)
-    cond_shapes = []
 
+    if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
+        return z_shapes
+
+    # flows_outs are before split => channels should be multiplied by 2 (except for the last shape)
+    if mode == 'flows_outs':
+        for i in range(len(z_shapes) - 1):
+            z_shapes[i] = list(z_shapes[i])
+            z_shapes[i][0] = z_shapes[i][0] * 2
+            z_shapes[i] = tuple(z_shapes[i])
+        return z_shapes
+
+    cond_shapes = []
     for z_shape in z_shapes:
         h, w = z_shape[1], z_shape[2]
         if mode == 'segment':

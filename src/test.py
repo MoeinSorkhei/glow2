@@ -1,5 +1,5 @@
 import torch
-import model
+import models
 import data_handler
 import train
 import experiments
@@ -97,6 +97,8 @@ def test_city(mode):
 
     data_folder = {'segment': data_path, 'real': data_path2}
 
+    params = helper.read_params('params.json')['cityscapes']
+
     if mode == 'read_imgs':
         img_ids = data_handler.read_image_ids(data_path, dataset_name)
         print(f'{len(img_ids)} images found, some of them:')
@@ -116,10 +118,10 @@ def test_city(mode):
 
         cond_shapes = helper.calc_cond_shapes(cond_orig_size, params['channels'],
                                               (params['height'], params['width']),
-                                              params['n_block'])
+                                               params['n_block'])
         print('cond shapes:', cond_shapes)
 
-        glow = model.init_glow(params, cond_shapes)
+        glow = models.init_glow(params, cond_shapes)
         loader_prms = {'batch_size': 10, 'shuffle': True, 'num_workers': 0}
         loader = data_handler.init_city_loader(data_folder, (params['height'], params['width']),
                                                remove_alpha=True, loader_params=loader_prms)
@@ -142,6 +144,46 @@ def test_city(mode):
             inp_rand = glow.reverse(z_rand, reconstruct=False, cond=cond)
             print('backward second done')
 
+    if mode == 'c_flow':
+        two_glows = models.TwoGlows(params)
+        seg_path = 'aachen/aachen_000000_000019_gtFine_color.png'
+        real_path = 'aachen/aachen_000000_000019_leftImg8bit.png'
+
+        dataset = data_handler.CityDataset(data_folder, img_size=params['img_size'], remove_alpha=True)
+        seg = dataset[0]['segment'].unsqueeze(0)
+        real = dataset[0]['real'].unsqueeze(0)
+        seg_path = dataset[0]['segment_path']
+
+        print('Segment path:', seg_path)
+        print('cond shapes:', two_glows.cond_shapes)
+        # input()
+
+        # total_log_det, z_outs_left, flows_outs_left, z_outs_right, flows_outs_right = two_glows(seg, real)
+        total_log_det, _, left_glow_outs, right_glow_outs = two_glows(seg, real)
+
+        # for i in range(len(left_glow_outs['z_outs'])):
+        #    left_glow_outs['z_outs'][i].unsqueeze(0)
+        #    right_glow_outs['z_outs'][i].unsqueeze(0)
+
+        '''print('left z_outs shapes')
+        for z in left_glow_outs['z_outs']:
+            print(z.shape)
+
+        print('right z_outs shapes')
+        for z in right_glow_outs['z_outs']:
+            print(z.shape)'''
+
+        with torch.no_grad():
+            x_a, x_b = two_glows.reverse(left_glow_outs, right_glow_outs, mode='reconstruct')
+
+        x_a = x_a.squeeze(0)  # removing batch dimension (only one image)
+        x_b = x_b.squeeze(0)
+        helper.show_images([x_a, x_b])
+
+        print(torch.allclose(x_a, seg), torch.allclose(x_b, real))
+        print(torch.mean(torch.abs(x_a - seg)))
+        print(torch.mean(torch.abs(x_b - real)))
+
 
 def main():
     # which_fn = 'initialize'
@@ -154,7 +196,8 @@ def main():
     # test_label_mnist()
 
     # test_resample()
-    test_city('train')
+    # test_city('train')
+    test_city('c_flow')
 
 
 if __name__ == '__main__':

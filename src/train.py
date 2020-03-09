@@ -33,9 +33,11 @@ def sample_z(z_shapes, n_samples, temperature, device):
 
 def train(args, params, model, optimizer, device, comet_tracker=None,
           resume=False, last_optim_step=0, reverse_cond=None):
+    # ============ setting params
     batch_size = params['batch_size'] if args.dataset == 'mnist' else params['batch_size'][args.cond_mode]
     loader_params = {'batch_size': batch_size, 'shuffle': True, 'num_workers': 0}
 
+    # ============ initializing data loaders
     if args.dataset == 'cityscapes':
         data_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
                                                     image_size=(params['img_size']),
@@ -45,13 +47,17 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
         data_loader = data_handler.init_mnist_loader(mnist_folder=params['data_folder'],
                                                      img_size=params['img_size'],
                                                      loader_params=loader_params)
+
+    # ============ adjusting params
     in_channels = params['channels']
     n_bins = 2. ** params['n_bits']
-    z_shapes = helper.calc_z_shapes(in_channels, params['img_size'], params['n_block'])
 
+    # ============ sampling z's
     # sampled z's used to show evolution of the generated images during training
+    z_shapes = helper.calc_z_shapes(in_channels, params['img_size'], params['n_block'])
     z_samples = sample_z(z_shapes, params['n_samples'], params['temperature'], device)
 
+    # ============ adjusting optim step
     optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
 
@@ -59,8 +65,9 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
         print(f'In [train]: resuming training from optim_step={optim_step}')
 
     print(f'In [train]: training with a data loader of size: {len(data_loader)} '
-          f'and batch size of: {params["batch_size"]}')
+          f'and batch size of: {params["batch_size"][args.cond_mode]}')
 
+    # ============ optimization
     while optim_step < max_optim_steps:
         for i_batch, batch in enumerate(data_loader):
             # conditional, using labels
@@ -69,76 +76,118 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                 label_batch = batch['label'].to(device)
                 cond = (args.dataset, label_batch)
 
+            # ============ creating the data batches and the conditions
             elif args.dataset == 'cityscapes':
                 img_batch = batch['real'].to(device)
                 segment_batch = batch['segment'].to(device)
 
-                if args.cond_mode == 'segment':
-                    cond = ('city_segment', segment_batch)
+                # ============ segment condition
+                if args.cond_mode == 'segment':  # could be refactored later so args.cond_mode is exactly 'city_segment'
+                    cond_name = 'city_segment' if args.model == 'glow' else 'c_flow'
+                    cond = (cond_name, segment_batch)
+                    # cond = ('city_segment', segment_batch)
 
-                elif args.cond_mode == 'segment_id':
+                # ============ segment_id condition
+                elif args.cond_mode == 'segment_id':  # not updated for now
                     id_repeats_batch = batch['id_repeats'].to(device)
                     cond = ('city_segment_id', segment_batch, id_repeats_batch)
 
-                    # print('in train: id_repeats_batch shape:', id_repeats_batch.shape, 'segment_batch shape:', segment_batch.shape)
-                    # input()
+                else:
+                    raise NotImplementedError('The desired condition is not implemented.')
 
             # unconditional, without using any labels
             else:
                 raise NotImplementedError('Now only conditional implemented.')
-                # img_batch = batch.to(device)
-                # cond = None
 
-            # I do not know this
-            if optim_step == 0:
-                with torch.no_grad():  # why
-                    log_p, logdet, _ = model(img_batch + torch.rand_like(img_batch) / n_bins, cond)
-                    optim_step += 1
-                    continue
+            # ============ forward pass calculating loss
+            if args.model == 'glow':
+                log_p, logdet, _ = model(img_batch, cond)
+                logdet = logdet.mean()  # logdet and log_p: tensors of shape torch.Size([5])
+                loss, log_p, log_det = calc_loss(log_p, logdet, params['img_size'], n_bins)
+
+            elif args.model == 'c_flow':
+                left_glow_outs, right_glow_outs = model(segment_batch, img_batch)
+                log_p_left, log_det_left = left_glow_outs['log_p'], left_glow_outs['log_det'].mean()
+                log_p_right, log_det_right = right_glow_outs['log_p'], right_glow_outs['log_det'].mean()
+
+                loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
+                loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
+                loss = loss_left + loss_right
+
             else:
-                log_p, logdet, _ = model(img_batch + torch.rand_like(img_batch) / n_bins, cond)
+                raise NotImplementedError
 
-            logdet = logdet.mean()
-
-            loss, log_p, log_det = calc_loss(log_p, logdet, params['img_size'], n_bins)
+            # ============ backward pass
             model.zero_grad()
             loss.backward()
+
+            # ============ optimizer step
             # warmup_lr = args.lr * min(1, i * batch_size / (50000 * 10))
             warmup_lr = params['lr']
-            optimizer.param_groups[0]['lr'] = warmup_lr
+            optimizer.param_groups[0]['lr'] = warmup_lr  # this could be removed if lr is not changing
             optimizer.step()
 
-            print(f'Step: {optim_step} => loss: {loss.item():.3f}, log_p: {log_p.item():.3f}')
+            if args.model == 'c_flow':
+                print(f'\nloss_left: {loss_left.item():.3f} - loss_right: {loss_right.item():.3f}')
 
+            print(f'Step: {optim_step} => loss: {loss.item():.3f}')
+
+            # ============ tracking by comet
             if args.use_comet:
                 comet_tracker.track_metric('loss', round(loss.item(), 3), optim_step)
 
-            if optim_step % 100 == 0:
+                if args.model == 'glow':
+                    comet_tracker.track_metric('log_p', round(log_p.item(), 3), optim_step)
+
+                if args.model == 'c_flow':
+                    comet_tracker.track_metric('loss_left', round(loss_left.item(), 3), optim_step)
+                    comet_tracker.track_metric('loss_right', round(loss_right.item(), 3), optim_step)
+
+                    comet_tracker.track_metric('log_p_left', round(log_p_left.item(), 3), optim_step)
+                    comet_tracker.track_metric('log_p_right', round(log_p_right.item(), 3), optim_step)
+
+            # ============ saving samples
+            if optim_step % params['sample_freq'] == 0:
                 if args.dataset == 'cityscapes':
-                    pth = params['samples_path']['real'][args.cond_mode]  # only 'real' for now
+                    pth = params['samples_path']['real'][args.cond_mode][args.model]  # only 'real' for now
                 else:
                     pth = params['samples_path']['conditional']
 
+                # ============ create path if not available
                 if not os.path.exists(pth):
                     os.makedirs(pth)
                     print(f'In [train]: created path "{pth}"')
 
+                # ============ get the samples by calling reverse()
                 with torch.no_grad():
-                    sampled_images = model.reverse(z_samples, cond=reverse_cond).cpu().data
+                    if args.model == 'glow':
+                        sampled_images = model.reverse(z_samples, cond=reverse_cond).cpu().data
+
+                    elif args.model == 'c_flow':  # here reverse_cond is x_a
+                        # ============ only sanity check for c_flow: make sure we can reconstruct the images
+                        if args.sanity_check:
+                            x_a, x_b = reverse_cond[0], reverse_cond[1]
+                            x_a_rec, x_b_rec = model.reverse(x_a=x_a, x_b=x_b, mode='reconstruct_all')
+                            x_a_rec, x_b_rec = x_a_rec.cpu().data, x_b_rec.cpu().data
+                            sampled_images = torch.cat([x_a_rec, x_b_rec], dim=0)
+
+                        # ============ real sampling
+                        else:
+                            sampled_images = \
+                                model.reverse(x_a=reverse_cond, z_b_samples=z_samples, mode='sample_x_b').cpu().data
+
+                    else:
+                        raise NotImplementedError
+
                     utils.save_image(sampled_images, f'{pth}/{str(optim_step).zfill(6)}.png', nrow=10)
 
-                    '''utils.save_image(
-                        model_single.reverse(z_sample).cpu().data,
-                        f'sample/{str(optim_step).zfill(6)}.png',
-                        normalize=True,
-                        nrow=10,
-                        range=(-0.5, 0.5),
-                    )'''
                 print("\nSample saved at iteration", optim_step, '\n')
 
-            if optim_step % 1000 == 0:
+            # ============ saving checkpoint
+            if optim_step > 0 and optim_step % params['checkpoint_freq'] == 0:
                 if args.dataset == 'cityscapes':
-                    pth = params['checkpoints_path']['real'][args.cond_mode]  # only 'real' for now
+                    pth = params['checkpoints_path']['real'][args.cond_mode][args.model]  # only 'real' for now
+
                 else:
                     pth = params['checkpoints_path']['conditional']
 

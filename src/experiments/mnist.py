@@ -8,7 +8,7 @@ from PIL import Image
 
 from train import sample_z
 from helper import load_checkpoint, label_to_tensor, make_dir_if_not_exists
-from model import init_glow
+from models import init_glow
 from data_handler import MnistDataset
 
 

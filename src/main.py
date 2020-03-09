@@ -1,6 +1,6 @@
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from helper import read_params, calc_cond_shapes
-from model import Glow, init_glow
+from models import Glow, init_glow, TwoGlows
 from train import train
 from experiments import interpolate, new_condition, resample_latent, get_image
 from data_handler import create_segment_cond
@@ -25,6 +25,8 @@ def read_params_and_args():
 
     # args for Cityscapes
     parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
+    parser.add_argument('--model', type=str, default='glow', help='which model to be used: glow, c_flow, ...')
+    parser.add_argument('--sanity_check', action='store_true')
 
     # args mainly for the experiment mode
     parser.add_argument('--exp', action='store_true')
@@ -42,37 +44,66 @@ def run_training(args, params):
     if args.resume_train:
         raise NotImplementedError('NOTE! Make sure to use the same segmentation images. Should I?.')
 
+    # ======== preparing reverse condition
     if args.dataset == 'mnist':
         model = init_glow(params)
         reverse_cond = ('mnist', 1, params['n_samples'])
 
     else:
-        segmentations, id_repeats_batch = create_segment_cond(params['n_samples'],
-                                                              params['data_folder'],
-                                                              params['img_size'],
-                                                              params["samples_path"]["real"][args.cond_mode])
+        segmentations, \
+            id_repeats_batch, \
+            real_imgs = create_segment_cond(params['n_samples'],
+                                            params['data_folder'],
+                                            params['img_size'],
+                                            device,
+                                            params["samples_path"]["real"][args.cond_mode][args.model])
+        # condition is segmentation
         if args.cond_mode == 'segment':
-            reverse_cond = ('city_segment', segmentations)
+            if args.model == 'glow':
+                reverse_cond = ('city_segment', segmentations)
 
+            elif args.model == 'c_flow':
+                # here reverse_cond is equivalent to x_a, the actual condition will be made inside the reverse function
+                reverse_cond = (segmentations, real_imgs) if args.sanity_check else segmentations
+
+            else:
+                raise NotImplementedError
+
+        # condition is segmentation + ID's
         elif args.cond_mode == 'segment_id':
             reverse_cond = ('city_segment_id', segmentations, id_repeats_batch)
 
         else:
             raise NotImplementedError
 
-        cond_shapes = calc_cond_shapes(segmentations.shape[1:], params['channels'], params['img_size'],
-                                       params['n_block'], args.cond_mode)
-        model = init_glow(params, cond_shapes)
+        # calculating condition shape (needed to init the model)
+        cond_shapes = calc_cond_shapes(segmentations.shape[1:],
+                                       params['channels'],
+                                       params['img_size'],
+                                       params['n_block'],
+                                       args.cond_mode)
+        # ======== init glow
+        if args.model == 'glow':
+            model = init_glow(params, cond_shapes)
+        # ======== init c_flow
+        elif args.model == 'c_flow':
+            model = TwoGlows(params)
 
+        else:
+            raise NotImplementedError
+
+    # ======== preparing model and optimizer
     # model = nn.DataParallel(model)
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
 
+    # ======== setting comet tracker
     tracker = None
     if args.use_comet:
         tracker = init_comet(params)
         print("Comet experiment initialized...")
 
+    # ======== training
     # resume training
     if args.resume_train:
         optim_step = args.last_optim_step
@@ -203,7 +234,9 @@ if __name__ == '__main__':
     main()
 
 # ================ training
-# --dataset cityscapes --use_comet
+#  --dataset cityscapes --cond_mode segment --use_comet
+# --dataset cityscapes --model c_flow --cond_mode segment --use_comet
+# --dataset cityscapes --model c_flow --cond_mode segment --sanity_check --use_comet
 
 # ================ resume training (now throws NotImplementedError)
 # --dataset mnist --resume_train --last_optim_step 21000 --use_comet

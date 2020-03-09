@@ -114,7 +114,7 @@ def read_image_ids(data_folder, dataset_name):
     return img_ids
 
 
-def create_segment_cond(n_samples, data_folder, img_size, save_path=None):
+def create_segment_cond(n_samples, data_folder, img_size, device, save_path=None):
     city_dataset = CityDataset(data_folder, img_size, remove_alpha=True)
     segs = [city_dataset[i]['segment'] for i in range(n_samples)]
     reals = [city_dataset[i]['real'] for i in range(n_samples)]
@@ -123,7 +123,7 @@ def create_segment_cond(n_samples, data_folder, img_size, save_path=None):
 
     n_channels = segs[0].shape[0]
 
-    segmentations= torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
+    segmentations = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
     real_imgs = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
     id_repeats_batch = torch.zeros((n_samples, 34, img_size[0], img_size[1]))  # 34 different IDs
 
@@ -154,7 +154,7 @@ def create_segment_cond(n_samples, data_folder, img_size, save_path=None):
                 f.write("%s\n" % item)
         print('In [create_segment_cond]: saved the image paths')
 
-    return segmentations, id_repeats_batch
+    return segmentations.to(device), id_repeats_batch.to(device), real_imgs.to(device)
 
 
 def id_repeats_to_cond(id_repeats, h, w):

@@ -41,8 +41,8 @@ def read_params_and_args():
 
 
 def run_training(args, params):
-    if args.resume_train:
-        raise NotImplementedError('NOTE! Make sure to use the same segmentation images. Should I?.')
+    # if args.resume_train:
+    #    raise NotImplementedError('NOTE! Make sure to use the same segmentation images. Should I?.')
 
     # ======== preparing reverse condition
     if args.dataset == 'mnist':
@@ -106,9 +106,13 @@ def run_training(args, params):
     # ======== training
     # resume training
     if args.resume_train:
+        if args.dataset == 'mnist':
+            raise NotImplementedError('In [resume_train]: consider the checkpoint path for MNIST...')
+
         optim_step = args.last_optim_step
-        mode = 'conditional' if args.conditional else 'unconditional'
-        model, optimizer, _ = load_checkpoint(params['checkpoints_path'][mode], optim_step, model, optimizer, device)
+        # mode = 'conditional' if args.conditional else 'unconditional'
+        checkpt_path = params['checkpoints_path']['real'][args.cond_mode][args.model]  # only 'real' for now
+        model, optimizer, _ = load_checkpoint(checkpt_path, optim_step, model, optimizer, device)
 
         train(args, params, model, optimizer,
               device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
@@ -240,6 +244,7 @@ if __name__ == '__main__':
 
 # ================ resume training (now throws NotImplementedError)
 # --dataset mnist --resume_train --last_optim_step 21000 --use_comet
+# --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 6000
 
 # ================ interpolation
 # --dataset mnist --exp --interp --last_optim_step 12000

@@ -8,7 +8,7 @@
 
 
 # ================ salloc
-salloc --gres=gpu:1 --mem=5GB --cpus-per-task=1 --constrain=gondor
+salloc --gres=gpu:1 --mem=5GB --cpus-per-task=1 --constrain=shire
 # conda activate workshop
 
 # first screen, then activate environment

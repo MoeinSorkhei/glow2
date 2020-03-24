@@ -74,7 +74,7 @@ class InvConv1x1(nn.Module):
         _, _, height, width = inp.shape
         out = F.conv2d(inp, self.weight)
 
-        log_w = torch.slogdet(self.weight.squeeze().double())[1].float()  # use of double() and float()? (ablation)
+        log_w = torch.slogdet(self.weight.squeeze().double())[1].float()
         log_det = height * width * log_w
         return out, log_det
 
@@ -146,7 +146,7 @@ class ZeroInitConv2d(nn.Module):
     """
     To be used in the Affine Coupling step:
     The last convolution of each NN(), according to the paper is initialized with zeros, such that the each affine layer
-    initially performs an identity function (at the moment, I have difficulty understanding why this is helpful)
+    initially performs an identity function.
     """
     def __init__(self, in_channel, out_channel, padding=1):
         super().__init__()
@@ -158,9 +158,9 @@ class ZeroInitConv2d(nn.Module):
 
     def forward(self, inp):
         # padding with additional 1 in each side to keep the spatial dimension unchanged after the convolution operation
-        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)  # 1. why value=1 (ablation)? OpenAI? [ASKED]
+        out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)
         out = self.conv(out)
-        out = out * torch.exp(self.scale * 3)  # 2. why having learnable scale? why * 3 why torch.exp()? [ASKED]
+        out = out * torch.exp(self.scale * 3)
         return out
 
 
@@ -229,10 +229,10 @@ class AffineCoupling(nn.Module):
             else:
                 log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
 
-            s = torch.sigmoid(log_s + 2)  # 4. why not exp(.)? why + 2? (ablation study) [ASKED]
+            s = torch.sigmoid(log_s + 2)
 
-            out_b = (inp_b + t) * s  # 5. why first + then *?? [ASKED]
-            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)  # print and check shape for s and inp (lazy)
+            out_b = (inp_b + t) * s
+            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)
 
         else:
             # note: ZeroConv2d(in_channel=n_filters, out_channel=in_channel) should also be changed for additive
@@ -361,10 +361,10 @@ class Block(nn.Module):
             out, z_new = out.chunk(chunks=2, dim=1)  # split along the channel dimension
             mean, log_sd = self.gaussian(out).chunk(chunks=2, dim=1)
             log_p = gaussian_log_p(z_new, mean, log_sd)
-            log_p = log_p.view(b_size, -1).sum(1)  # why view (bsize, -1)? sum(1)? what is dimension of log_p? I should print it. (lazy)
+            log_p = log_p.view(b_size, -1).sum(1)
 
         else:
-            zeros = torch.zeros_like(out)  # making zero output - why??
+            zeros = torch.zeros_like(out)
             mean, log_sd = self.gaussian(zeros).chunk(chunks=2, dim=1)
             log_p = gaussian_log_p(out, mean, log_sd)
             log_p = log_p.view(b_size, -1).sum(1)

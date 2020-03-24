@@ -40,7 +40,7 @@ class TwoGlows(nn.Module):
         return left_glow_outs, right_glow_outs
         # return total_log_det, total_log_p, left_glow_outs, right_glow_outs
 
-    def reverse(self, x_a, x_b=None, z_b_samples=None, mode='reconstruct_all'):
+    def reverse(self, x_a=None, x_b=None, z_a_samples=None, z_b_samples=None, mode='reconstruct_all'):
         """
         Later it could be extended to sample from both glows: first generate a new segmentation and then sample a real
         image conditioned on that to generate novel scenes (so x_a is not given, but z_a_samples should be give).
@@ -58,20 +58,11 @@ class TwoGlows(nn.Module):
         flows_outs_left would be a 2D list of length n_block, whole elements are 1Ds list of len n_flow,
         whose elements are tensors of shape (B, C, H, W)
         """
-        # getting the conditions from the left glow
-        log_p_sum_left, log_det_left, \
-            z_outs_left, flows_outs_left = self.left_glow(x_a, cond=None, return_flows_outs=True)
-
-        # print(flows_outs_left)
-        cond = ['c_flow', flows_outs_left]
-
-        '''for i in range(len(flows_outs_left)):
-            for j in range(len(flows_outs_left[i])):
-                print('flows_out mean:', torch.mean(flows_outs_left[i][j]))
-                print('flows_out std:', torch.std(flows_outs_left[i][j]))
-                print('\n')'''
-
         if mode == 'reconstruct_all':  # reconstructing bot x_a and x_b (mostly for sanity check)
+            log_p_sum_left, log_det_left, \
+                z_outs_left, flows_outs_left = self.left_glow(x_a, cond=None, return_flows_outs=True)
+            cond = ['c_flow', flows_outs_left]
+
             log_p_sum_right, log_det_right, \
                 z_outs_right, flows_outs_right = self.right_glow(x_b, cond=cond, return_flows_outs=True)
 
@@ -82,15 +73,18 @@ class TwoGlows(nn.Module):
             return x_a_rec, x_b_rec
 
         if mode == 'sample_x_b':
-            # sample x_b conditioned on x_a. z_b_samples: list of sampled z's
-            '''print('z_b_samples len:', len(z_b_samples))
-            print('z_b_samples[0] shape:', z_b_samples[0].shape)
-            print('cond[1] len:', len(cond[1]))
-            print('cond[1][0] len:', len(cond[1][0]))
-            print('cond[1][0][0].shape:', cond[1][0][0].shape)'''
+            log_p_sum_left, log_det_left, \
+                z_outs_left, flows_outs_left = self.left_glow(x_a, cond=None, return_flows_outs=True)
+            cond = ['c_flow', flows_outs_left]
 
+            # sample x_b conditioned on x_a. z_b_samples: list of sampled z's
             x_b_syn = self.right_glow.reverse(z_b_samples, reconstruct=False, cond=cond, return_reverses=False)
             return x_b_syn
+
+        if mode == 'sample_x_a':
+            # synthesize image with sampled z's
+            x_a_syn = self.left_glow.reverse(z_a_samples, reconstruct=False, cond=None, return_reverses=None)
+            return x_a_syn
 
 
 def sanity_check(x_a, x_b, x_a_rec, x_b_rec):

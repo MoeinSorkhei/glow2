@@ -4,6 +4,7 @@ from models import Glow, init_glow, TwoGlows
 from train import train
 from experiments import interpolate, new_condition, resample_latent, get_image
 from data_handler import create_segment_cond
+import experiments
 
 import argparse
 import json
@@ -22,6 +23,7 @@ def read_params_and_args():
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
+    parser.add_argument('--trials', type=int)
 
     # args for Cityscapes
     parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
@@ -33,6 +35,9 @@ def read_params_and_args():
     parser.add_argument('--interp', action='store_true')
     parser.add_argument('--new_cond', action='store_true')
     parser.add_argument('--resample', action='store_true')
+    parser.add_argument('--sample_c_flow', action='store_true')
+    parser.add_argument('--conditional', action='store_true')
+    parser.add_argument('--syn_segs', action='store_true')
 
     arguments = parser.parse_args()
     parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
@@ -217,6 +222,10 @@ def run_resample_experiments(args, params):
         resample_latent(img_info, all_resample_lst, params, args, device)
 
 
+def run_c_flow_trials(args, params):
+    experiments.sample_trained_c_flow(args, params, device)
+
+
 def main():
     args, params = read_params_and_args()
     print('In [main]: arguments:', args)
@@ -230,6 +239,9 @@ def main():
     elif args.exp and args.resample:
         run_resample_experiments(args, params)
 
+    elif args.exp and args.sample_c_flow:
+        run_c_flow_trials(args, params)
+
     else:  # training
         run_training(args, params)
 
@@ -238,7 +250,6 @@ if __name__ == '__main__':
     main()
 
 # ================ training
-#  --dataset cityscapes --cond_mode segment --use_comet
 # --dataset cityscapes --model c_flow --cond_mode segment --use_comet
 # --dataset cityscapes --model c_flow --cond_mode segment --sanity_check --use_comet
 
@@ -254,3 +265,10 @@ if __name__ == '__main__':
 
 # ================  resampling
 # --dataset mnist --exp --resample --last_optim_step 12000
+
+# ================  sample trials conditional on real segmentations (with c_flow)
+# --dataset cityscapes --exp --sample_c_flow --conditional --last_optim_step 27000 --model c_flow --cond_mode segment --trials 5
+
+
+# ================  synthesize segmentations (with c_flow)
+# --dataset cityscapes --exp --sample_c_flow --syn_segs --last_optim_step 27000 --model c_flow --cond_mode segment --trial 5

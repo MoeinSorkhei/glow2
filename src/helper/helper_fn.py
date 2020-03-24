@@ -50,7 +50,11 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_t
     # model_single.train() if resume_train else model_single.eval()
 
     # return model_single, model, optimizer, loss
-    return model, optimizer, loss
+    # if optimizer is not None:
+    #    return model.to(device), optimizer.to(device), loss
+    if optimizer is not None:
+        return model.to(device), optimizer.to(device), loss
+    return model.to(device), None, loss
 
 
 def translate_address(path, package):

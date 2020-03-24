@@ -9,14 +9,26 @@ import numpy as np
 
 
 def calc_loss(log_p, logdet, image_size, n_bins):  # how does it work
+    """
+    :param log_p:
+    :param logdet:
+    :param image_size:
+    :param n_bins:
+    :return:
+
+    Note: by having 8 bits, that is, discretization level of 1/256:
+    loss = -log(n_bins) * n_pixel  ==> this line computes -c: log(1/256) = -log(256)
+    Then this values is added to log likelihood, and finally in the return the value is negated to denote
+    the negative log-likelihood.
+    """
     # log_p = calc_log_p([z_list])
     n_pixel = image_size * image_size * 3 if type(image_size) is int else image_size[0] * image_size[1] * 3
 
-    loss = -log(n_bins) * n_pixel
-    loss = loss + logdet + log_p
+    loss = -log(n_bins) * n_pixel  # -c in Eq. 2 of the Glow paper, discretization level = 1/256 (for instance)
+    loss = loss + logdet + log_p  # log_x = logdet + log_p
 
     return (
-        (-loss / (log(2) * n_pixel)).mean(),
+        (-loss / (log(2) * n_pixel)).mean(),  # make it negative log likelihood
         (log_p / (log(2) * n_pixel)).mean(),
         (logdet / (log(2) * n_pixel)).mean(),
     )
@@ -31,6 +43,55 @@ def sample_z(z_shapes, n_samples, temperature, device):
     return z_samples
 
 
+def calc_val_loss(args, params, device, model, val_loader):
+    # at the moment: only for Cityscapes and 'segment' condition
+    if args.dataset != 'cityscapes' or args.cond_mode != 'segment':
+        raise NotImplementedError
+
+    val_loss = 0.
+    for i_batch, batch in enumerate(val_loader):
+        img_batch = batch['real'].to(device)
+        segment_batch = batch['segment'].to(device)
+        cond_name = 'city_segment' if args.model == 'glow' else 'c_flow'
+        cond = (cond_name, segment_batch)
+
+        if args.model == 'glow':
+            loss, log_p, log_det = do_forward(args, params, model, img_batch, segment_batch, cond)
+
+        elif args.model == 'c_flow':
+            loss, loss_left, log_p_left, log_det_left, \
+                loss_right, log_p_right, log_det_right = \
+                do_forward(args, params, model, img_batch, segment_batch, cond)
+        else:
+            raise NotImplementedError
+        val_loss += loss.item()
+
+    return val_loss / len(val_loader)
+
+
+def do_forward(args, params, model, img_batch, segment_batch, cond):
+    n_bins = 2. ** params['n_bits']
+
+    if args.model == 'glow':
+        log_p, logdet, _ = model(img_batch + torch.rand_like(img_batch) / n_bins, cond)
+        log_p = log_p.mean()
+        logdet = logdet.mean()  # logdet and log_p: tensors of shape torch.Size([5])
+        loss, log_p, log_det = calc_loss(log_p, logdet, params['img_size'], n_bins)
+        return loss, log_p, log_det
+
+    elif args.model == 'c_flow':
+        left_glow_outs, right_glow_outs = model(segment_batch + torch.rand_like(segment_batch) / n_bins,
+                                                img_batch + torch.rand_like(img_batch) / n_bins)
+
+        log_p_left, log_det_left = left_glow_outs['log_p'].mean(), left_glow_outs['log_det'].mean()
+        log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
+
+        loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
+        loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
+        loss = loss_left + loss_right
+        return loss, loss_left, log_p_left, log_det_left, loss_right, log_p_right, log_det_right
+
+
 def train(args, params, model, optimizer, device, comet_tracker=None,
           resume=False, last_optim_step=0, reverse_cond=None):
     # ============ setting params
@@ -39,22 +100,18 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
     # ============ initializing data loaders
     if args.dataset == 'cityscapes':
-        data_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                    image_size=(params['img_size']),
-                                                    remove_alpha=True,  # removing the alpha channel
-                                                    loader_params=loader_params)
+        train_loader, \
+            val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
+                                                       image_size=(params['img_size']),
+                                                       remove_alpha=True,  # removing the alpha channel
+                                                       loader_params=loader_params)
     else:  # MNIST
         data_loader = data_handler.init_mnist_loader(mnist_folder=params['data_folder'],
                                                      img_size=params['img_size'],
                                                      loader_params=loader_params)
-
-    # ============ adjusting params
-    in_channels = params['channels']
-    n_bins = 2. ** params['n_bits']
-
     # ============ sampling z's
     # sampled z's used to show evolution of the generated images during training
-    z_shapes = helper.calc_z_shapes(in_channels, params['img_size'], params['n_block'])
+    z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
     z_samples = sample_z(z_shapes, params['n_samples'], params['temperature'], device)
 
     # ============ adjusting optim step
@@ -64,12 +121,15 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
     if resume:
         print(f'In [train]: resuming training from optim_step={optim_step}')
 
-    print(f'In [train]: training with a data loader of size: {len(data_loader)} '
-          f'and batch size of: {params["batch_size"][args.cond_mode]}')
+    if args.dataset == 'cityscapes':  # printing this only for cityscapes
+        print(f'In [train]: training with a data loaders of size: \n'
+              f'train_loader: {len(train_loader)} \n'
+              f'val_loader: {len(val_loader)} \n'
+              f'and batch_size of: {params["batch_size"][args.cond_mode]}')
 
     # ============ optimization
     while optim_step < max_optim_steps:
-        for i_batch, batch in enumerate(data_loader):
+        for i_batch, batch in enumerate(train_loader):
             # conditional, using labels
             if args.dataset == 'mnist':
                 img_batch = batch['image'].to(device)
@@ -101,19 +161,12 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             # ============ forward pass calculating loss
             if args.model == 'glow':
-                log_p, logdet, _ = model(img_batch, cond)
-                logdet = logdet.mean()  # logdet and log_p: tensors of shape torch.Size([5])
-                loss, log_p, log_det = calc_loss(log_p, logdet, params['img_size'], n_bins)
+                loss, log_p, log_det = do_forward(args, params, model, img_batch, segment_batch, cond)
 
             elif args.model == 'c_flow':
-                left_glow_outs, right_glow_outs = model(segment_batch, img_batch)
-                log_p_left, log_det_left = left_glow_outs['log_p'], left_glow_outs['log_det'].mean()
-                log_p_right, log_det_right = right_glow_outs['log_p'], right_glow_outs['log_det'].mean()
-
-                loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
-                loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
-                loss = loss_left + loss_right
-
+                loss, loss_left, log_p_left, log_det_left, \
+                    loss_right, log_p_right, log_det_right = \
+                    do_forward(args, params, model, img_batch, segment_batch, cond)
             else:
                 raise NotImplementedError
 
@@ -122,7 +175,6 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
             loss.backward()
 
             # ============ optimizer step
-            # warmup_lr = args.lr * min(1, i * batch_size / (50000 * 10))
             warmup_lr = params['lr']
             optimizer.param_groups[0]['lr'] = warmup_lr  # this could be removed if lr is not changing
             optimizer.step()
@@ -132,9 +184,18 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             print(f'Step: {optim_step} => loss: {loss.item():.3f}')
 
+            # ============ validation loss
+            if optim_step % params['val_freq'] == 0:
+                with torch.no_grad():
+                    val_loss = calc_val_loss(args, params, device, model, val_loader)
+                    print(f'==== val_loss: {round(val_loss, 3)}')
+
             # ============ tracking by comet
             if args.use_comet:
                 comet_tracker.track_metric('loss', round(loss.item(), 3), optim_step)
+                # also track the val_loss at the desired frequency
+                if optim_step % params['val_freq'] == 0:
+                    comet_tracker.track_metric('val_loss', round(val_loss, 3), optim_step)
 
                 if args.model == 'glow':
                     comet_tracker.track_metric('log_p', round(log_p.item(), 3), optim_step)

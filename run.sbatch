@@ -12,9 +12,17 @@
 
 echo "Starting job ${SLURM_JOB_ID} on ${SLURMD_NODENAME}"
 nvidia-smi
+# shellcheck disable=SC1090
 . ~/miniconda3/etc/profile.d/conda.sh
 conda activate workshop
 
+# no need to change dir before hand, just ssh moria and run this sbatch file: sbatch glow2/run.sbatch
+# shellcheck disable=SC2164
 cd glow2/src/
 # ps aux |grep python3 |awk '{print $2}' |xargs kill -9
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 7000 --use_comet
+
+# train from scratch
+python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --use_comet
+
+# resume training (pay attention to the optim_step)
+# python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 7000 --use_comet

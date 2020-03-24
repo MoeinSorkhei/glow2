@@ -27,8 +27,10 @@ class CityDataset(data.Dataset):
         self.transforms = transforms.Compose([transforms.Resize(img_size),
                                               transforms.ToTensor()])
 
-        self.real_img_paths = read_image_ids(self.data_folder['real'], 'cityscapes_leftImg8bit')  # real images
+        # finding the path for real images
+        self.real_img_paths = read_image_ids(self.data_folder['real'], 'cityscapes_leftImg8bit')
         cities_and_ids = self.cities_and_ids()
+        # finding the path for the segmentation images
         self.seg_img_paths = \
             [self.data_folder['segment'] + f'/{city}/{Id}_gtFine_color.png' for (city, Id) in cities_and_ids]
 
@@ -74,13 +76,38 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params):
     :param remove_alpha:
     :param image_size:
     :param data_folder: the folder to read the images from
-    :param dataset_name: the dataset_name (refer to the Dataset class)
     :param loader_params: a dictionary containing the DataLoader parameters such batch_size and so on.
     :return: the initialized data loader
     """
-    dataset = CityDataset(data_folder, image_size, remove_alpha)
-    data_loader = data.DataLoader(dataset, **loader_params)
-    return data_loader
+    # train data loader
+    train_df = {'real': data_folder['real'] + '/train',  # adjusting the paths for the train data folder
+                'segment': data_folder['segment'] + '/train'}
+    train_dataset = CityDataset(train_df, image_size, remove_alpha)
+    train_loader = data.DataLoader(train_dataset, **loader_params)
+
+    # val data loader
+    val_df = {'real': data_folder['real'] + '/val',  # adjusting the paths for the validation data folder
+              'segment': data_folder['segment'] + '/val'}
+    val_dataset = CityDataset(val_df, image_size, remove_alpha)
+    val_loader = data.DataLoader(val_dataset, **loader_params)
+
+    '''fine_segment_train_dataset = CityDataset(data_folder['fine_segment_train'], image_size, remove_alpha)
+    fine_segment_train_loader = data.DataLoader(fine_segment_train_dataset, **loader_params)
+
+    fine_segment_val_dataset = CityDataset(data_folder['fine_segment_val'], image_size, remove_alpha)
+    fine_segment_val_loader = data.DataLoader(fine_segment_val_dataset, **loader_params)
+
+    real_train_dataset = CityDataset(data_folder['real_train'], image_size, remove_alpha)
+    real_train_loader = data.DataLoader(real_train_dataset, **loader_params)
+
+    real_val_dataset = CityDataset(data_folder['real_val'], image_size, remove_alpha)
+    real_val_loader = data.DataLoader(real_val_dataset, **loader_params)
+
+    return {'fine_segment_train_loader': fine_segment_train_loader,
+            'fine_segment_val_loader': fine_segment_val_loader,
+            'real_train_loader': real_train_loader,
+            'real_val_loader': real_val_loader}'''
+    return train_loader, val_loader
 
 
 def read_image_ids(data_folder, dataset_name):
@@ -115,7 +142,11 @@ def read_image_ids(data_folder, dataset_name):
 
 
 def create_segment_cond(n_samples, data_folder, img_size, device, save_path=None):
-    city_dataset = CityDataset(data_folder, img_size, remove_alpha=True)
+    # currently the conditions are taken from the train set - could be changed later
+    train_df = {'segment': data_folder['segment'] + '/train',
+                'real': data_folder['real'] + '/train'}
+    city_dataset = CityDataset(train_df, img_size, remove_alpha=True)
+
     segs = [city_dataset[i]['segment'] for i in range(n_samples)]
     reals = [city_dataset[i]['real'] for i in range(n_samples)]
     seg_paths = [city_dataset[i]['segment_path'] for i in range(n_samples)]
@@ -142,7 +173,7 @@ def create_segment_cond(n_samples, data_folder, img_size, device, save_path=None
         make_dir_if_not_exists(save_path)
         utils.save_image(segmentations, f'{save_path}/condition.png', nrow=10)
         utils.save_image(real_imgs, f'{save_path}/real_imgs.png', nrow=10)
-        print('In [create_segment_cond]: saved the condition and real images')
+        print(f'In [create_segment_cond]: saved the condition and real images to: "{save_path}"')
 
         with open(f'{save_path}/img_paths.txt', 'a') as f:
             f.write("==== SEGMENTATIONS PATHS \n")

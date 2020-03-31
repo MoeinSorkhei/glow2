@@ -29,10 +29,10 @@ def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
                   'optimizer_state_dict': optimizer.state_dict()}
 
     torch.save(checkpoint, name)
+    print(f'In [save_checkpoint]: save state dict done at: "{name}"')
 
 
 def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_train=True):
-    # path_to_load = translate_address(path_to_load, 'helper')
     name = path_to_load + f'/optim_step={optim_step}.pt'
     checkpoint = torch.load(name, map_location=device)
 
@@ -43,17 +43,18 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_t
 
     loss = checkpoint['loss']
 
-    print('In [load_checkpoint]: load state dict: done')
+    print(f'In [load_checkpoint]: load state dict done from: "{name}"')
 
     # putting the model in the correct mode
-    model.train() if resume_train else model.eval()  # model or model_single?
-    # model_single.train() if resume_train else model_single.eval()
+    if resume_train:
+        model.train()
+    else:
+        model.eval()
+        for param in model.parameters():  # freezing the layers when using only for evaluation
+            param.requires_grad = False
 
-    # return model_single, model, optimizer, loss
-    # if optimizer is not None:
-    #    return model.to(device), optimizer.to(device), loss
     if optimizer is not None:
-        return model.to(device), optimizer.to(device), loss
+        return model.to(device), optimizer, loss
     return model.to(device), None, loss
 
 
@@ -151,3 +152,104 @@ def calc_cond_shapes(orig_shape, in_channels, img_size, n_block, mode):
         cond_shapes.append((channels, h, w))
 
     return cond_shapes
+
+
+def print_info(args, params, model, which_info='all'):
+    if which_info == 'params' or which_info == 'all':
+        # printing important running params
+        print(f'{"=" * 50} \n'
+              f'In [print_info]: Important params: \n'
+              f'model: {args.model} \n'
+              f'lr: {args.lr if args.lr is not None else params["lr"]} \n'
+              f'last_optim_step: {args.last_optim_step} \n'
+              f'left_lr: {args.left_lr} \n'
+              f'left_step: {args.left_step} \n'
+              f'cond: {args.cond_mode} \n\n')
+
+        # printing paths
+        paths = compute_paths(args, params)
+        print(f'Paths:')
+        for path_name, path_addr in paths.items():
+            print(f'{path_name}: {path_addr}')
+        print(f'{"=" * 50}\n')
+
+    if which_info == 'model' or which_info == 'all':
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        print(f'{"=" * 50}\n'
+              'In [print_info]: Using model with the following info:\n'
+              f'Total parameters: {total_params:,} \n'
+              f'Trainable parameters: {trainable_params:,} \n'
+              f'{"=" * 50}\n')
+
+
+def scientific(float_num):
+    if float_num < 1e-4:
+        return str(float_num)
+    elif float_num == 1e-4:
+        return '1e-4'
+    elif float_num == 1e-3:
+        return '1e-3'
+    raise NotImplementedError('In [scientific]: Conversion from float to scientific str needed.')
+
+
+def compute_paths(args, params):
+    dataset = args.dataset
+    model = args.model
+    img = 'segment' if args.train_on_segment else 'real'  # now only training glow on segmentations
+    cond = args.cond_mode
+    run_mode = 'infer' if args.exp else 'train'
+
+    # base paths - common between all models
+    samples_base_dir = f'{params["samples_path"]}/{dataset}/model={model}/img={img}/cond={cond}'
+    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/model={model}/img={img}/cond={cond}'
+
+    # specifying lr: from args if determined, otherwise default from params.json
+    lr = scientific(args.lr if args.lr is not None else params['lr'])
+    paths = {}  # the paths dict be filled along the way
+
+    # ========= c_flow paths
+    if model == 'c_flow':
+        c_flow_type = 'left_pretrained' if args.left_pretrained else 'from_scratch'
+        # paths common between c_flow models
+        samples_path = f'{samples_base_dir}/{c_flow_type}'
+        checkpoints_path = f'{checkpoints_base_dir}/{c_flow_type}'
+
+        # details for left_pretrained paths
+        if c_flow_type == 'left_pretrained':
+            left_lr = args.left_lr  # example: left_pretrained/left_lr=1e-4/freezed/left_step=10000
+            left_status = 'unfreezed' if args.left_unfreeze else 'freezed'
+            left_step = args.left_step  # optim_step of the left glow
+
+            samples_path += f'/left_lr={left_lr}/{left_status}/left_step={left_step}'
+            checkpoints_path += f'/left_lr={left_lr}/{left_status}/left_step={left_step}'
+
+            # left glow checkpoint path
+            left_glow_path = f'{params["checkpoints_path"]}/{dataset}/model=glow/img=segment/cond={args.left_cond}'
+            left_glow_path += f'/lr={left_lr}'  # e.g.: model=glow/img=segment/cond=None/lr=1e-4
+            paths['left_glow_path'] = left_glow_path
+
+        # common between left_pretrained and from_scratch
+        samples_path += f'/{run_mode}/lr={lr}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train/lr=1e-5
+        checkpoints_path += f'/lr={lr}'
+
+        # infer: also adding optimization step (step is specified after lr)
+        if run_mode == 'infer':
+            optim_step = args.last_optim_step  # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
+            samples_path += f'{samples_path}/step={optim_step}'
+
+    # ========= glow paths
+    else:  # e.g.: img=real/cond=segment/train/lr=1e-4
+        samples_path = f'{samples_base_dir}/{run_mode}/lr={lr}'
+        checkpoints_path = f'{checkpoints_base_dir}/lr={lr}'
+
+        if run_mode == 'infer':
+            step = args.last_optim_step
+            samples_path += f'/step={step}'
+
+    # bring everything together
+    paths['samples_path'] = samples_path
+    paths['checkpoints_path'] = checkpoints_path
+    return paths
+

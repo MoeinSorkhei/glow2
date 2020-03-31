@@ -183,7 +183,7 @@ def create_segment_cond(n_samples, data_folder, img_size, device, save_path=None
             f.write("==== REAL IMAGES PATHS \n")
             for item in real_paths:
                 f.write("%s\n" % item)
-        print('In [create_segment_cond]: saved the image paths')
+        print('In [create_segment_cond]: saved the image paths \n')
 
     return segmentations.to(device), id_repeats_batch.to(device), real_imgs.to(device)
 

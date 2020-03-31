@@ -6,14 +6,14 @@ from helper import calc_cond_shapes, show_images
 
 
 class TwoGlows(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, pretrained_left_glow=None):
         super().__init__()
         self.cond_shapes = calc_cond_shapes(orig_shape=None,
                                             in_channels=params['channels'],
                                             img_size=params['img_size'],
                                             n_block=params['n_block'],
                                             mode='flows_outs')
-        self.left_glow = init_glow(params)  # no condition
+        self.left_glow = init_glow(params) if pretrained_left_glow is None else pretrained_left_glow
         self.right_glow = init_glow(params, self.cond_shapes)
 
     def forward(self, x_a, x_b):
@@ -91,7 +91,6 @@ def sanity_check(x_a, x_b, x_a_rec, x_b_rec):
     x_a_diff = torch.mean(torch.abs(x_a - x_a_rec))
     x_b_diff = torch.mean(torch.abs(x_b - x_b_rec))
 
-    # print('x_a, x_rec_a:', x_a, x_a_rec)
     print('In [sanity_check]: mean x_a_diff over all the batch:', x_a_diff)
     print('In [sanity_check]: mean x_b_diff over all the batch:', x_b_diff)
 

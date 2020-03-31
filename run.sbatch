@@ -5,7 +5,7 @@
 #SBATCH --constrain "shire"
 #SBATCH --mail-type BEGIN,END,FAIL
 #SBATCH --mail-user sorkhei@kth.se
-#SBATCH --time 16:00:00
+#SBATCH --time 36:00:00
 #SBATCH --output /Midgard/home/%u/glow2/logs/%J.out
 #SBATCH --error  /Midgard/home/%u/glow2/logs/%J.err
 
@@ -16,13 +16,12 @@ nvidia-smi
 . ~/miniconda3/etc/profile.d/conda.sh
 conda activate workshop
 
-# no need to change dir before hand, just ssh moria and run this sbatch file: sbatch glow2/run.sbatch
+# Note: no need to change dir before hand, just ssh moria and run this sbatch file: sbatch glow2/run.sbatch
 # shellcheck disable=SC2164
 cd glow2/src/
 # ps aux |grep python3 |awk '{print $2}' |xargs kill -9
 
-# train from scratch
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --use_comet
-
-# resume training (pay attention to the optim_step)
-# python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 7000 --use_comet
+# 4.
+python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
+                --left_lr 1e-4 --left_unfreeze --left_step 30000 \
+                --lr 5e-5 --use_comet

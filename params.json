@@ -37,49 +37,19 @@
     "lu": true,
     "affine": true,
     "n_bits": 8,
-    "lr": 1e-5,
+    "lr": 1e-4,
     "temperature": 0.7,
     "n_samples": 30,
     "channels": 3,
     "img_size": [64, 128],
-
-    "batch_size": {
-      "segment": 5,
-      "segment_id": 10
-    },
+    "batch_size": 5,
 
     "data_folder": {
       "segment": "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine",
       "real": "/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit"
     },
 
-    "checkpoints_path": {
-      "segment": "../checkpoints/city_segment",
-
-      "real": {
-        "segment": {
-          "glow": "/local_storage/users/moein/checkpoints/city_model=glow_image=real_cond=segment",
-          "c_flow": "/Midgard/home/sorkhei/glow2/checkpoints/city_model=c_flow_image=real_cond=segment"
-        },
-        "segment_id": "../checkpoints/city_real_segment_id"
-      }
-    },
-
-    "samples_path": {
-      "segment": {
-        "segment": {
-          "glow": "../samples/city_model=glow_image=§§real_cond=segment",
-          "c_flow": "/Midgard/home/sorkhei/glow2/samples/city/model=c_flow/img=segment_cond=segment"
-        }
-      },
-
-      "real": {
-        "segment": {
-          "glow": "../samples/city_model=glow_image=real_cond=segment",
-          "c_flow": "/Midgard/home/sorkhei/glow2/samples/city/model=c_flow/img=real_cond=segment"
-        },
-        "segment_id": "../samples/city_real_segment_id"
-      }
-    }
+    "samples_path": "/Midgard/home/sorkhei/glow2/samples",
+    "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
   }
 }

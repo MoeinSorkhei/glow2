@@ -5,7 +5,7 @@ import numpy as np
 import os
 from PIL import Image
 from torchvision import utils
-from helper import make_dir_if_not_exists
+from helper import make_dir_if_not_exists, read_image_ids
 from city_utility import *
 
 
@@ -16,8 +16,7 @@ class CityDataset(data.Dataset):
         :param data_folder: the folder of the dataset whose images are to be read. Please note that this constructor
         expects the path relative to the 'data' folder whe all the data lie, so it automatically prepends the 'data/'
         folder to the name of the folder given.
-        :param img_size: the desired image size to be transformed to. Due to large images size, it is currently set
-        to 32 x 32 as default.
+        :param img_size: the desired image size to be transformed to.
 
         Image IDs are the pure image names which, once joined with the corresponding data folder, can be used to
         retrieve both the real and segmentation images (and any other file corresponding to that ID).
@@ -89,56 +88,10 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params):
     val_df = {'real': data_folder['real'] + '/val',  # adjusting the paths for the validation data folder
               'segment': data_folder['segment'] + '/val'}
     val_dataset = CityDataset(val_df, image_size, remove_alpha)
+
+    loader_params['shuffle'] = False  # no need to shuffle for the val set
     val_loader = data.DataLoader(val_dataset, **loader_params)
-
-    '''fine_segment_train_dataset = CityDataset(data_folder['fine_segment_train'], image_size, remove_alpha)
-    fine_segment_train_loader = data.DataLoader(fine_segment_train_dataset, **loader_params)
-
-    fine_segment_val_dataset = CityDataset(data_folder['fine_segment_val'], image_size, remove_alpha)
-    fine_segment_val_loader = data.DataLoader(fine_segment_val_dataset, **loader_params)
-
-    real_train_dataset = CityDataset(data_folder['real_train'], image_size, remove_alpha)
-    real_train_loader = data.DataLoader(real_train_dataset, **loader_params)
-
-    real_val_dataset = CityDataset(data_folder['real_val'], image_size, remove_alpha)
-    real_val_loader = data.DataLoader(real_val_dataset, **loader_params)
-
-    return {'fine_segment_train_loader': fine_segment_train_loader,
-            'fine_segment_val_loader': fine_segment_val_loader,
-            'real_train_loader': real_train_loader,
-            'real_val_loader': real_val_loader}'''
     return train_loader, val_loader
-
-
-def read_image_ids(data_folder, dataset_name):
-    """
-    It reads all the image names (id's) in the given data_folder, and returns the image names needed according to the
-    given dataset_name.
-
-    :param data_folder: to folder to read the images from. NOTE: This function expects the data_folder to exist in the
-    'data' directory.
-
-    :param dataset_name: the name of the dataset (is useful when there are extra unwanted images in data_folder, such as
-    reading the segmentations)
-
-    :return: the list of the image names.
-    """
-    img_ids = []
-    if dataset_name == 'cityscapes_segmentation':
-        suffix = '_color.png'
-    elif dataset_name == 'cityscapes_leftImg8bit':
-        suffix = '_leftImg8bit.png'
-    else:
-        raise NotImplementedError('In [read_image_ids] of Dataset: the wanted dataset is not implemented yet')
-
-    # all the files in all the subdirectories
-    for city_name, _, files in os.walk(data_folder):
-        for file in files:
-            if file.endswith(suffix):  # read all the images in the folder with the desired suffix
-                img_ids.append(os.path.join(city_name, file))
-
-    # print(f'In [read_image_ids]: found {len(img_ids)} images')
-    return img_ids
 
 
 def create_segment_cond(n_samples, data_folder, img_size, device, save_path=None):
@@ -199,5 +152,4 @@ def id_repeats_to_cond(id_repeats, h, w):
     cond = torch.zeros((len(id_repeats), h, w))
     for i in range(len(id_repeats)):
         cond[i, :, :] = id_repeats[i]
-
     return cond

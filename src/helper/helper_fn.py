@@ -3,6 +3,8 @@ import numpy as np
 import os
 import json
 import matplotlib.pyplot as plt
+from PIL import Image
+# import data_handler
 
 
 def show_images(img_list):
@@ -160,10 +162,14 @@ def print_info(args, params, model, which_info='all'):
         print(f'{"=" * 50} \n'
               f'In [print_info]: Important params: \n'
               f'model: {args.model} \n'
-              f'lr: {args.lr if args.lr is not None else params["lr"]} \n'
+              # f'lr: {args.lr if args.lr is not None else params["lr"]} \n'
+              f'lr: {params["lr"]} \n'
+              f'batch_size: {params["batch_size"]} \n'
+              f'temperature: {params["temperature"]} \n'
               f'last_optim_step: {args.last_optim_step} \n'
               f'left_lr: {args.left_lr} \n'
               f'left_step: {args.left_step} \n'
+              f'left_unfreeze? {args.left_unfreeze} \n'
               f'cond: {args.cond_mode} \n\n')
 
         # printing paths
@@ -185,8 +191,12 @@ def print_info(args, params, model, which_info='all'):
 
 
 def scientific(float_num):
-    if float_num < 1e-4:
-        return str(float_num)
+    # if float_num < 1e-4:
+    #    return str(float_num)
+    if float_num == 1e-5:
+        return '1e-5'
+    elif float_num == 5e-5:
+        return '5e-5'
     elif float_num == 1e-4:
         return '1e-4'
     elif float_num == 1e-3:
@@ -195,18 +205,30 @@ def scientific(float_num):
 
 
 def compute_paths(args, params):
+    """
+    Different paths computed in this function include:
+        - eval_path: where the validation images and the results of evaluation is stored.
+        - validation_path: where the samples are generated on the validation images
+          (in the size the network was trained on).
+        - resized_path: where the validation set samples are resized (to 256x256) to be used for cityscapes evaluation.
+    :param args:
+    :param params:
+    :return:
+    """
     dataset = args.dataset
     model = args.model
     img = 'segment' if args.train_on_segment else 'real'  # now only training glow on segmentations
     cond = args.cond_mode
-    run_mode = 'infer' if args.exp else 'train'
+    run_mode = 'infer' if (args.exp or args.infer_on_val or
+                           args.evaluate or args.eval_complete or args.resize_for_fcn) else 'train'
+    h, w = params['img_size'][0], params['img_size'][1]
 
     # base paths - common between all models
-    samples_base_dir = f'{params["samples_path"]}/{dataset}/model={model}/img={img}/cond={cond}'
-    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/model={model}/img={img}/cond={cond}'
+    samples_base_dir = f'{params["samples_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}'
+    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}'
 
     # specifying lr: from args if determined, otherwise default from params.json
-    lr = scientific(args.lr if args.lr is not None else params['lr'])
+    lr = scientific(params['lr'])
     paths = {}  # the paths dict be filled along the way
 
     # ========= c_flow paths
@@ -226,7 +248,7 @@ def compute_paths(args, params):
             checkpoints_path += f'/left_lr={left_lr}/{left_status}/left_step={left_step}'
 
             # left glow checkpoint path
-            left_glow_path = f'{params["checkpoints_path"]}/{dataset}/model=glow/img=segment/cond={args.left_cond}'
+            left_glow_path = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model=glow/img=segment/cond={args.left_cond}'
             left_glow_path += f'/lr={left_lr}'  # e.g.: model=glow/img=segment/cond=None/lr=1e-4
             paths['left_glow_path'] = left_glow_path
 
@@ -237,7 +259,7 @@ def compute_paths(args, params):
         # infer: also adding optimization step (step is specified after lr)
         if run_mode == 'infer':
             optim_step = args.last_optim_step  # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
-            samples_path += f'{samples_path}/step={optim_step}'
+            samples_path += f'/step={optim_step}/temp={params["temperature"]}'
 
     # ========= glow paths
     else:  # e.g.: img=real/cond=segment/train/lr=1e-4
@@ -250,6 +272,78 @@ def compute_paths(args, params):
 
     # bring everything together
     paths['samples_path'] = samples_path
+    paths['eval_path'] = samples_path + '/evaluation'
+    paths['val_path'] = paths['eval_path'] + '/val_imgs'
+    paths['resized_path'] = paths['eval_path'] + '/val_imgs_resized'
+    paths['eval_results'] = paths['eval_path'] + '/results'
     paths['checkpoints_path'] = checkpoints_path
     return paths
 
+
+def read_image_ids(data_folder, dataset_name):
+    """
+    It reads all the image names (id's) in the given data_folder, and returns the image names needed according to the
+    given dataset_name.
+
+    :param data_folder: to folder to read the images from. NOTE: This function expects the data_folder to exist in the
+    'data' directory.
+
+    :param dataset_name: the name of the dataset (is useful when there are extra unwanted images in data_folder, such as
+    reading the segmentations)
+
+    :return: the list of the image names.
+    """
+    img_ids = []
+    if dataset_name == 'cityscapes_segmentation':
+        suffix = '_color.png'
+    elif dataset_name == 'cityscapes_leftImg8bit':
+        suffix = '_leftImg8bit.png'
+    else:
+        raise NotImplementedError('In [read_image_ids] of Dataset: the wanted dataset is not implemented yet')
+
+    # all the files in all the subdirectories
+    for city_name, _, files in os.walk(data_folder):
+        for file in files:
+            if file.endswith(suffix):  # read all the images in the folder with the desired suffix
+                img_ids.append(os.path.join(city_name, file))
+
+    # print(f'In [read_image_ids]: found {len(img_ids)} images')
+    return img_ids
+
+
+def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):
+    imgs = read_image_ids(path_to_load, dataset_name='cityscapes_leftImg8bit')
+    print(f'In [resize_imgs]: read {len(imgs)} from: "{path_to_load}"')
+    print(f'In [resize_imgs]: will save resized imgs to: "{path_to_save}"')
+    make_dir_if_not_exists(path_to_save)
+
+    for i in range(len(imgs)):
+        if i > 0 and i % 50 == 0:
+            print(f'In [resize_imgs]: done for the {i}th image')
+
+        img_full_name = imgs[i].split('/')[-1]
+        city = img_full_name.split('_')[0]
+        image = Image.open(imgs[i])
+
+        if package == 'pil':
+            resized = image.resize((w, h))
+            resized.save(f'{path_to_save}/{img_full_name}')
+
+        else:  # package == 'scipy' => only works for scipy=1.0.0
+            import scipy.misc
+            image = np.array(image)
+            resized = scipy.misc.imresize(image, (h, w))
+            scipy.misc.imsave(f'{path_to_save}/{img_full_name}', resized)
+
+    print('In [resize_imgs]: All done')
+
+
+def resize_for_fcn(args, params):
+    if args.gt:
+        load_path = '/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'
+        save_path = '/Midgard/home/sorkhei/glow2/data/cityscapes/resized/val'
+    else:
+        paths = compute_paths(args, params)
+        load_path, save_path = paths['val_path'], paths['resized_path']
+
+    resize_imgs(load_path, save_path, package='scipy')

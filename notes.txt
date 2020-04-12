@@ -2,6 +2,8 @@ NOTES:
 For running:
     - We should be in the 'src' folder to run the. Do not run 'main.py' from any other folder.
 
+For evaluation: Caffe model should be present in the corresponding directory in the evaluation package
+    - Change dir to src/evaluation/third_party and, check the bash file and run it
 
 
 OBSERVATIONS:
@@ -14,3 +16,45 @@ disabled the model to learn the patterns, while the normalized values help the m
 patterns.
 
 2. num_workers=4 is problematic on T4 as well
+
+
+Installations:
+I used the following command to install Caffe in a new environment. By default installing it showed me errors becuase of conflicts
+in cudatoolkit version required by this and PyTprch. The version of Scipy==1.0.0 is needed to Cityscpaes evaluation (it has the imsave
+function which is deprecated).
+=====> conda create -n caffe scipy=1.0.0 numpy Pillow caffe-gpu
+
+Note: The Caffe model could only be used when activating the caffe workshop on the clusters. This environment is only
+useful for this task as it has almost nothing else installed.
+
+Evaluation should only be done in the "caffe" environment. The caffe package (CPU version) in the workshop environment
+shall not be used for evaluation (it is too slow and has not been tested).
+
+
+To-Do: make the installations all in a yaml file.
+I installed comet via "pip install comet-ml", since installing via conda caused errors.
+For some reason, I had to install torchvision separately after installing PyTorch: conda install -c pytorch torchvision
+Also need to install mlxtnd: conda install -c conda-forge mlxtend
+
+
+
+Important notes for evaluation:
+    - The 'evaluate' script can only work if images are saved and resize with scipy=1.0.0.
+    - Before evaluating, the images need to be resized to 256x256 (see the 'prepare' scripts), and they will automatically
+      be resized to match the size of the actual segmentation/label inside the script.
+    - The semantic classifier was trained on 256x256 images that were up-sampled to 1024x2048.
+    - The script needed to download the caffe model could be found in the 'examples.sh' file.
+    - Examples of resizing the generated images before evaluating could be found in the 'examples.sh' file.
+
+
+Steps for getting FCN score for a model:
+    - Determine the desired model via arguments
+    - Run program to train the model
+    - Run program for inference on validation set
+    - Run program for resizing for fcn
+    - Go to the evaluation package and follow the scripts for computing the scores
+
+# IMPORTANT ASSUMPTION: the program is run from the main.py module and all the paths are considered to be from there.
+
+Resized images and evaluation results are stored in /Midgard rather than /local_storage to make transferring the results
+easier

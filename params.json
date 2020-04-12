@@ -39,12 +39,14 @@
     "n_bits": 8,
     "lr": 1e-4,
     "temperature": 0.7,
-    "n_samples": 30,
+    "n_samples": 5,
     "channels": 3,
     "img_size": [64, 128],
     "batch_size": 5,
+    "monitor_val": true,
 
     "data_folder": {
+      "base": "/local_storage/datasets/moein/cityscapes",
       "segment": "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine",
       "real": "/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit"
     },

@@ -1,14 +1,16 @@
-import torch
-import models
-import data_handler
-import train
-import experiments
-import helper
+# import torch  # ==> some imports induce errors which are seemingly due to conda environemnt
+# import models
+# import data_handler
+# import train
+# import experiments
+# import helper
+from helper import resize_imgs, read_params, resize_for_fcn
+# import evaluation
 
 import matplotlib.pyplot as plt
-import json
+# import json
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def test_actnorm(which_fn):
@@ -185,6 +187,21 @@ def test_city(mode):
         print(torch.mean(torch.abs(x_b - real)))
 
 
+def test_eval():
+    params = read_params('../params.json')['city_evaluation']
+    evaluation.evaluate_city(params)
+
+
+def test_resize():
+    # helper.resize_imgs(path_to_load='data/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val',
+    #                   path_to_save='data/cityscapes/resized/val')
+
+    # resize_imgs(path_to_load='/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val',
+    #                   path_to_save='/local_storage/datasets/moein/cityscapes/resized/val')
+
+    resize_for_fcn()
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -197,7 +214,10 @@ def main():
 
     # test_resample()
     # test_city('train')
-    test_city('c_flow')
+    # test_city('c_flow')
+
+    # test_eval()
+    test_resize()
 
 
 if __name__ == '__main__':

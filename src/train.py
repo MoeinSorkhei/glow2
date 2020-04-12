@@ -128,17 +128,18 @@ def track_metrics(args, params, comet_tracker, metrics, optim_step):
 
     comet_tracker.track_metric('loss', round(metrics['loss'].item(), 3), optim_step)
     # also track the val_loss at the desired frequency
-    if optim_step % params['val_freq'] == 0:
+    if params['monitor_val'] and optim_step % params['val_freq'] == 0:
         comet_tracker.track_metric('val_loss', round(metrics['val_loss'], 3), optim_step)
 
     if args.model == 'glow':
         comet_tracker.track_metric('log_p', round(metrics['log_p'].item(), 3), optim_step)
 
     if args.model == 'c_flow':
-        comet_tracker.track_metric('loss_left', round(metrics['loss_left'].item(), 3), optim_step)
-        comet_tracker.track_metric('loss_right', round(metrics['loss_right'].item(), 3), optim_step)
+        if args.left_unfreeze:  # track left metrics only if left_glow is trainable
+            comet_tracker.track_metric('loss_left', round(metrics['loss_left'].item(), 3), optim_step)
+            comet_tracker.track_metric('log_p_left', round(metrics['log_p_left'].item(), 3), optim_step)
 
-        comet_tracker.track_metric('log_p_left', round(metrics['log_p_left'].item(), 3), optim_step)
+        comet_tracker.track_metric('loss_right', round(metrics['loss_right'].item(), 3), optim_step)
         comet_tracker.track_metric('log_p_right', round(metrics['log_p_right'].item(), 3), optim_step)
 
 
@@ -183,7 +184,8 @@ def prepare_batch(args, batch, device):
 def train(args, params, model, optimizer, device, comet_tracker=None,
           resume=False, last_optim_step=0, reverse_cond=None):
     # ============ setting params
-    batch_size = args.bsize if args.bsize is not None else params['batch_size']
+    # batch_size = args.bsize if args.bsize is not None else params['batch_size']
+    batch_size = params['batch_size']
     loader_params = {'batch_size': batch_size, 'shuffle': True, 'num_workers': 0}
 
     # ============ initializing data loaders
@@ -209,8 +211,8 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
     optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
 
-    # ============ show model params paths, etc.
-    helper.print_info(args, params, model, which_info='all')
+    # ============ show model params
+    helper.print_info(args, params, model, which_info='model')
 
     if resume:
         print(f'In [train]: resuming training from optim_step={optim_step}')
@@ -235,10 +237,14 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                     do_forward(args, params, model, img_batch, segment_batch, cond)
 
                 metrics = {'loss': loss,
-                           'loss_left': loss_left,
-                           'log_p_left': log_p_left,
                            'loss_right': loss_right,
                            'log_p_right': log_p_right}
+
+                if args.left_pretrained and not args.left_unfreeze:  # left glow pre-trained and freezed
+                    pass
+                else:  # normal c_flow OR pre-trained left glow unfreezed
+                    metrics['loss_left'] = loss_left
+                    metrics['log_p_left'] = log_p_left
             else:
                 raise NotImplementedError
 
@@ -249,7 +255,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
             print(f'In [train]: Step: {optim_step} => loss: {loss.item():.3f}')
 
             # ============ validation loss
-            if optim_step % params['val_freq'] == 0:
+            if params['monitor_val'] and optim_step % params['val_freq'] == 0:
                 val_loss = calc_val_loss(args, params, device, model, val_loader)
                 metrics['val_loss'] = val_loss
                 print(f'====== In [train]: val_loss: {round(val_loss, 3)}')

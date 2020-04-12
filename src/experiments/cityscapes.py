@@ -10,6 +10,8 @@ from data_handler import create_segment_cond
 from train import sample_z
 from helper import calc_z_shapes, load_checkpoint
 from models import TwoGlows
+import models
+import data_handler
 
 
 def visualize_img(img_path, data_folder, dataset_name, desired_size):
@@ -113,3 +115,65 @@ def syn_new_segmentations(args, params, model, device):
 
             print(f'Temp={temp}: done')
         print(f'Trial={trial}: done')
+
+
+def infer_on_validation_set(args, params, device):
+    """
+    The model name and paths should be equivalent to the name used in the resize_for_fcn function
+    in evaluation.third_party.prepare.py module.
+    :param args:
+    :param params:
+    :param device:
+    :return:
+    """
+    with torch.no_grad():
+        paths = helper.compute_paths(args, params)
+        checkpt_path, val_path = paths['checkpoints_path'], paths['val_path']
+
+        print(f'In [infer_on_validation_set]:\n====== checkpt_path: "{checkpt_path}" \n====== val_path: "{val_path}" \n')
+        helper.make_dir_if_not_exists(val_path)
+
+        # init and load model
+        model, _ = models.init_model(args, params, device, run_mode='infer')  # init model based on args and params
+        optim_step = args.last_optim_step
+        model, _, _ = load_checkpoint(checkpt_path, optim_step, model, None, device)
+        print(f'In [infer_on_validation_set]: init model and load checkpoint: done')
+
+        # validation loader
+        batch_size = params['batch_size']
+        loader_params = {'batch_size': batch_size, 'shuffle': False, 'num_workers': 0}
+        _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
+                                                      image_size=(params['img_size']),
+                                                      remove_alpha=True,  # removing the alpha channel
+                                                      loader_params=loader_params)
+        print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
+        helper.print_info(args, params, model)
+
+        for i_batch, batch in enumerate(val_loader):
+            segment_batch = batch['segment'].to(device)
+            real_paths = batch['real_path']  # list: used to save samples with the same name as original images
+            z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+            z_samples = sample_z(z_shapes, batch_size, params['temperature'], device)  # batch_size samples in each iter
+
+            # take samples
+            if args.model == 'c_flow':
+                samples = model.reverse(x_a=segment_batch, z_b_samples=z_samples, mode='sample_x_b').cpu().data
+
+            else:
+                raise NotImplementedError
+
+            # save inferred images separately
+            save_one_by_one(samples, real_paths, val_path)
+
+            if i_batch > 0 and i_batch % 20 == 0:
+                print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')
+        print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path}')
+
+
+def save_one_by_one(imgs_batch, paths_list, save_path):
+    bsize = imgs_batch.shape[0]
+    for i in range(bsize):
+        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
+        image_name = paths_list[i].split('/')[-1]  # e.g.: lindau_000023_000019_leftImg8bit.png
+        full_path = f'{save_path}/{image_name}'
+        utils.save_image(tensor, full_path, nrow=1, padding=0)

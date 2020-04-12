@@ -11,3 +11,5 @@ sample
 samples
 checkpoints
 tmp/checkpoints
+src/evaluation/third_party/caffemodel/
+gt_eval_results/

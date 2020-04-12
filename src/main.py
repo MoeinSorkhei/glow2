@@ -6,6 +6,8 @@ from experiments import interpolate, new_condition, resample_latent, get_image
 from data_handler import create_segment_cond
 import experiments
 import helper
+import models
+import evaluation
 
 import argparse
 import json
@@ -24,8 +26,12 @@ def read_params_and_args():
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
+
+    parser.add_argument('--img_size', nargs='+', type=int)  # in height width order: e.g. --img_size 128 256
     parser.add_argument('--bsize', type=int)
     parser.add_argument('--lr', type=float)
+    parser.add_argument('--temp', type=float)  # temperature
+
     parser.add_argument('--left_step', type=int)  # left glow optim_step (pretrained) in c_flow
     # Note: left_lr is str since it is used only for finding the checkpoints path of the left glow
     parser.add_argument('--left_lr', type=str)  # the lr using which the left glow was trained
@@ -39,7 +45,14 @@ def read_params_and_args():
     parser.add_argument('--sanity_check', action='store_true')
     parser.add_argument('--train_on_segment', action='store_true')  # train/synthesis with vanilla Glow on segmentations
 
-    # args mainly for the experiment mode
+    # evaluation
+    parser.add_argument('--infer_on_val', action='store_true')
+    parser.add_argument('--resize_for_fcn', action='store_true')
+    parser.add_argument('--evaluate', action='store_true')
+    parser.add_argument('--eval_complete', action='store_true')
+    parser.add_argument('--gt', action='store_true')  # used only as --evaluate --gt for evaluating ground-truth images
+
+    # args mainly for the experiment mode: --exp should be used for the following (should be revised though)
     parser.add_argument('--exp', action='store_true')
     parser.add_argument('--interp', action='store_true')
     parser.add_argument('--new_cond', action='store_true')
@@ -55,88 +68,31 @@ def read_params_and_args():
     return arguments, parameters
 
 
-def prepare_reverse_cond(args, params, device):
-    if args.dataset == 'mnist':
-        reverse_cond = ('mnist', 1, params['n_samples'])
-        return reverse_cond
-
-    else:
-        if args.cond_mode is None:  # vanilla Glow on real/segments without condition
-            return None
-
-        samples_path = helper.compute_paths(args, params)['samples_path']
-        segmentations, id_repeats_batch, real_imgs = create_segment_cond(params['n_samples'],
-                                                                         params['data_folder'],
-                                                                         params['img_size'],
-                                                                         device,
-                                                                         save_path=samples_path)
-        # condition is segmentation
-        if args.cond_mode == 'segment':
-            if args.model == 'glow':
-                reverse_cond = ('city_segment', segmentations)
-
-            elif args.model == 'c_flow':
-                # here reverse_cond is equivalent to x_a, the actual condition will be made inside the reverse function
-                if args.sanity_check:
-                    reverse_cond = (segmentations, real_imgs)
-                else:
-                    reverse_cond = segmentations
-            else:
-                raise NotImplementedError
-
-        # condition is segmentation + ID's
-        elif args.cond_mode == 'segment_id':
-            reverse_cond = ('city_segment_id', segmentations, id_repeats_batch)
-        else:
-            raise NotImplementedError
-
-        # calculating condition shape (needed to init the model) -- maybe better to move this part somewhere else
-        cond_shapes = calc_cond_shapes(segmentations.shape[1:],
-                                       params['channels'],
-                                       params['img_size'],
-                                       params['n_block'],
-                                       args.cond_mode)
-        return reverse_cond, cond_shapes
+def adjust_params(args, params):
+    """
+    Change the default params if specified in the arguments.
+    :param args:
+    :param params:
+    :return:
+    """
+    if args.bsize is not None:
+        params['batch_size'] = args.bsize
+    if args.lr is not None:
+        params['lr'] = args.lr
+    if args.temp is not None:
+        params['temperature'] = args.temp
+    if args.img_size is not None:
+        params['img_size'] = args.img_size
+    print('In [adjust_params]: params adjusted')
+    return params
 
 
 def run_training(args, params):
-    # ======== preparing reverse condition and initializing models
-    if args.dataset == 'mnist':
-        model = init_glow(params)
-        reverse_cond = prepare_reverse_cond(args, params, device)
-
-    elif args.model == 'glow':
-        if args.cond_mode is None:
-            reverse_cond = None
-            model = init_glow(params)
-
-        else:
-            reverse_cond, cond_shapes = prepare_reverse_cond(args, params, device)
-            model = init_glow(params, cond_shapes)
-
-    # ======== init c_flow
-    elif args.model == 'c_flow':
-        reverse_cond, _ = prepare_reverse_cond(args, params, device)
-
-        if args.left_pretrained:  # use pre-trained left Glow
-            # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
-            left_glow_path = helper.compute_paths(args, params)['left_glow_path']
-            pre_trained_left_glow = init_glow(params)  # init the model
-            pretrained_left_glow, _, _ = load_checkpoint(path_to_load=left_glow_path,
-                                                         optim_step=args.left_step,
-                                                         model=pre_trained_left_glow,
-                                                         optimizer=None,
-                                                         device=device,
-                                                         resume_train=args.left_unfreeze)  # load from checkpoint
-            model = TwoGlows(params, pretrained_left_glow)
-        else:  # also train left Glow
-            model = TwoGlows(params)
-    else:
-        raise NotImplementedError
-
     # ======== preparing model and optimizer
-    model.to(device)
-    lr = args.lr if args.lr is not None else params['lr']
+    model, reverse_cond = models.init_model(args, params, device)
+    # model.to(device)
+    # lr = args.lr if args.lr is not None else params['lr']
+    lr = params['lr']
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # ======== setting comet tracker
@@ -164,9 +120,29 @@ def run_training(args, params):
 
 def main():
     args, params = read_params_and_args()
-    print('In [main]: arguments:', args)
+    params = adjust_params(args, params)
 
-    if args.exp and args.interp:  # experiments
+    # show important params and the paths
+    if not args.eval_complete:  # no need to print in this mode
+        helper.print_info(args, params, model=None, which_info='params')
+    # print('waiting input')
+    # input()
+    # print('In [main]: arguments:', args)
+
+    # NOTE: EVERY NEWLY ADDED ARGUMENT FOR INFERENCE MODE SHOULD ALSO BE ADDED TO THE COMPUTE_PATHS FUNCTION (IN HELPER)
+    if args.eval_complete:
+        evaluation.eval_complete(args, params, device)
+
+    elif args.infer_on_val:
+        experiments.infer_on_validation_set(args, params, device)
+
+    elif args.resize_for_fcn:
+        helper.resize_for_fcn(args, params)
+
+    elif args.evaluate:
+        evaluation.evaluate_city(args, params)
+
+    elif args.exp and args.interp:  # experiments
         experiments.run_interp_experiments(args, params)
 
     elif args.exp and args.new_cond:

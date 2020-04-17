@@ -187,6 +187,8 @@ def print_info(args, params, model, which_info='all'):
               'In [print_info]: Using model with the following info:\n'
               f'Total parameters: {total_params:,} \n'
               f'Trainable parameters: {trainable_params:,} \n'
+              f'n_flow: {params["n_flow"]} \n'
+              f'n_block: {params["n_block"]} \n'
               f'{"=" * 50}\n')
 
 

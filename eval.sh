@@ -29,8 +29,11 @@ sleep 5m # Waits 5 minutes.
 
 
 # pre-trained freezed, left_step=30K, lr=5e-5, step=13000 -- CHECKED
-python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
-                --left_lr 1e-4 --left_step 30000 --lr 5e-5 --last_optim_step 13000 --bsize 20
+python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment \
+                --left_pretrained --left_lr 1e-4 --left_step 30000 \
+                --lr 1e-4 \
+                --last_optim_step 29000 \
+                --bsize 20
 sleep 5m # Waits 5 minutes.
 
 

@@ -27,6 +27,8 @@ def read_params_and_args():
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--last_optim_step', type=int)
 
+    parser.add_argument('--n_flow', type=int)
+    parser.add_argument('--n_block', type=int)
     parser.add_argument('--img_size', nargs='+', type=int)  # in height width order: e.g. --img_size 128 256
     parser.add_argument('--bsize', type=int)
     parser.add_argument('--lr', type=float)
@@ -75,14 +77,24 @@ def adjust_params(args, params):
     :param params:
     :return:
     """
+    if args.n_block is not None:
+        params['n_block'] = args.n_block
+
+    if args.n_flow is not None:
+        params['n_flow'] = args.n_flow
+
     if args.bsize is not None:
         params['batch_size'] = args.bsize
+
     if args.lr is not None:
         params['lr'] = args.lr
+
     if args.temp is not None:
         params['temperature'] = args.temp
+
     if args.img_size is not None:
         params['img_size'] = args.img_size
+
     print('In [adjust_params]: params adjusted')
     return params
 

@@ -5,7 +5,7 @@
 #SBATCH --constrain "shire|rivendell|khazadum"
 #SBATCH --mail-type BEGIN,END,FAIL
 #SBATCH --mail-user sorkhei@kth.se
-#SBATCH --time 5:00:00
+#SBATCH --time 10:00:00
 #SBATCH --output /Midgard/home/%u/glow2/logs/%J.out
 #SBATCH --error  /Midgard/home/%u/glow2/logs/%J.err
 
@@ -19,13 +19,10 @@ conda activate caffe
 # shellcheck disable=SC2164
 cd glow2/src/
 
-# from scratch, lr=1e-5 -- CHECKED
-python3 main.py --eval_complete \
-                --dataset cityscapes \
-                --model c_flow \
-                --cond_mode segment \
-                --lr 1e-5 \
-                --last_optim_step 26000 \
-                --bsize 20
-
 # NOTE: No need to resize if it was already 256x256
+# pre-trained freezed, left_step=10K, lr=1e-5 -- CHECKED
+python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment \
+                --left_pretrained --left_lr 1e-4 --left_step 30000 \
+                --lr 1e-4 \
+                --last_optim_step 29000 \
+                --bsize 20

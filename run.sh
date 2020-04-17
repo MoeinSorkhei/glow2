@@ -49,10 +49,15 @@ python3 main.py --dataset cityscapes --model glow --bsize 10 --lr 1e-4 --use_com
 python3 main.py --dataset cityscapes --model glow --img_size 128 256 --bsize 1 --lr 1e-4 --use_comet
 
 # train glow on segmentations only
-python3 main.py --dataset cityscapes --model glow --train_on_segment --bsize 10 --lr 1e-4 --use_comet
+python3 main.py --dataset cityscapes --model glow --train_on_segment \
+                --img_size 256 512 --bsize 1 \
+                --lr 1e-4 \
+                --use_comet
 
 # train glow on segmentations only with larger images
 python3 main.py --dataset cityscapes --model glow --train_on_segment --img_size 128 256 --bsize 1 --lr 1e-4 --use_comet
+
+
 
 # ================================ training c_flow
 # train c_flow on cityscapes
@@ -63,27 +68,38 @@ python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
                 --img_size 128 256 --bsize 1 --lr 5e-5 --use_comet
 
 
+# train c_flow from scratch on cityscapes with even larger img size
+python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
+                --n_block 4 --n_flow 14 \
+                --img_size 256 512 --bsize 1 \
+                --lr 1e-4 \
+                --use_comet
+
+
+
 # training c_flow with sanity check (revision in sanity check may be needed)
 python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --lr 1e-4 --sanity_check
 
 
-# 1. train c-flow with pre-trained left glow, unfreezing its layers so it is trainable as well
+
+# 3. train c-flow with freezed pre-trained left glow
+python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
+                --left_pretrained --left_lr 1e-4 --left_step 136000 \
+                --img_size 256 256 \
+                --bsize 1 \
+                --lr 1e-4 \
+                --use_comet
+
+
+
+# 1. train c-flow with unfreezed pre-trained left glow
 python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
                 --left_lr 1e-4 --left_unfreeze --left_step 30000 \
                 --lr 1e-5 --use_comet
 
-# 3. train c-flow with pre-trained left glow, freezing its layers so it is not trainable
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
-                --left_lr 1e-4 --left_step 20000 --img_size 128 256 --bsize 1 --\
-                --lr 5e-5 --use_comet
-
-# 4.
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
-                --left_lr 1e-4 --left_unfreeze --left_step 30000 \
-                --lr 5e-5 --use_comet
 
 
-
+# =====================================================================================================================
 # ================================ inference on validation set
 # infer for c_flow (default temperature)
 python3 main.py --infer_on_val --dataset cityscapes --model c_flow --cond_mode segment --lr 5e-5 \
@@ -133,7 +149,8 @@ python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode 
 # =========== REVISE THE ARGS FOR EXPERIMENTS
 # ================ resume training (now throws NotImplementedError)
 # =========== resume training (pay attention to the optim_step)
-# python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 19000 --use_comet
+# python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 19000
+# --use_comet
 # --dataset mnist --resume_train --last_optim_step 21000 --use_comet
 # --dataset cityscapes --model c_flow --cond_mode segment --resume_train --last_optim_step 6000
 
@@ -152,4 +169,5 @@ python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode 
 
 
 # ================  synthesize segmentations (with c_flow)
-# --dataset cityscapes --exp --sample_c_flow --syn_segs --last_optim_step 27000 --model c_flow --cond_mode segment --trial 5
+# --dataset cityscapes --exp --sample_c_flow --syn_segs --last_optim_step 27000 --model c_flow --cond_mode segment
+# --trial 5

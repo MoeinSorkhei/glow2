@@ -13,7 +13,7 @@ from .cityscapes import cityscapes
 import sys
 
 
-def evaluate(data_folder, paths, split='val', save_output_images=True, gpu_id=0):
+def evaluate(data_folder, paths, split='val', save_output_images=False, gpu_id=0):
     output_dir = paths['eval_results']  # Where to save the evaluation result
     result_dir = paths['resized_path']  # Path to the (resized) generated images to be evaluated
     cityscapes_dir = data_folder

@@ -4,7 +4,6 @@ import os
 import json
 import matplotlib.pyplot as plt
 from PIL import Image
-# import data_handler
 
 
 def show_images(img_list):
@@ -131,14 +130,28 @@ def calc_cond_shapes(orig_shape, in_channels, img_size, n_block, mode):
     if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
         return z_shapes
 
-    # flows_outs are before split => channels should be multiplied by 2 (except for the last shape)
-    if mode == 'flows_outs':
-        for i in range(len(z_shapes) - 1):
-            z_shapes[i] = list(z_shapes[i])
-            z_shapes[i][0] = z_shapes[i][0] * 2
-            z_shapes[i] = tuple(z_shapes[i])
+    # flows_outs are before split while z_shapes are calculated for z's after they are split
+    # ===> channels should be multiplied by 2 (except for the last shape)
+    # if mode == 'flows_outs' or mode == 'flows_outs + bmap':
+    if mode == 'segment' or mode == 'segment_boundary':
+        for i in range(len(z_shapes)):
+            z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
+
+            if i < len(z_shapes) - 1:
+                z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
+                if mode == 'segment_boundary':
+                    z_shapes[i][0] += 12  # extra channel dimension for the boundary
+
+            elif mode == 'segment_boundary':  # last layer - adding dim only for boundaries
+                # no need to have z_shapes[i][0] * 2 since this layer does not have split
+                z_shapes[i][0] += 12  # extra channel dimension for the boundary
+
+            z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
+            # print(f'z[{i}] cond shape = {z_shapes[i]}')
+            # input()
         return z_shapes
 
+    # for 'segment' or 'segment_id' modes
     cond_shapes = []
     for z_shape in z_shapes:
         h, w = z_shape[1], z_shape[2]
@@ -169,7 +182,6 @@ def print_info(args, params, model, which_info='all'):
               f'last_optim_step: {args.last_optim_step} \n'
               f'left_lr: {args.left_lr} \n'
               f'left_step: {args.left_step} \n'
-              f'left_unfreeze? {args.left_unfreeze} \n'
               f'cond: {args.cond_mode} \n\n')
 
         # printing paths
@@ -221,13 +233,20 @@ def compute_paths(args, params):
     model = args.model
     img = 'segment' if args.train_on_segment else 'real'  # now only training glow on segmentations
     cond = args.cond_mode
+    # used for checkpoints
+    cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
+
     run_mode = 'infer' if (args.exp or args.infer_on_val or
                            args.evaluate or args.eval_complete or args.resize_for_fcn) else 'train'
     h, w = params['img_size'][0], params['img_size'][1]
 
+    w_conditional = args.w_conditional
+    act_conditional = args.act_conditional
     # base paths - common between all models
-    samples_base_dir = f'{params["samples_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}'
-    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}'
+    samples_base_dir = f'{params["samples_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}' \
+                       f'/w_cond={w_conditional}_act_cond={act_conditional}'
+    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond_with_ceil}' \
+                           f'/w_conditional={w_conditional}/act_conditional={act_conditional}'
 
     # specifying lr: from args if determined, otherwise default from params.json
     lr = scientific(params['lr'])
@@ -243,11 +262,11 @@ def compute_paths(args, params):
         # details for left_pretrained paths
         if c_flow_type == 'left_pretrained':
             left_lr = args.left_lr  # example: left_pretrained/left_lr=1e-4/freezed/left_step=10000
-            left_status = 'unfreezed' if args.left_unfreeze else 'freezed'
+            # left_status = 'unfreezed' if args.left_unfreeze else 'freezed'
             left_step = args.left_step  # optim_step of the left glow
 
-            samples_path += f'/left_lr={left_lr}/{left_status}/left_step={left_step}'
-            checkpoints_path += f'/left_lr={left_lr}/{left_status}/left_step={left_step}'
+            samples_path += f'/left_lr={left_lr}_left_step={left_step}'
+            checkpoints_path += f'/left_lr={left_lr}/freezed/left_step={left_step}'  # always freezed
 
             # left glow checkpoint path
             left_glow_path = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model=glow/img=segment/cond={args.left_cond}'
@@ -255,7 +274,8 @@ def compute_paths(args, params):
             paths['left_glow_path'] = left_glow_path
 
         # common between left_pretrained and from_scratch
-        samples_path += f'/{run_mode}/lr={lr}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train/lr=1e-5
+        # samples_path += f'/{run_mode}/lr={lr}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train/lr=1e-5
+        samples_path += f'/{run_mode}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train
         checkpoints_path += f'/lr={lr}'
 
         # infer: also adding optimization step (step is specified after lr)

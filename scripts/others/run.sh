@@ -30,15 +30,19 @@ ps aux |grep python3 |awk '{print $2}' |xargs kill -9
 scancel --user=${USER}
 
 
-# ================================ transgferring datasets to compute nodes
+# ================================ transferring datasets to compute nodes
 # on the compute node
 mkdir -p /local_storage/datasets/moein
 cp -a /Midgard/home/sorkhei/glow2/data/cityscapes/ /local_storage/datasets/moein/
 cd /local_storage/datasets/moein/cityscapes/
 unzip -q gtFine_trainvaltest.zip -d gtFine_trainvaltest
 unzip -q leftImg8bit_trainvaltest.zip -d leftImg8bit_trainvaltest
+rm gtFine_trainvaltest.zip
+rm leftImg8bit_trainvaltest.zip
 
 
+# moving boundaries from Midgard to compute node
+rsync -Pav /Midgard/Data/moein/cityscapes/boundaries/ /local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/
 
 
 # ================ training glow
@@ -60,42 +64,26 @@ python3 main.py --dataset cityscapes --model glow --train_on_segment --img_size 
 
 
 # ================================ training c_flow
-# train c_flow on cityscapes
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --lr 1e-4 --use_comet
-
-# train c_flow on cityscapes with larger img size
+#  train c-flow with freezed pre-trained left glow
 python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
-                --img_size 128 256 --bsize 1 --lr 5e-5 --use_comet
-
-
-# train c_flow from scratch on cityscapes with even larger img size
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
-                --n_block 4 --n_flow 14 \
                 --img_size 256 512 --bsize 1 \
+                --n_block 4 --n_flow 14 \
+                --left_pretrained --left_lr 1e-4 --left_step 136000 \
                 --lr 1e-4 \
+                --resume_train --last_optim_step 106000 \
                 --use_comet
 
+
+
+# train c-flow with unfreezed pre-trained left glow
+python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
+                --left_lr 1e-4 --left_unfreeze --left_step 30000 \
+                --lr 1e-5 --use_comet
 
 
 # training c_flow with sanity check (revision in sanity check may be needed)
 python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --lr 1e-4 --sanity_check
 
-
-
-# 3. train c-flow with freezed pre-trained left glow
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
-                --left_pretrained --left_lr 1e-4 --left_step 136000 \
-                --img_size 256 256 \
-                --bsize 1 \
-                --lr 1e-4 \
-                --use_comet
-
-
-
-# 1. train c-flow with unfreezed pre-trained left glow
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment --left_pretrained \
-                --left_lr 1e-4 --left_unfreeze --left_step 30000 \
-                --lr 1e-5 --use_comet
 
 
 
@@ -130,6 +118,8 @@ python3 main.py --resize_for_fcn --dataset cityscapes --model c_flow --cond_mode
 # evaluate for ground-truth data
 python3 main.py --evaluate --gt --dataset cityscapes
 
+
+
 # evaluate for c_flow
 python3 main.py --evaluate --dataset cityscapes --model c_flow --cond_mode segment --lr 5e-5 \
                 --last_optim_step 19000
@@ -144,6 +134,12 @@ python3 main.py --evaluate --dataset cityscapes --model c_flow --cond_mode segme
 python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment --lr 1e-5 \
         --last_optim_step 26000 --bsize 20
 # python3 main.py --infer_on_val --dataset cityscapes --model c_flow --cond_mode segment --lr 1e-5 --last_optim_step 26000
+
+
+
+
+# create boundary maps (needs huge memory: 50GB)
+python3 main.py --dataset cityscapes --create_boundaries
 
 
 # =========== REVISE THE ARGS FOR EXPERIMENTS

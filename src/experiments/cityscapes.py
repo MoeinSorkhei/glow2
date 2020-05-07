@@ -1,12 +1,10 @@
-from PIL import Image
-from torchvision import transforms
 import torch
 import matplotlib.pyplot as plt
 from torchvision import utils
 
 import helper
 from data_handler import CityDataset
-from data_handler import create_segment_cond
+from data_handler import create_cond
 from train import sample_z
 from helper import calc_z_shapes, load_checkpoint
 from models import TwoGlows
@@ -39,7 +37,7 @@ def visualize_img(img_path, data_folder, dataset_name, desired_size):
 
 def sample_trained_c_flow(args, params, device):
     checkpt_pth = params['checkpoints_path']['real'][args.cond_mode][args.model]
-    model = TwoGlows(params)  # initializing the model
+    model = TwoGlows(params, do_ceil=args.do_ceil)  # initializing the model
     model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, device, False)  # loading the model
 
     if args.conditional:
@@ -55,11 +53,11 @@ def sample_c_flow_conditional(args, params, model, device):
     helper.make_dir_if_not_exists(trials_pth)
 
     segmentations, _, real_imgs = \
-        create_segment_cond(params['n_samples'],
-                            params['data_folder'],
-                            params['img_size'],
-                            device,
-                            save_path=trials_pth)
+        create_cond(params['n_samples'],
+                    params['data_folder'],
+                    params['img_size'],
+                    device,
+                    save_path=trials_pth)
 
     z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
     # split into tensors of 5 img: better for visualization
@@ -145,7 +143,8 @@ def infer_on_validation_set(args, params, device):
         _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
                                                       image_size=(params['img_size']),
                                                       remove_alpha=True,  # removing the alpha channel
-                                                      loader_params=loader_params)
+                                                      loader_params=loader_params,
+                                                      do_ceil=args.do_ceil)
         print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
         helper.print_info(args, params, model)
 
@@ -174,6 +173,12 @@ def save_one_by_one(imgs_batch, paths_list, save_path):
     bsize = imgs_batch.shape[0]
     for i in range(bsize):
         tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
-        image_name = paths_list[i].split('/')[-1]  # e.g.: lindau_000023_000019_leftImg8bit.png
-        full_path = f'{save_path}/{image_name}'
+
+        if save_path is not None:  # explicitly get the image name and save it to the desired location
+            image_name = paths_list[i].split('/')[-1]  # e.g.: lindau_000023_000019_leftImg8bit.png
+            full_path = f'{save_path}/{image_name}'
+
+        else:  # full path is already provided in the path list
+            full_path = paths_list[i]
+
         utils.save_image(tensor, full_path, nrow=1, padding=0)

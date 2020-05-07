@@ -6,11 +6,13 @@
 # import helper
 from helper import resize_imgs, read_params, resize_for_fcn
 # import evaluation
+import helper
 
 import matplotlib.pyplot as plt
 # import json
 
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import torch
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def test_actnorm(which_fn):
@@ -140,10 +142,10 @@ def test_city(mode):
 
             z_rand = train.sample_z(helper.calc_z_shapes(params['channels'], (params['height'], params['width']),
                                                          params['n_block']), real.shape[0], 0.7, device)
-            inp = glow.reverse(z, reconstruct=True, cond=cond)
+            inp = glow.reverse(z, reconstruct=True, coupling_conds=cond)
             print('backward first done')
 
-            inp_rand = glow.reverse(z_rand, reconstruct=False, cond=cond)
+            inp_rand = glow.reverse(z_rand, reconstruct=False, coupling_conds=cond)
             print('backward second done')
 
     if mode == 'c_flow':
@@ -202,6 +204,100 @@ def test_resize():
     resize_for_fcn()
 
 
+def test_cn():
+    import models
+    import torch
+
+    actnorm_cn = models.ActNormCN(in_channels=3, cond_h=16, cond_w=32, fc_out_shape=24)
+    a = torch.randn(10, 3, 16, 32)
+    out = actnorm_cn(a)
+    print('out shape:', out.shape)
+
+
+def test_edge():
+    import helper
+    a = torch.randn((1, 3, 4, 4)).to(device)
+    edge = helper.get_edges(a)
+    print(edge)
+
+
+def test_pil():
+    from PIL import Image
+    import glob
+
+    p = "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine"
+    # p = "/Midgard/Data/moein/cityscapes/boundaries/"
+    files = glob.glob(p + '/**/*_boundary.png', recursive=True)
+    print(f'Found {len(files)} boundary images recursively at: "{p}"')
+
+    # pth = "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine" \
+    #      "/train/strasbourg/strasbourg_000001_005666_gtFine_boundary.png"
+    # Image.open(pth)
+    for f in files:
+        # if f != '/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine/' \
+        #        'train/strasbourg/strasbourg_000001_005666_gtFine_boundary.png':
+        Image.open(f)
+            # print('open file done')
+    print('All files are OK.')
+
+
+def test_recreate_bmap():
+    boundary_path = '/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine/' \
+                'train/strasbourg/strasbourg_000001_005666_gtFine_boundary.png'
+
+    instance_path = '/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine/' \
+                'train/strasbourg/strasbourg_000001_005666_gtFine_instanceIds.png'
+
+    helper.recreate_boundary_map(instance_path, boundary_path, device)
+
+
+def test_cond_net():
+    import models
+    inp, stride = torch.randn((10, 6, 64, 128)), 3
+    # inp, stride = torch.randn((10, 12, 32, 64)), 3
+    # inp, stride = torch.randn((10, 24, 16, 32)), 2
+    # inp, stride = torch.randn((10, 48, 8, 16)), 1
+    cond_net = models.WCondNet(inp[0].shape, conv_stride=stride)
+    out = cond_net(inp[0].unsqueeze(0))
+
+
+def test_cond_actnorm():
+    import models
+    inp, stride = torch.randn((10, 6, 64, 128)), 3
+    # inp, stride = torch.randn((10, 12, 32, 64)), 3
+    # inp, stride = torch.randn((10, 24, 16, 32)), 2
+    # inp, stride = torch.randn((10, 48, 8, 16)), 1
+
+    # inp = inp[0].unsqueeze(0)
+    cond = torch.randn(inp.shape)
+
+    cond_act_norm = models.ActNormConditional(inp[0].shape, conv_stride=stride)
+
+    # cond_net = models.ActCondNet(inp[0].shape, conv_stride=stride)
+    # out = cond_net(inp)  # output shape (B, 2, C)
+
+    # s, t = out[:, 0, :].unsqueeze(2).unsqueeze(3), out[:, 1, :].unsqueeze(2).unsqueeze(3)
+    # print('s, t shape: ', s.shape, t.shape)
+    # print('s, t: ', s, t)
+
+    # print('inp mean:', inp[:, 0].mean())
+    # print('inp std:', inp[:, 0].std())
+    # print('\n')
+
+    # output = s * (inp + t)
+    #for i in range(4):
+    #    print(f'out mean for i={i}:', output[:, i, :, :].mean())
+    #    print(f'out std for i={i}:', output[:, i, :, :].std())
+    #    print()
+
+    # print(s[0] == s[1])
+    # print(t[2] == t[3])
+
+    out, _ = cond_act_norm(inp, act_left_out=cond)
+    inp_again = cond_act_norm.reverse(out, act_left_out=cond)
+
+    print(inp == inp_again)
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -217,7 +313,16 @@ def main():
     # test_city('c_flow')
 
     # test_eval()
-    test_resize()
+    # test_resize()
+
+    # test_cn()
+    # test_edge()
+
+    # test_recreate_bmap()
+    # test_pil()
+
+    # test_cond_net()
+    test_cond_actnorm()
 
 
 if __name__ == '__main__':

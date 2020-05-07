@@ -20,8 +20,8 @@ patterns.
 
 Installations:
 I used the following command to install Caffe in a new environment. By default installing it showed me errors becuase of conflicts
-in cudatoolkit version required by this and PyTprch. The version of Scipy==1.0.0 is needed to Cityscpaes evaluation (it has the imsave
-function which is deprecated).
+in cudatoolkit version required by this and PyTprch. The version of Scipy==1.0.0 is needed to Cityscpaes evaluation (it has
+the imsave function which is now deprecated).
 =====> conda create -n caffe scipy=1.0.0 numpy Pillow caffe-gpu
 
 Note: The Caffe model could only be used when activating the caffe workshop on the clusters. This environment is only
@@ -58,3 +58,26 @@ Steps for getting FCN score for a model:
 
 Resized images and evaluation results are stored in /Midgard rather than /local_storage to make transferring the results
 easier
+
+
+
+
+NOTE on choosing the boundary map:
+In the current implementation, the boundary maps are down-sampled to spatially match the dimension of the z in the
+corresponding Block (before squeezing). Then the are squeezed in the Blocks (like z's) before being concatenated in the
+affine coupling layer. In each block, the boundary maps would have a channel dimension of 12 all the time, since the
+3-channel image is squeezed so it would have 12 channels.
+
+
+
+LATEST CHANGES:
+Code changes: no use of --nearest_neighbor and set do_ceil to False in CityDataset and glow.py
+Helper compute_path()
+
+
+
+Number of params for 128x256 images:
+    - baseline: 175.5M
+    - act_norm conditional: 176.2M
+    - w_conditional: 177.2M
+    - act_norm_conditional + w_conditional: 177.9M

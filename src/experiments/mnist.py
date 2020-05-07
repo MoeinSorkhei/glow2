@@ -2,12 +2,10 @@ import data_handler
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from torchvision import utils, transforms
-from copy import deepcopy
-from PIL import Image
+from torchvision import utils
 
 from train import sample_z
-from helper import load_checkpoint, label_to_tensor, make_dir_if_not_exists
+from helper import load_checkpoint, make_dir_if_not_exists
 from models import init_glow
 from data_handler import MnistDataset
 
@@ -60,7 +58,7 @@ def change_linear(z_samples, model, rev_cond, rep, val, save_path, mode):
         change = round((i + 1) * val, 1)
         print(f'In [mnist_interpolate]: z1 linearly changed ({mode}) {change}')
 
-        sampled_imgs = model.reverse(z_samples, cond=rev_cond).cpu().data
+        sampled_imgs = model.reverse(z_samples, coupling_conds=rev_cond).cpu().data
 
         sign = '+' if mode == 'increment' else '-'
         utils.save_image(sampled_imgs, f'{save_path}/{sign}{change}.png', nrow=10)
@@ -109,7 +107,7 @@ def interpolate(cond_config, interp_config, params, args, device, mode='conditio
             z_list_inter = [z_list1[i] for i in range(len(z_list1))]  # deepcopy not available for these tensors
             z_list_inter[axis] = z_list1[axis] + coeff * z_diff[axis]
 
-        sampled_img = model.reverse(z_list_inter, reconstruct=True, cond=rev_cond).cpu().data
+        sampled_img = model.reverse(z_list_inter, reconstruct=True, coupling_conds=rev_cond).cpu().data
         all_sampled.append(sampled_img.squeeze(dim=0))
         # make naming consistent and easy to sort
         coeff_name = '%.2f' % coeff if interp_config['type'] == 'limited' else round(coeff, 2)
@@ -140,7 +138,7 @@ def new_condition(img_list, params, args, device):
             new_cond = ('mnist', digit, 1)
             # pass the new cond along with the extracted latent vectors
             # apply it to a new random image with another condition (another digit)
-            sampled_img = model.reverse(z_list, reconstruct=True, cond=new_cond)
+            sampled_img = model.reverse(z_list, reconstruct=True, coupling_conds=new_cond)
             all_sampled.append(sampled_img.squeeze(dim=0))  # removing the batch dimension (=1) for the sampled image
             print(f'In [new_condition]: sample with digit={digit} done.')
 
@@ -192,7 +190,7 @@ def resample_latent(img_info, all_resample_lst, params, args, device):
         else:
             raise NotImplementedError
 
-        sampled_img = model.reverse(z_lst, reconstruct=reconstruct_lst, cond=reverse_cond).cpu().data
+        sampled_img = model.reverse(z_lst, reconstruct=reconstruct_lst, coupling_conds=reverse_cond).cpu().data
         all_sampled_imgs.append(sampled_img.squeeze(0))
 
     utils.save_image(all_sampled_imgs, f'{save_path}/img={img_info["img"]}.png', nrow=10)

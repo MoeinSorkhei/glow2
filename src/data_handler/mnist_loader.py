@@ -1,6 +1,5 @@
 from mlxtend.data import loadlocal_mnist
 from torch.utils import data
-import torch
 import numpy as np
 from torchvision import transforms
 from PIL import Image

@@ -1,6 +1,7 @@
 *.idea
 __pycache__*
 __pycache__/
+*.pyc
 .DS_Store
 **/.DS_Scleartore
 data/
@@ -13,3 +14,4 @@ checkpoints
 tmp/checkpoints
 src/evaluation/third_party/caffemodel/
 gt_eval_results/
+samples_prev/

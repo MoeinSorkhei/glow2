@@ -22,7 +22,9 @@ cd glow2/src/
 # NOTE: No need to resize if it was already 256x256
 # pre-trained freezed, left_step=10K, lr=1e-5 -- CHECKED
 python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment \
-                --left_pretrained --left_lr 1e-4 --left_step 30000 \
+                --img_size 256 512 \
+                --n_block 4 --n_flow 14 \
+                --left_pretrained --left_lr 1e-4 --left_step 136000 \
                 --lr 1e-4 \
-                --last_optim_step 29000 \
+                --last_optim_step 103000 \
                 --bsize 20

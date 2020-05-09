@@ -30,7 +30,7 @@
   "cityscapes": {
     "sample_freq": 500,
     "checkpoint_freq": 1000,
-    "val_freq": 500,
+    "val_freq": 1000,
     "iter": 5000000,
     "n_flow": 32,
     "n_block": 4,

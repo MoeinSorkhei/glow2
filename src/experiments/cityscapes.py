@@ -37,7 +37,8 @@ def visualize_img(img_path, data_folder, dataset_name, desired_size):
 
 def sample_trained_c_flow(args, params, device):
     checkpt_pth = params['checkpoints_path']['real'][args.cond_mode][args.model]
-    model = TwoGlows(params, do_ceil=args.do_ceil)  # initializing the model
+    # model = TwoGlows(params, do_ceil=args.do_ceil)  # initializing the model
+    model = models.init_model(args, params, device, run_mode='infer')
     model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, device, False)  # loading the model
 
     if args.conditional:
@@ -143,8 +144,7 @@ def infer_on_validation_set(args, params, device):
         _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
                                                       image_size=(params['img_size']),
                                                       remove_alpha=True,  # removing the alpha channel
-                                                      loader_params=loader_params,
-                                                      do_ceil=args.do_ceil)
+                                                      loader_params=loader_params)
         print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
         helper.print_info(args, params, model)
 

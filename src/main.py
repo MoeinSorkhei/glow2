@@ -24,6 +24,7 @@ def read_params_and_args():
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
     parser.add_argument('--checkpoint_freq', type=int)
+    parser.add_argument('--prev_exp_id', type=str)
 
     parser.add_argument('--n_flow', type=int)
     parser.add_argument('--n_block', type=int)
@@ -128,7 +129,7 @@ def run_training(args, params):
     # ======== setting comet tracker
     tracker = None
     if args.use_comet:
-        tracker = init_comet(params)
+        tracker = init_comet(args, params)
         print("In [run_training]: Comet experiment initialized...")
 
     # ======== training

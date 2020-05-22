@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from helper import label_to_tensor
 from .actnorm import ActNorm, ActNormConditional
 from .conv1x1 import InvConv1x1, InvConv1x1LU, InvConv1x1Conditional
+from ..cond_net import CouplingCondNet
 from globals import device
 
 
@@ -34,11 +35,29 @@ class AffineCoupling(nn.Module):
     """
     This transforms part of the input tensor in a way that half of the output tensor in a way that half of the output
     tensor is a non-linear function of the other half. This non-linearity is obtained through the stacking some CNNs.
+
+    Notes:
+        - About the conditioning network: Cond shape is the shape of the condition, which might have larger channels if
+          the condition has boundary maps etc. Inp shape is the actual shape of the corresponding z.
+          Example: cond shape (C + 12, H, W) - inp shape (C, H, W), where the extra 12 is for boundary map.
+          The output of the cond net will be the same shape as the corresponding z.
+
+        - If no conditioning net is used, the inp shape would not be needed and the cond shape will directly be used
+          for creating the CNNs (conv_channels parameter in the __init__ function).
     """
-    def __init__(self, in_channel, n_filters=512, do_affine=True, cond_shape=None):
+    def __init__(self, in_channel, n_filters=512, do_affine=True, cond_shape=None, use_cond_net=False, inp_shape=None):
         super().__init__()
         # adding extra channels for the condition (e.g., 10 for MNIST)
-        conv_channels = in_channel // 2 if cond_shape is None else (in_channel // 2) + cond_shape[0]
+        # conv_channels = in_channel // 2 if cond_shape is None else (in_channel // 2) + cond_shape[0]
+
+        if cond_shape is None:
+            conv_channels = in_channel // 2  # e.g. z shape: (12, 128, 256) --> conv_shape: (6, 128, 256)
+
+        elif not use_cond_net:  # e.g. z shape: (12, 128, 256) --> conv_shape: (12 + 18, 128, 256),  18 for bmaps
+            conv_channels = (in_channel // 2) + cond_shape[0]
+
+        else:  # with cond net. e.g. z shape: (12, 128, 256) --> conv_shape: (12, 128, 256),  12 for inp shape
+            conv_channels = (in_channel // 2) + inp_shape[0]
 
         self.do_affine = do_affine
         self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
@@ -57,20 +76,30 @@ class AffineCoupling(nn.Module):
         self.net[2].weight.data.normal_(0, 0.05)
         self.net[2].bias.data.zero_()
 
+        if use_cond_net:  # uses inp shape only if cond net is used
+            self.use_cond_net = True
+            self.cond_net = CouplingCondNet(inp_shape, cond_shape)  # without considering batch size dimension
+        else:
+            self.use_cond_net = False
+
     def forward(self, inp, cond=None):
         inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
         if self.do_affine:
             if cond is not None:  # conditional
-                if cond['name'] == 'mnist':
+                if cond['name'] == 'mnist':  # needs to be re-implemented
                     # expects the cond to be of shape (B, 10, H, W). Concatenate condition along channel: C -> C+10
                     # truncate spatial dimension so it spatially fits the actual tensor
                     cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
 
                 elif cond['name'] == 'segment':  # c_flow: getting z's from left glow
-                    cond_tensor = cond['segment']  # the whole xA with all the channels
+                    # cond_tensor = cond['segment']  # the whole xA with all the channels
+                    # the whole xA with all the channels
+                    cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
 
                 elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    # cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
 
                 else:
                     raise NotImplementedError('In [Block] forward: Condition not implemented...')
@@ -103,16 +132,18 @@ class AffineCoupling(nn.Module):
                     cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
 
                 elif cond['name'] == 'segment':
-                    cond_tensor = cond['segment']  # the whole x_a with all the channels
+                    # cond_tensor = cond['segment']  # the whole xA with all the channels
+                    # the whole xA with all the channels
+                    cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
 
                 elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    # cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
+                    cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
 
                 else:
                     raise NotImplementedError('In [Block] reverse: Condition not implemented...')
 
-                # print('out_a shape:', out_a.shape, '\n')
-                # print('cond_tensor shape:', cond_tensor.shape, '\n')
                 out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
                 log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
 
@@ -134,7 +165,8 @@ class Flow(nn.Module):
     The Flow module does not change the dimensionality of its input.
     """
     def __init__(self, in_channel, do_affine=True, conv_lu=True, coupling_cond_shape=None,
-                 w_conditional=False, act_conditional=False, inp_shape=None, conv_stride=None):
+                 w_conditional=False, act_conditional=False, use_coupling_cond_net=False,
+                 inp_shape=None, conv_stride=None):
         super().__init__()
 
         # initializing actnorm
@@ -154,7 +186,14 @@ class Flow(nn.Module):
             self.w_conditional = False
 
         # initializing coupling
-        self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=coupling_cond_shape)
+        if use_coupling_cond_net:
+            self.use_coupling_cond_net = True
+            self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=coupling_cond_shape,
+                                           use_cond_net=True, inp_shape=inp_shape)
+        else:
+            self.use_coupling_cond_net = False
+            self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=coupling_cond_shape,
+                                           use_cond_net=False)
 
     def forward(self, inp, coupling_cond=None, w_left_out=None, act_left_out=None,
                 return_w_out=False, return_act_out=False):

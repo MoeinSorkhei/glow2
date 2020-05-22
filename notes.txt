@@ -3,7 +3,7 @@ For running:
     - We should be in the 'src' folder to run the. Do not run 'main.py' from any other folder.
 
 For evaluation: Caffe model should be present in the corresponding directory in the evaluation package
-    - Change dir to src/evaluation/third_party and, check the bash file and run it
+    - Change dir to src/evaluation/third_party/caffemodel and, check the bash file and run it
 
 
 OBSERVATIONS:
@@ -75,9 +75,21 @@ Code changes: no use of --nearest_neighbor and set do_ceil to False in CityDatas
 Helper compute_path()
 
 
+"""
+Notes:
+    - Image names are always based on real images, even when their corresponding condition is needed.
+    - Every new argument should be checked with in compute_paths function
+"""
+
 
 Number of params for 128x256 images:
     - baseline: 175.5M
     - act_norm conditional: 176.2M
     - w_conditional: 177.2M
     - act_norm_conditional + w_conditional: 177.9M
+
+
+
+Note: SSIM computation needs no GPU (inference on validation images should already be done)
+All the sbatch or sh files should be run from the outside of the glow2 folder, they will cd to the corresponding
+folder they need for running.

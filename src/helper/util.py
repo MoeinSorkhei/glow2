@@ -6,7 +6,7 @@ import experiments
 
 def get_edges(t):
     """
-    Thi function is taken from: https://github.com/NVIDIA/pix2pixHD.
+    This function is taken from: https://github.com/NVIDIA/pix2pixHD.
     :param t:
     :return:
     """

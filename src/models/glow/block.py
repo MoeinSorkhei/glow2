@@ -125,13 +125,15 @@ class Block(nn.Module):
     Each of the Glow block.
     """
     def __init__(self, in_channel, n_flow, do_split=True, do_affine=True, conv_lu=True, coupling_cond_shape=None,
-                 w_conditionals=False, act_conditionals=False, inp_shape=None, conv_stride=None):
+                 w_conditionals=False, act_conditionals=False, use_coupling_cond_net=False,
+                 inp_shape=None, conv_stride=None):
         super().__init__()
 
         squeeze_dim = in_channel * 4
         self.do_split = do_split
         self.w_conditionals = w_conditionals
         self.act_conditionals = act_conditionals
+        self.use_coupling_cond_net = use_coupling_cond_net
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
@@ -142,7 +144,8 @@ class Block(nn.Module):
                                    w_conditional=w_conditionals,
                                    act_conditional=act_conditionals,
                                    inp_shape=inp_shape,
-                                   conv_stride=conv_stride))
+                                   conv_stride=conv_stride,
+                                   use_coupling_cond_net=use_coupling_cond_net))
 
         # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
         if self.do_split:
@@ -229,8 +232,7 @@ class Block(nn.Module):
 
         :param output: the input to the reverse function, latent variable from the previous Block.
         :param eps: could be the latent variable already extracted in the forward pass. It is used for reconstruction of
-        an image with its extracted latent vectors. Otherwise (in the cases I uses) it is simply a sample of the unit
-        Gaussian (with temperature).
+        an image with its extracted latent vectors. Otherwise it is a sample of the unit Gaussian (with temperature).
         :param reconstruct: If true, eps is used for reconstruction.
         :return: -
         """

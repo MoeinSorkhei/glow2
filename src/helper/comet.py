@@ -57,6 +57,12 @@ def create_tags(args, params):
     if args.cond_mode == 'segment_boundary':  # boundary
         tags.append('boundary')
 
+    if args.cond_mode == 'segment':  # segment
+        tags.append('segment')
+
+    if args.coupling_cond_net:
+        tags.append('coupling_net')
+
     if args.left_pretrained:  # left_pretrained
         tags.append('left_pretrained')
     else:  # from scratch

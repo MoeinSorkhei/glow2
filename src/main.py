@@ -17,7 +17,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def read_params_and_args():
     parser = argparse.ArgumentParser(description='Glow trainer')
-    # parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
     parser.add_argument('--dataset', type=str, help='the name of the dataset')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
@@ -25,6 +24,8 @@ def read_params_and_args():
     parser.add_argument('--sample_freq', type=int)
     parser.add_argument('--checkpoint_freq', type=int)
     parser.add_argument('--prev_exp_id', type=str)
+    parser.add_argument('--max_step', type=int)
+    parser.add_argument('--n_samples', type=int)
 
     parser.add_argument('--n_flow', type=int)
     parser.add_argument('--n_block', type=int)
@@ -33,15 +34,19 @@ def read_params_and_args():
     parser.add_argument('--lr', type=float)
     parser.add_argument('--temp', type=float)  # temperature
 
-    parser.add_argument('--left_step', type=int)  # left glow optim_step (pretrained) in c_flow
     # Note: left_lr is str since it is used only for finding the checkpoints path of the left glow
+    parser.add_argument('--left_step', type=int)  # left glow optim_step (pretrained) in c_flow
     parser.add_argument('--left_lr', type=str)  # the lr using which the left glow was trained
     parser.add_argument('--left_pretrained', action='store_true')  # use pre-trained left glow inf c_flow
-    # parser.add_argument('--left_unfreeze', action='store_true')  # freeze the left glow of unfreeze it
     parser.add_argument('--w_conditional', action='store_true')
     parser.add_argument('--act_conditional', action='store_true')
-    # parser.add_argument('--do_ceil', action='store_true')
+    parser.add_argument('--coupling_cond_net', action='store_true')
     parser.add_argument('--no_validation', action='store_true')
+    # parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
+    # parser.add_argument('--do_ceil', action='store_true')
+    # parser.add_argument('--left_unfreeze', action='store_true')  # freeze the left glow of unfreeze it
+    # parser.add_argument('--use_bmap', action='store_true')  # use boundary maps when training
+    # parser.add_argument('--nearest_neighbor', action='store_true')
 
     # not used anymore
     parser.add_argument('--left_cond', type=str)  # condition used for training left glow, if any
@@ -49,22 +54,27 @@ def read_params_and_args():
     # args for Cityscapes
     parser.add_argument('--model', type=str, default='glow', help='which model to be used: glow, c_flow, ...')
     parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
-    # parser.add_argument('--use_bmap', action='store_true')  # use boundary maps when training
     parser.add_argument('--train_on_segment', action='store_true')  # train/synthesis with vanilla Glow on segmentations
     parser.add_argument('--sanity_check', action='store_true')
+    parser.add_argument('--test_invertibility', action='store_true')
 
     # preparation
     parser.add_argument('--create_boundaries', action='store_true')
-    # parser.add_argument('--nearest_neighbor', action='store_true')
 
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
     parser.add_argument('--resize_for_fcn', action='store_true')
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--eval_complete', action='store_true')
+    parser.add_argument('--eval_ssim', action='store_true')
     parser.add_argument('--gt', action='store_true')  # used only as --evaluate --gt for evaluating ground-truth images
 
     # args mainly for the experiment mode: --exp should be used for the following (should be revised though)
+    parser.add_argument('--random_samples', action='store_true')
+    parser.add_argument('--new_condition', action='store_true')
+    parser.add_argument('--seg_image', type=str)  # name of the segmentation used for random sampling
+
+    parser.add_argument('--compute_val_bpd', action='store_true')
     parser.add_argument('--exp', action='store_true')
     parser.add_argument('--interp', action='store_true')
     parser.add_argument('--new_cond', action='store_true')
@@ -114,6 +124,12 @@ def adjust_params(args, params):
     if args.no_validation:
         params['monitor_val'] = False
 
+    if args.max_step:
+        params['iter'] = args.max_step
+
+    if args.n_samples:
+        params['n_samples'] = args.n_samples
+
     print('In [adjust_params]: params adjusted')
     return params
 
@@ -150,17 +166,22 @@ def run_training(args, params):
 
 
 def main():
+    # NOTE: EVERY NEWLY ADDED ARGUMENT FOR INFERENCE MODE SHOULD ALSO BE ADDED TO:
+    #   1. COMPUTE_PATHS FUNCTION (IN HELPER)  2. Comet experiment tags
+
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
-    # show important params and the paths
-    if not args.eval_complete and not args.create_boundaries:  # no need to print in this mode
-        helper.print_info(args, params, model=None, which_info='params')
+    # show important params and the paths (could be refactored based on --exp)
+    if not args.exp:
+        if not args.eval_complete and not args.create_boundaries and not args.random_samples and not args.new_condition:
+            helper.print_info(args, params, model=None, which_info='params')  # print run info (mainly for training)
 
+    # ================ preparation
     if args.create_boundaries:
         helper.create_boundary_maps(params, device)
 
-    # NOTE: EVERY NEWLY ADDED ARGUMENT FOR INFERENCE MODE SHOULD ALSO BE ADDED TO THE COMPUTE_PATHS FUNCTION (IN HELPER)
+    # ================ evaluation
     elif args.eval_complete:
         evaluation.eval_complete(args, params, device)
 
@@ -173,10 +194,23 @@ def main():
     elif args.evaluate:
         evaluation.evaluate_city(args, params)
 
-    elif args.exp and args.interp:  # experiments
+    elif args.eval_ssim:
+        evaluation.compute_ssim_all(args, params)
+
+    # ================ experiments
+    if args.exp and args.test_invertibility:
+        models.verify_invertibility(args, params)
+
+    elif args.random_samples:
+        experiments.take_random_samples(args, params)
+
+    elif args.exp and args.new_condition:
+        experiments.sample_with_new_condition(args, params)
+
+    elif args.exp and args.interp:
         experiments.run_interp_experiments(args, params)
 
-    elif args.exp and args.new_cond:
+    elif args.exp and args.new_cond:  # is not used, should be refactored
         experiments.run_new_cond_experiments(args, params)
 
     elif args.exp and args.resample:
@@ -186,7 +220,11 @@ def main():
         # run_c_flow_trials(args, params)
         experiments.sample_trained_c_flow(args, params, device)
 
-    else:  # training
+    elif args.compute_val_bpd:
+        evaluation.compute_val_bpd(args, params)
+
+    # ================ training
+    else:
         run_training(args, params)
 
 

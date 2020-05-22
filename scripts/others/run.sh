@@ -167,3 +167,12 @@ python3 main.py --dataset cityscapes --create_boundaries
 # ================  synthesize segmentations (with c_flow)
 # --dataset cityscapes --exp --sample_c_flow --syn_segs --last_optim_step 27000 --model c_flow --cond_mode segment
 # --trial 5
+
+
+# ================ evaluation of validation bits per dimension
+python3 main.py --compute_val_bpd --dataset cityscapes --model c_flow --cond_mode segment \
+                --img_size 256 512 \
+                --n_block 4 --n_flow 14 \
+                --lr 1e-4 \
+                --last_optim_step 67000 \
+                --bsize 1  # important

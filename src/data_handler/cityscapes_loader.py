@@ -8,11 +8,11 @@ from torchvision import utils
 
 from helper import make_dir_if_not_exists, read_image_ids
 from city_utility import *
-import globals
+from globals import device
 
 
 class CityDataset(data.Dataset):
-    def __init__(self, data_folder, img_size, remove_alpha, ret_type='for_train', fixed_cond=False):
+    def __init__(self, data_folder, img_size, remove_alpha, ret_type='for_train', fixed_cond=None):
         """
         Initializes a dataset to be given to a DataLoader.
         :param data_folder: the folder of the dataset whose images are to be read. Please note that this constructor
@@ -24,6 +24,9 @@ class CityDataset(data.Dataset):
 
         :param ret_type: could be 'for_train' or 'all'. If set to 'for_train', it returns only a batch of things that
          are needed during training.
+
+        :param fixed_cond: list of real image paths whose segmentations are used as fixed conditions. If not specified,
+        random images will be taken from the dataset.
 
         Image IDs are the pure image names which, once joined with the corresponding data folder, can be used to
         retrieve both the real and segmentation images (and any other file corresponding to that ID).
@@ -46,7 +49,8 @@ class CityDataset(data.Dataset):
             self.real_img_paths = read_image_ids(self.data_folder['real'], 'cityscapes_leftImg8bit')
         else:
             print(f'In CityDataset [__init__]: using the fixed conditions...')
-            self.real_img_paths = globals.desired_real_imgs
+            # self.real_img_paths = globals.desired_real_imgs
+            self.real_img_paths = fixed_cond
 
         # get list of (city, id) pairs
         cities_and_ids = self.cities_and_ids()
@@ -161,15 +165,32 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_t
     return train_loader, val_loader
 
 
-def create_cond(n_samples, data_folder, img_size, device, fixed_conds=True, save_path=None):
-    # currently the conditions are taken from the train set - could be changed later
+# could be renamed to create_cond_batch
+def create_cond(params, fixed_conds=None, save_path=None):
+    """
+    :param params:
+    :param fixed_conds:
+    :param save_path:
+    :return:
+
+    Notes:
+        - The use of .clones() for saving in this function is very important. In utils.save_image() the float values
+          will be normalized to [0-255] integer and the values of the tensor change in-place, so the tensor does not
+          have valid float values after this operation, unless we use .clone() to make a new copy of it for saving.
+    """
+    n_samples = params['n_samples'] if fixed_conds is None else len(fixed_conds)
+    data_folder = params['data_folder']
+    img_size = params['img_size']
+
+    # this will not be used if fixed_conds is given
     train_df = {'segment': data_folder['segment'] + '/train',
                 'real': data_folder['real'] + '/train'}
 
-    if fixed_conds:  # fixed conditions
-        city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=True)
-    else:  # random segmentation
-        city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=False)
+    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=fixed_conds)
+    # if fixed_conds:  # fixed conditions
+    #    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=fixed_conds)
+    # else:  # random segmentation
+    #    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=False)
     print(f'In [create_cond]: created dataset of len {len(city_dataset)}')
 
     segs = [city_dataset[i]['segment'] for i in range(n_samples)]
@@ -197,10 +218,10 @@ def create_cond(n_samples, data_folder, img_size, device, fixed_conds=True, save
 
     if save_path:
         make_dir_if_not_exists(save_path)
-        utils.save_image(segmentations, f'{save_path}/condition.png', nrow=10)
-        utils.save_image(real_imgs, f'{save_path}/real_imgs.png', nrow=10)
-        utils.save_image(boundaries, f'{save_path}/boundaries.png', nrow=10)
-        print(f'In [create_segment_cond]: saved the condition and real images to: "{save_path}"')
+        utils.save_image(segmentations.clone(), f'{save_path}/condition.png', nrow=10)  # .clone(): very important
+        utils.save_image(real_imgs.clone(), f'{save_path}/real_imgs.png', nrow=10)
+        utils.save_image(boundaries.clone(), f'{save_path}/boundaries.png', nrow=10)
+        print(f'In [create_cond]: saved the condition and real images to: "{save_path}"')
 
         with open(f'{save_path}/img_paths.txt', 'a') as f:
             f.write("==== SEGMENTATIONS PATHS \n")
@@ -210,7 +231,7 @@ def create_cond(n_samples, data_folder, img_size, device, fixed_conds=True, save
             f.write("==== REAL IMAGES PATHS \n")
             for item in real_paths:
                 f.write("%s\n" % item)
-        print('In [create_segment_cond]: saved the image paths \n')
+        print('In [create_cond]: saved the image paths \n')
 
     return segmentations.to(device), id_repeats_batch.to(device), real_imgs.to(device), boundaries.to(device)
 

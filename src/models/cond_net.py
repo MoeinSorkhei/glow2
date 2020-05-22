@@ -93,6 +93,7 @@ def compute_conv_out_shape(inp_shape, n_convs, kernel_size, stride):
 class ConvNet(nn.Module):
     def __init__(self, inp_shape, conv_stride):
         """
+        The Convolutional network used in conditioning networks of W and actnorm.
         The first convolution in the module is a 1x1 convolution with stride 1 for down-sampling. The rest are 3x3
         convolutions with the given stride.
         :param inp_shape:
@@ -181,10 +182,10 @@ class WCondNet(nn.Module):
 
         self.print_params = False
         if self.print_params:
-            total_params = sum(p.numel() for p in self.conv_net.parameters())
-            print(f'conv_net params: {total_params}')
-            total_params = sum(p.numel() for p in self.linear_net.parameters())
-            print(f'linear_net params: {total_params}')
+            p1 = sum(p.numel() for p in self.conv_net.parameters())
+            p2 = sum(p.numel() for p in self.linear_net.parameters())
+            print(f'conv_net params: {p1} - linear_net params: {p2} - '
+                  f'Total: {p1 + p2}')
 
     def forward(self, inp):
         conv_out = self.conv_net(inp)
@@ -205,6 +206,13 @@ class ActCondNet(nn.Module):
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
         self.linear_net = LinearNet(conv_net_out_shape, inp_channels, condition='actnorm')
 
+        self.print_params = False
+        if self.print_params:
+            p1 = sum(p.numel() for p in self.conv_net.parameters())
+            p2 = sum(p.numel() for p in self.linear_net.parameters())
+            print(f'conv_net params: {p1} - linear_net params: {p2} - '
+                  f'Total: {p1 + p2}')
+
     def forward(self, left_act_out, data_batch=None):
         # passing through the ConvNet
         conv_out = self.conv_net(left_act_out)
@@ -218,21 +226,25 @@ class ActCondNet(nn.Module):
         return out
 
 
-class CouplingCondNet(nn.Module):  # not used yet
-    def __init__(self, inp_shape, conv_stride):
+class CouplingCondNet(nn.Module):
+    def __init__(self, inp_shape, cond_shape):
         super().__init__()
-        self.conv_net = ConvNet(inp_shape, conv_stride)
+        cond_channels = cond_shape[0]  # might be segment + boundary - input shape of the cond net
+        inp_channels = inp_shape[0]  # the actual channels of z - used as output shape of the cond net
 
-        conv_net_out_shape = self.conv_net.output_shape()
-        inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
-        # self.linear_net = LinearNet(conv_net_out_shape, inp_channels, condition='coupling')
+        self.conv_net = nn.Sequential(
+            nn.Conv2d(in_channels=cond_channels, out_channels=128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=128, out_channels=inp_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.print_params = False
+        if self.print_params:
+            total_params = sum(p.numel() for p in self.conv_net.parameters())
+            print(f'CouplingCondNet params: {total_params}')
 
     def forward(self, left_coupling_out):
         conv_out = self.conv_net(left_coupling_out)
-        conv_out = conv_out.view(conv_out.shape[0], -1)
-
-        # out = self.linear_net(conv_out)
-        # channels = left_coupling_out.shape[1]
-        # out = out.view(out.shape[0], 2, channels)  # 12 --> 6 x 2 - output shape: (B, 2, C)
-    pass
+        return conv_out
 

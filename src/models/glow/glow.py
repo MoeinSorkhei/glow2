@@ -6,11 +6,13 @@ from .block import Block, prep_coupling_cond, reverse_conditions
 
 class Glow(nn.Module):
     def __init__(self, in_channel, n_flows, n_blocks, do_affine=True, conv_lu=True, coupling_cond_shapes=None,
-                 w_conditionals=None, act_conditionals=None, input_shapes=None):
+                 w_conditionals=None, act_conditionals=None, use_coupling_cond_nets=None, input_shapes=None):
         super().__init__()
 
         self.w_conditionals = w_conditionals
         self.act_conditionals = act_conditionals
+        self.use_coupling_cond_net = use_coupling_cond_nets
+
         self.blocks = nn.ModuleList()
         n_channel = in_channel
         # making None -> [None, None, ..., None]
@@ -20,7 +22,9 @@ class Glow(nn.Module):
             # for this Block: specifying if w and actnorm are conditional
             w_conditional = True if w_conditionals is not None and w_conditionals[i] else False
             act_conditional = True if act_conditionals is not None and act_conditionals[i] else False
+            use_coupling_cond_net = True if use_coupling_cond_nets is not None and use_coupling_cond_nets[i] else False
             inp_shape = None if input_shapes is None else input_shapes[i]
+            coupling_cond_shape = coupling_cond_shapes[i]
 
             # specifying the stride for the conditioning networks
             if w_conditionals or act_conditionals:
@@ -37,11 +41,12 @@ class Glow(nn.Module):
                           do_split=do_split,
                           do_affine=do_affine,
                           conv_lu=conv_lu,
-                          coupling_cond_shape=coupling_cond_shapes[i],
+                          coupling_cond_shape=coupling_cond_shape,
                           w_conditionals=w_conditional,
                           act_conditionals=act_conditional,
                           inp_shape=inp_shape,
-                          conv_stride=stride)
+                          conv_stride=stride,
+                          use_coupling_cond_net=use_coupling_cond_net)
             self.blocks.append(block)
 
             # increase the channels for all the Blocks before the last Block
@@ -183,14 +188,15 @@ def compute_inp_shapes(n_channels, input_size, n_blocks):
     return input_shapes
 
 
-def init_glow(params, cond_shapes=None, w_conditionals=None, act_conditionals=None):
-    if w_conditionals or act_conditionals:
+def init_glow(params, cond_shapes=None, w_conditionals=None, act_conditionals=None, use_coupling_cond_nets=None):
+    if w_conditionals or act_conditionals or use_coupling_cond_nets:
         input_shapes = compute_inp_shapes(params['channels'], params['img_size'], params['n_block'])
         return Glow(
             params['channels'], params['n_flow'], params['n_block'], params['affine'], params['lu'],
             coupling_cond_shapes=cond_shapes,
             w_conditionals=w_conditionals,
             act_conditionals=act_conditionals,
+            use_coupling_cond_nets=use_coupling_cond_nets,
             input_shapes=input_shapes
         )
 

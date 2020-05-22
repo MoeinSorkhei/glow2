@@ -1,15 +1,20 @@
 import torch
 import matplotlib.pyplot as plt
 from torchvision import utils
+from PIL import Image
+import os
 
 import helper
 from data_handler import CityDataset
 from data_handler import create_cond
+import data_handler
 from train import sample_z
 from helper import calc_z_shapes, load_checkpoint
 from models import TwoGlows
 import models
 import data_handler
+from globals import device, sampling_real_imgs, new_cond_reals
+import train
 
 
 def visualize_img(img_path, data_folder, dataset_name, desired_size):
@@ -148,25 +153,30 @@ def infer_on_validation_set(args, params, device):
         print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
         helper.print_info(args, params, model)
 
+        print('In [infer_on_validation_set]: starting inference on validation set')
         for i_batch, batch in enumerate(val_loader):
             segment_batch = batch['segment'].to(device)
+            boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
             real_paths = batch['real_path']  # list: used to save samples with the same name as original images
             z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
             z_samples = sample_z(z_shapes, batch_size, params['temperature'], device)  # batch_size samples in each iter
 
             # take samples
             if args.model == 'c_flow':
-                samples = model.reverse(x_a=segment_batch, z_b_samples=z_samples, mode='sample_x_b').cpu().data
+                samples = model.reverse(x_a=segment_batch,
+                                        b_map=boundary_batch,
+                                        z_b_samples=z_samples,
+                                        mode='sample_x_b').cpu().data
 
             else:
-                raise NotImplementedError
+                raise NotImplementedError('In [infer_on_validation_set]: no support for the desired model')
 
             # save inferred images separately
             save_one_by_one(samples, real_paths, val_path)
 
             if i_batch > 0 and i_batch % 20 == 0:
                 print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')
-        print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path}')
+        print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path} \n')
 
 
 def save_one_by_one(imgs_batch, paths_list, save_path):
@@ -182,3 +192,204 @@ def save_one_by_one(imgs_batch, paths_list, save_path):
             full_path = paths_list[i]
 
         utils.save_image(tensor, full_path, nrow=1, padding=0)
+
+
+def save_one_by_one2(imgs_batch, paths_list):
+    bsize = imgs_batch.shape[0]
+    for i in range(bsize):
+        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
+        path = paths_list[i]
+        utils.save_image(tensor, path, nrow=1, padding=0)
+
+
+def prep_for_sampling(args, params, img_name, additional_info):
+    """
+    :param args:
+    :param params:
+    :param img_name: the (path of the) real image whose segmentation which will be used for conditioning.
+    :param additional_info:
+    :return:
+    """
+    # ========== specifying experiment path
+    paths = helper.compute_paths(args, params, additional_info)
+    if additional_info['exp_type'] == 'random_samples':
+        experiment_path = paths['random_samples_path']
+
+    elif additional_info['exp_type'] == 'new_cond':
+        experiment_path = paths['new_cond_path']
+
+    else:
+        raise NotImplementedError
+
+    # ========== make the condition a single image
+    fixed_conds = [img_name]
+    # ========== create condition and save it to experiment path
+    # no need to save for new_cond type
+    path_to_save = None if additional_info['exp_type'] == 'new_cond' else experiment_path
+    seg_batch, _, real_batch, boundary_batch = data_handler.create_cond(params,
+                                                                        fixed_conds=fixed_conds,
+                                                                        save_path=path_to_save)  # (1, C, H, W)
+    # ========== duplicate condition for n_samples times (not used by all exp_modes)
+    seg_batch_dup = seg_batch.repeat((params['n_samples'], 1, 1, 1))  # duplicated: (n_samples, C, H, W)
+    boundary_dup = boundary_batch.repeat((params['n_samples'], 1, 1, 1))
+
+    if additional_info['exp_type'] == 'random_samples':
+        seg_rev_cond = seg_batch_dup  # (n_samples, C, H, W) - duplicate for random samples
+        bmap_rev_cond = boundary_dup
+
+    elif additional_info['exp_type'] == 'new_cond':
+        seg_rev_cond = seg_batch  # (1, C, H, W) - no duplicate needed
+        bmap_rev_cond = boundary_batch
+
+    else:
+        raise NotImplementedError
+
+    # ========== create reverse cond
+    if args.cond_mode == 'segment':
+        rev_cond = {'segment': seg_rev_cond, 'boundary': None}
+
+    elif args.cond_mode == 'segment_boundary':
+        rev_cond = {'segment': seg_rev_cond, 'boundary': bmap_rev_cond}
+
+    else:
+        raise NotImplementedError
+
+    # ========== specifying paths for saving samples
+    if additional_info['exp_type'] == 'random_samples':
+        exp_path = paths['random_samples_path']
+        save_paths = [f'{exp_path}/sample {i + 1}.png' for i in range(params['n_samples'])]
+
+    elif additional_info['exp_type'] == 'new_cond':
+        save_paths = experiment_path
+        # orig_path = paths['orig_path']
+        #exp_path = paths['new_cond_path']
+        #save_paths = {
+            # 'orig': orig_path,
+        #    'exp_path': exp_path,   # where all the samples will be saved
+            # 'new_cond_samples': [f'{exp_path}/sample {i + 1}.png' for i in range(params['n_samples'])]
+        #}
+
+    else:
+        raise NotImplementedError
+    return save_paths, rev_cond, real_batch
+
+
+def sample_c_flow(args, params, model):  # with the specified temperature
+    for img_name in sampling_real_imgs:
+        img_pure_name = img_name.split('/')[-1][:-len('_leftImg8bit.png')]
+        additional_info = {'cond_img_name': img_pure_name, 'exp_type': 'random_samples'}
+
+        save_paths, rev_cond, _ = prep_for_sampling(args, params, img_name, additional_info)
+        print(f'In [sample_c_flow]: doing for images: {img_pure_name} {"=" * 50}')
+
+        # ========== take samples from the model
+        z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+        z_samples = train.sample_z(z_shapes, params['n_samples'], params['temperature'], device)
+        samples = train.take_samples(args, model, z_samples, rev_cond)  # (n_samples, C, H, W)
+        save_one_by_one2(samples, save_paths)
+        print(f'In [sample_c_flow]: for images: {img_pure_name}: done {"=" * 50}\n\n')
+
+
+def take_random_samples(args, params):
+    model = models.init_and_load(args, params, run_mode='infer')
+    print(f'In [take_random_samples]: model init: done')
+
+    # temperature specified
+    if args.temp:
+        sample_c_flow(args, params, model)
+        print(f'In [take_random_samples]: temperature = {params["temperature"]}: done')
+
+    # try different temperatures
+    else:
+        for temp in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            print(f'In [take_random_samples]: doing for temperature = {temp}')
+            params['temperature'] = temp
+
+            sample_c_flow(args, params, model)
+            print(f'In [take_random_samples]: temperature = {temp}: done \n')
+
+    print(f'In [take_random_samples]: all done \n')
+
+
+def sample_with_new_condition(args, params):
+    """
+    In this function, temperature has no effect here as we have no random sampling.
+    :param args:
+    :param params:
+    :return:
+    """
+    model = models.init_and_load(args, params, run_mode='infer')
+    orig_real_name = new_cond_reals['orig_img']  # image paths of the original image (with the desired style)
+    orig_pure_name = orig_real_name.split('/')[-1][:-len('_leftImg8bit.png')]
+    print(f'In [sample_with_new_cond]: orig cond is: "{orig_pure_name}" \n')
+    # orig_seg_name = orig_real_name[:-len('_leftImg8bit.png')] + '_gtFine_color.png'
+    # boundary_name = orig_img_name[:-len('_leftImg8bit.png')] + '_gtFine_boundary.png'
+
+    # ========= get the original segmentation and real image
+    orig_seg_batch, _, orig_real_batch, orig_bmap_batch = \
+        data_handler.create_cond(params, fixed_conds=[orig_real_name], save_path=None)  # (1, C, H, W)
+
+    # make b_maps None is not needed
+    if args.cond_mode == 'segment':
+        orig_bmap_batch = None
+
+    # ========= real_img_name: the real image whose segmentation which will be used for conditioning.
+    for new_cond_name in new_cond_reals['cond_imgs']:
+        new_cond_pure_name = new_cond_name.split('/')[-1][:-len('_leftImg8bit.png')]
+        additional_info = {
+            'orig_pure_name': orig_pure_name,  # original condition city name
+            'new_cond_pure_name': new_cond_pure_name,   # new condition city name
+            'exp_type': 'new_cond'
+        }
+        print(f'In [sample_with_new_cond]: doing for images: "{new_cond_pure_name}" {"=" * 50} \n')
+
+        # ========= getting new segment cond and real image batch
+        exp_path, new_rev_cond, new_real_batch = prep_for_sampling(args, params, new_cond_name, additional_info)
+
+        # ========= new_cond segment and bmap batches
+        new_seg_batch = new_rev_cond['segment']  # (1, C, H, W)
+        new_bmap_batch = new_rev_cond['boundary']
+
+        if args.cond_mode == 'segment':
+            new_bmap_batch = None
+
+        # ========= save new segmentation and the corresponding real imgs
+        helper.make_dir_if_not_exists(exp_path)
+
+        utils.save_image(new_seg_batch.clone(), f"{exp_path}/new_seg.png", nrow=1, padding=0)
+        utils.save_image(new_real_batch.clone(), f"{exp_path}/new_real.png", nrow=1, padding=0)
+        # if new_bmap_batch is not None:
+        #    utils.save_image(new_bmap_batch.clone(), f"{exp_path}/new_bmap.png", nrow=1, padding=0)
+
+        # ========= save the original segmentation and real image
+        utils.save_image(orig_seg_batch.clone(), f"{exp_path}/orig_seg.png", nrow=1, padding=0)
+        utils.save_image(orig_real_batch.clone(), f"{exp_path}/orig_real.png", nrow=1, padding=0)
+        # if orig_bmap_batch is not None:
+        #    utils.save_image(orig_bmap_batch.clone(), f"{exp_path}/orig_bmap.png", nrow=1, padding=0)
+        print(f'In [sample_with_new_cond]: saved original and new segmentation images')
+
+        # =========== getting z_real corresponding to the desired style (x_b) from the orig real images
+        left_glow_outs, right_glow_outs = model(x_a=orig_seg_batch, x_b=orig_real_batch, b_map=orig_bmap_batch)
+        z_real = right_glow_outs['z_outs']  # desired style
+
+        # =========== apply the new condition to the desired style
+        new_real_syn = model.reverse(x_a=new_seg_batch,  # new segmentation (condition)
+                                     b_map=new_bmap_batch,
+                                     z_b_samples=z_real,  # desired style
+                                     mode='new_condition')  # (1, C, H, W)
+        utils.save_image(new_real_syn.clone(), f"{exp_path}/new_real_syn.png", nrow=1, padding=0)
+        print(f'In [sample_with_new_cond]: save synthesized real image')
+
+        # =========== save all images of combined in a grid
+        all_together = torch.cat([orig_seg_batch, new_seg_batch, orig_real_batch, new_real_batch, new_real_syn], dim=0)
+        utils.save_image(all_together.clone(), f"{exp_path}/all.png", nrow=2, padding=10)
+
+        exp_pure_path = exp_path.split('/')[-1]
+        all_together_path = os.path.split(exp_path)[0] + '/all'  # 'all' dir in the previous dir
+        helper.make_dir_if_not_exists(all_together_path)
+
+        # print(f'all together path: {all_together_path}')
+        # input()
+
+        utils.save_image(all_together.clone(), f"{all_together_path}/{exp_pure_path}.png", nrow=2, padding=10)
+        print(f'In [sample_with_new_cond]: for images: "{new_cond_pure_name}": done {"=" * 50} \n')

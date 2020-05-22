@@ -13,9 +13,9 @@ from .cityscapes import cityscapes
 import sys
 
 
-def evaluate(data_folder, paths, split='val', save_output_images=False, gpu_id=0):
-    output_dir = paths['eval_results']  # Where to save the evaluation result
-    result_dir = paths['resized_path']  # Path to the (resized) generated images to be evaluated
+def evaluate(data_folder, output_dir, result_dir, split='val', save_output_images=False, gpu_id=0):
+    # output_dir = paths['eval_results']  # Where to save the evaluation result
+    # result_dir = paths['resized_path']  # Path to the (resized) generated images to be evaluated
     cityscapes_dir = data_folder
     # IMPORTANT ASSUMPTION: the program is run from the main.py module
     caffemodel_dir = 'evaluation/third_party/caffemodel'
@@ -66,13 +66,6 @@ def evaluate(data_folder, paths, split='val', save_output_images=False, gpu_id=0
             scipy.misc.imsave(output_image_dir + '/' + str(i) + '_pred.jpg', pred_im)
             scipy.misc.imsave(output_image_dir + '/' + str(i) + '_gt.jpg', label_im)
             scipy.misc.imsave(output_image_dir + '/' + str(i) + '_input.jpg', im)
-            # mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
-
-            # print(f'In [evaluate]: saved prediction to: "{output_image_dir + "/" + str(i) + "_pred.jpg"}"')
-            # print(f'So far histogram: \n'
-            #      f'mean_pixel_acc = {mean_pixel_acc} \n'
-            #      f'mean_class_acc = {mean_class_acc} \n'
-            #      f'mean_class_iou = {mean_class_iou} \n')
 
     mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
     print(f'Histogram: \n'
@@ -81,9 +74,9 @@ def evaluate(data_folder, paths, split='val', save_output_images=False, gpu_id=0
           f'mean_class_iou = {mean_class_iou} \n')
 
     with open(output_dir + '/evaluation_results.txt', 'w') as f:
-        f.write('Mean pixel accuracy: %f\n' % mean_pixel_acc)
-        f.write('Mean class accuracy: %f\n' % mean_class_acc)
-        f.write('Mean class IoU: %f\n' % mean_class_iou)
+        f.write('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
+        f.write('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
+        f.write('Mean class IoU: %f\n' % round(mean_class_iou, 2))
         f.write('************ Per class numbers below ************\n')
         for i, cl in enumerate(CS.classes):
             while len(cl) < 15:

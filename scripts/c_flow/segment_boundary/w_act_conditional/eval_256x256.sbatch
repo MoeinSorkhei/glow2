@@ -19,10 +19,11 @@ conda activate caffe
 # shellcheck disable=SC2164
 cd glow2/src/
 
-# NOTE: No need to resize if it was already 256x256
-python3 main.py --eval_complete --dataset cityscapes --model c_flow --cond_mode segment --w_conditional \
-                --img_size 256 512 \
-                --n_block 4 --n_flow 14 \
+# should be ready
+python3 main.py --exp --eval_complete --dataset cityscapes --model c_flow --cond_mode segment_boundary \
+                --w_conditional --act_conditional \
+                --img_size 256 256 \
+                --n_block 4 --n_flow 16 \
                 --lr 1e-4 \
-                --last_optim_step 72000 \
+                --last_optim_step 130000 \
                 --bsize 20

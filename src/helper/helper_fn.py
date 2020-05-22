@@ -6,6 +6,12 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 
+def print_and_wait(to_be_printed):
+    print(to_be_printed)
+    print('======== Waiting for input...')
+    input()
+
+
 def show_images(img_list):
     if len(img_list) != 2:
         raise NotImplementedError('Showing more than two images not implemented yet')
@@ -218,51 +224,78 @@ def scientific(float_num):
     raise NotImplementedError('In [scientific]: Conversion from float to scientific str needed.')
 
 
-def compute_paths(args, params):
+def compute_paths(args, params, additional_info=None):
     """
     Different paths computed in this function include:
         - eval_path: where the validation images and the results of evaluation is stored.
         - validation_path: where the samples are generated on the validation images
           (in the size the network was trained on).
         - resized_path: where the validation set samples are resized (to 256x256) to be used for cityscapes evaluation.
+    :param additional_info:
     :param args:
     :param params:
     :return:
     """
     dataset = args.dataset
     model = args.model
-    img = 'segment' if args.train_on_segment else 'real'  # now only training glow on segmentations
+    img = 'segment' if args.train_on_segment else 'real'
     cond = args.cond_mode
-    # used for checkpoints
-    cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
-
-    run_mode = 'infer' if (args.exp or args.infer_on_val or
-                           args.evaluate or args.eval_complete or args.resize_for_fcn) else 'train'
-    h, w = params['img_size'][0], params['img_size'][1]
-
     w_conditional = args.w_conditional
     act_conditional = args.act_conditional
-    # base paths - common between all models
-    samples_base_dir = f'{params["samples_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond}' \
-                       f'/w_cond={w_conditional}_act_cond={act_conditional}'
-    checkpoints_base_dir = f'{params["checkpoints_path"]}/{dataset}/{h}x{w}/model={model}/img={img}/cond={cond_with_ceil}' \
-                           f'/w_conditional={w_conditional}/act_conditional={act_conditional}'
 
-    # specifying lr: from args if determined, otherwise default from params.json
+    # (could be refactored based on --exp)
+    run_mode = 'infer' if (args.exp or
+                           args.infer_on_val or
+                           args.random_samples or
+                           args.new_condition or
+                           args.evaluate or
+                           args.eval_complete or
+                           args.resize_for_fcn) else 'train'
+    h, w = params['img_size'][0], params['img_size'][1]
+
+    # used for checkpoints only
+    coupling_str_checkpts = '/coupling_net' if args.coupling_cond_net else ''
+    cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
+
+    # used for samples only
+    cond_variant = 'baseline'
+    if args.act_conditional:
+        cond_variant += ' + act_cond'
+    if args.w_conditional:
+        cond_variant += ' + w_cond'
+    if args.coupling_cond_net:
+        cond_variant += ' + coupling_net'
+
+    samples_base_dir = f'{params["samples_path"]}' \
+                       f'/{dataset}' \
+                       f'/{h}x{w}' \
+                       f'/model={model}' \
+                       f'/img={img}' \
+                       f'/cond={cond}' \
+                       f'/{cond_variant}'
+
+    checkpoints_base_dir = f'{params["checkpoints_path"]}' \
+                           f'/{dataset}' \
+                           f'/{h}x{w}' \
+                           f'/model={model}' \
+                           f'/img={img}' \
+                           f'/cond={cond_with_ceil}' \
+                           f'/w_conditional={w_conditional}' \
+                           f'/act_conditional={act_conditional}' \
+                           f'{coupling_str_checkpts}'
+
     lr = scientific(params['lr'])
     paths = {}  # the paths dict be filled along the way
 
     # ========= c_flow paths
     if model == 'c_flow':
         c_flow_type = 'left_pretrained' if args.left_pretrained else 'from_scratch'
-        # paths common between c_flow models
         samples_path = f'{samples_base_dir}/{c_flow_type}'
         checkpoints_path = f'{checkpoints_base_dir}/{c_flow_type}'
 
-        # details for left_pretrained paths
+        # ========= only for left_pretrained
         if c_flow_type == 'left_pretrained':
             left_lr = args.left_lr  # example: left_pretrained/left_lr=1e-4/freezed/left_step=10000
-            # left_status = 'unfreezed' if args.left_unfreeze else 'freezed'
             left_step = args.left_step  # optim_step of the left glow
 
             samples_path += f'/left_lr={left_lr}_left_step={left_step}'
@@ -273,15 +306,47 @@ def compute_paths(args, params):
             left_glow_path += f'/lr={left_lr}'  # e.g.: model=glow/img=segment/cond=None/lr=1e-4
             paths['left_glow_path'] = left_glow_path
 
-        # common between left_pretrained and from_scratch
-        # samples_path += f'/{run_mode}/lr={lr}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train/lr=1e-5
-        samples_path += f'/{run_mode}'  # e.g.: left_lr=1e-4/freezed/left_step=10000/train
-        checkpoints_path += f'/lr={lr}'
+        samples_path += f'/{run_mode}'  # adding run mode # e.g.: left_lr=1e-4/freezed/left_step=10000/train
+        checkpoints_path += f'/lr={lr}'  # adding lr
 
-        # infer: also adding optimization step (step is specified after lr)
+        # ========= infer: also adding optimization step (step is specified after lr)
         if run_mode == 'infer':
-            optim_step = args.last_optim_step  # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
-            samples_path += f'/step={optim_step}/temp={params["temperature"]}'
+            optim_step = args.last_optim_step    # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
+            samples_path += f'/step={optim_step}'
+
+            eval_path_base = f'{samples_path}/eval'  # without including the temperature (for saving ssim results)
+            eval_path = f'{samples_path}/eval/temp={params["temperature"]}'  # with temperature
+
+            paths['eval_path'] = eval_path
+            paths['val_path'] = eval_path + '/val_imgs'
+            paths['resized_path'] = eval_path + '/val_imgs_resized'
+            paths['eval_results'] = eval_path  # no need to a separate dir because we don not save segmented images
+            paths['eval_path_base'] = eval_path_base
+
+            # ========= adding random_samples_path only if the city name is given in additional info
+            if additional_info is not None:
+                if additional_info['exp_type'] == 'random_samples':
+                    random_samples_path = f'{samples_path}' \
+                                          f'/random_samples' \
+                                          f'/{additional_info["cond_img_name"]}' \
+                                          f'/temp={params["temperature"]}'
+                    # adding to dict
+                    paths['random_samples_path'] = random_samples_path
+
+                elif additional_info['exp_type'] == 'new_cond':
+                    new_cond_path = f'{samples_path}' \
+                                f'/new_condition' \
+                                f'/orig={additional_info["orig_pure_name"]}' \
+                                f' - new_cond={additional_info["new_cond_pure_name"]}'
+                    # adding to dict
+                    paths['new_cond_path'] = new_cond_path
+
+                    #new_cond_path = f'{orig_path}' \
+                    #                f'/new_cond={additional_info["cond_img_name"]}' \
+                    #                f'/temp={params["temperature"]}'
+                    #paths['new_cond_path'] = new_cond_path
+
+
 
     # ========= glow paths
     else:  # e.g.: img=real/cond=segment/train/lr=1e-4
@@ -292,12 +357,7 @@ def compute_paths(args, params):
             step = args.last_optim_step
             samples_path += f'/step={step}'
 
-    # bring everything together
     paths['samples_path'] = samples_path
-    paths['eval_path'] = samples_path + '/evaluation'
-    paths['val_path'] = paths['eval_path'] + '/val_imgs'
-    paths['resized_path'] = paths['eval_path'] + '/val_imgs_resized'
-    paths['eval_results'] = paths['eval_path'] + '/results'
     paths['checkpoints_path'] = checkpoints_path
     return paths
 

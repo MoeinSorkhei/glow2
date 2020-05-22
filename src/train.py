@@ -3,6 +3,7 @@ import data_handler
 import helper
 import torch
 from torchvision import utils
+import numpy as np
 
 
 def calc_loss(log_p, logdet, image_size, n_bins):  # how does it work
@@ -41,12 +42,16 @@ def sample_z(z_shapes, n_samples, temperature, device):
 
 
 def calc_val_loss(args, params, device, model, val_loader):
+    print(f'In [calc_val_loss]: computing validation loss for data loader of len: {len(val_loader)} '
+          f'and batch size: {params["batch_size"]}')
+
     with torch.no_grad():
         # at the moment: only for Cityscapes
         if args.dataset != 'cityscapes':  # or args.cond_mode != 'segment':
             raise NotImplementedError
 
-        val_loss = 0.
+        # val_loss = 0.
+        val_list = []
         for i_batch, batch in enumerate(val_loader):
             img_batch = batch['real'].to(device)
             segment_batch = batch['segment'].to(device)
@@ -70,9 +75,11 @@ def calc_val_loss(args, params, device, model, val_loader):
 
             else:
                 raise NotImplementedError
-            val_loss += loss.item()
+            # val_loss += loss.item()
+            val_list.append(loss.item())
 
-        return val_loss / len(val_loader)
+        # return val_loss / len(val_loader)
+        return np.mean(val_list), np.std(val_list)
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
@@ -125,6 +132,10 @@ def take_samples(args, model, z_samples, reverse_cond):
         else:
             raise NotImplementedError
         return sampled_images
+
+
+def take_samples2():
+    pass
 
 
 def track_metrics(args, params, comet_tracker, metrics, optim_step):
@@ -230,7 +241,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
     helper.print_info(args, params, model, which_info='model')
 
     if resume:
-        print(f'In [train]: resuming training from optim_step={optim_step}')
+        print(f'In [train]: resuming training from optim_step={optim_step} - max_step: {max_optim_steps}')
 
     # ============ computing paths for samples, checkpoints, etc. based on the args and params
     paths = helper.compute_paths(args, params)
@@ -238,6 +249,10 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
     # ============ optimization
     while optim_step < max_optim_steps:
         for i_batch, batch in enumerate(train_loader):
+            if optim_step > max_optim_steps:
+                print(f'In [train]: reaching max_step: {max_optim_steps}. Terminating...')
+                return  # ============ terminate training if max steps reached
+
             # ============ forward pass, calculating loss
             # need to re-write here for MNIST
             if args.model == 'glow':
@@ -277,9 +292,11 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             # ============ validation loss
             if params['monitor_val'] and optim_step % params['val_freq'] == 0:
-                val_loss = calc_val_loss(args, params, device, model, val_loader)
-                metrics['val_loss'] = val_loss
-                print(f'====== In [train]: val_loss: {round(val_loss, 3)}')
+                val_loss_mean, _ = calc_val_loss(args, params, device, model, val_loader)
+                # val_loss_mean, val_loss_std = calc_val_loss(args, params, device, model, val_loader)
+                # print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)} - std: {round(val_loss_std, 3)}')
+                metrics['val_loss'] = val_loss_mean
+                print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)}')
 
             # ============ tracking metrics
             if args.use_comet:

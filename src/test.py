@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+import models
 
 def test_actnorm(which_fn):
     act = model.ActNorm(in_channel=2)
@@ -296,7 +296,81 @@ def test_cond_actnorm():
     out, _ = cond_act_norm(inp, act_left_out=cond)
     inp_again = cond_act_norm.reverse(out, act_left_out=cond)
 
-    print(inp == inp_again)
+    # print(inp == inp_again)
+
+
+def test_cond_coupling():
+    inp = torch.randn((10, 6, 256, 256))
+    cond = models.CouplingCondNet(inp.shape[1:])
+    out = cond(inp)
+
+    print(f'Input shape: {inp.shape}')
+    print(f'Output shape: {out.shape}')
+
+
+def test_ssim():
+    pass
+
+
+def test_ssim_from_skimage():
+    """
+    Code from https://scikit-image.org/docs/dev/auto_examples/transform/plot_ssim.html
+    :return:
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    from skimage import data, img_as_float
+    from skimage.metrics import structural_similarity as ssim
+
+    img = img_as_float(data.camera())
+    rows, cols = img.shape
+
+    noise = np.ones_like(img) * 0.2 * (img.max() - img.min())
+    noise[np.random.random(size=noise.shape) > 0.5] *= -1
+
+    def mse(x, y):
+        return np.linalg.norm(x - y)
+
+    img_noise = img + noise
+    img_const = img + abs(noise)
+
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4),
+                             sharex=True, sharey=True)
+    ax = axes.ravel()
+
+    mse_none = mse(img, img)
+    ssim_none = ssim(img, img, data_range=img.max() - img.min())
+
+    mse_noise = mse(img, img_noise)
+    ssim_noise = ssim(img, img_noise,
+                      data_range=img_noise.max() - img_noise.min())
+
+    mse_const = mse(img, img_const)
+    ssim_const = ssim(img, img_const,
+                      data_range=img_const.max() - img_const.min())
+
+    print(f'const image range: {img_const.max() - img_const.min()} \n'
+          f'noise image range min: {img_noise.min()} - max: {img_noise.max()}: {img_noise.max() - img_noise.min()} \n'
+          f'orignal img range: {img.max() - img.min()}')
+
+    label = 'MSE: {:.2f}, SSIM: {:.2f}'
+
+    ax[0].imshow(img, cmap=plt.cm.gray, vmin=0, vmax=1)
+    ax[0].set_xlabel(label.format(mse_none, ssim_none))
+    ax[0].set_title('Original image')
+
+    ax[1].imshow(img_noise, cmap=plt.cm.gray, vmin=0, vmax=1)
+    ax[1].set_xlabel(label.format(mse_noise, ssim_noise))
+    ax[1].set_title('Image with noise')
+
+    ax[2].imshow(img_const, cmap=plt.cm.gray, vmin=0, vmax=1)
+    ax[2].set_xlabel(label.format(mse_const, ssim_const))
+    ax[2].set_title('Image plus constant')
+
+    plt.tight_layout()
+    # plt.show()
+
 
 def main():
     # which_fn = 'initialize'
@@ -321,8 +395,11 @@ def main():
     # test_recreate_bmap()
     # test_pil()
 
+    # test_cond_actnorm()
     # test_cond_net()
-    test_cond_actnorm()
+    # test_cond_coupling()
+
+    test_ssim_from_skimage()
 
 
 if __name__ == '__main__':

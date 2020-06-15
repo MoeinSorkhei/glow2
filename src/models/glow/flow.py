@@ -5,7 +5,8 @@ from torch.nn import functional as F
 from helper import label_to_tensor
 from .actnorm import ActNorm, ActNormConditional
 from .conv1x1 import InvConv1x1, InvConv1x1LU, InvConv1x1Conditional
-from ..cond_net import CouplingCondNet
+# from ..cond_net import CouplingCondNet
+from .cond_net import CouplingCondNet
 from globals import device
 
 

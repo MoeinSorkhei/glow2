@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from ..cond_net import ActCondNet, compute_batch_stats
+from .cond_net import ActCondNet, compute_batch_stats
 
 logabs = lambda x: torch.log(torch.abs(x))
 

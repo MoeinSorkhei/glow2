@@ -4,7 +4,7 @@ from . import third_party
 import helper
 import experiments
 import data_handler
-from train import calc_val_loss
+from trainer import calc_val_loss
 from globals import device
 import helper
 import models

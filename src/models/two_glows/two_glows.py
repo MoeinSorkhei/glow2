@@ -1,7 +1,7 @@
 from torch import nn
 
-from . import init_glow
-from .interface import calc_cond_shapes
+from .. import init_glow
+from ..interface import calc_cond_shapes
 
 
 class TwoGlows(nn.Module):

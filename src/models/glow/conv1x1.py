@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import numpy as np
 from scipy import linalg as la
 
-from ..cond_net import WCondNet
+from .cond_net import WCondNet
 
 
 logabs = lambda x: torch.log(torch.abs(x))

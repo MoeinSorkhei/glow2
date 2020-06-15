@@ -2,7 +2,7 @@
 #SBATCH --gres gpu:1
 #SBATCH --mem  10GB
 #SBATCH --cpus-per-task 1
-#SBATCH --constrain "shire|rivendell|khazadum"
+#SBATCH --constrain "shire|rivendell|khazadum|belegost"
 #SBATCH --mail-type BEGIN,END,FAIL
 #SBATCH --mail-user sorkhei@kth.se
 #SBATCH --time 48:00:00
@@ -19,13 +19,11 @@ conda activate workshop
 # Note: no need to change dir beforehand, just ssh moria and run this sbatch file: sbatch glow2/run.sbatch
 # shellcheck disable=SC2164
 cd glow2/src/
-# ps aux |grep python3 |awk '{print $2}' |xargs kill -9
 
-# train glow on segmentations only with larger images
-python3 main.py --dataset cityscapes --model glow --train_on_segment \
-                --img_size 256 512 --bsize 1 \
-                --n_block 4 --n_flow 14 \
-                --lr 1e-4 \
-                --resume_train --last_optim_step 140000 \
-                --use_comet
-
+python3 main.py --dataset cityscapes --model c_flow --direction photo2label \
+                 --act_conditional --w_conditional --coupling_cond_net \
+                 --img_size 256 256 --bsize 1 \
+                 --n_block 4 --n_flow 16 \
+                 --lr 1e-4 \
+                 --use_comet
+                 # --no_validation --sample_freq 10 --checkpoint_freq 100 \

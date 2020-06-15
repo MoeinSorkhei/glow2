@@ -10,6 +10,7 @@ class cityscapes:
     def __init__(self, data_path):
         # data_path something like /data2/cityscapes
         self.dir = data_path
+        # NOTE: These are the 19 classes that are used for evaluation (their ignoreInEval is False)
         self.classes = ['road', 'sidewalk', 'building', 'wall', 'fence',
                         'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain',
                         'sky', 'person', 'rider', 'car', 'truck',

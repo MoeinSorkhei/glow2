@@ -103,76 +103,84 @@ def make_dir_if_not_exists(directory):
 def reshape_cond(img_condition, h, w):
     return img_condition.rehspae((-1, h, w))  # reshaping to it could be concatenated in the channel dimension
 
-
-def calc_z_shapes(n_channel, input_size, n_block):
-    """
-    This function calculates z shapes given the desired number of blocks in the Glow model. After each block, the
-    spatial dimension is halved and the number of channels is doubled.
-    :param n_channel:
-    :param input_size:
-    :param n_flow:
-    :param n_block:
-    :return:
-    """
-    z_shapes = []
-    for i in range(n_block - 1):
-        input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
-        n_channel *= 2
-
-        shape = (n_channel, input_size, input_size) if type(input_size) is int else (n_channel, *input_size)
-        z_shapes.append(shape)
-
-    # for the very last block where we have no split operation
-    input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
-    shape = (n_channel * 4, input_size, input_size) if type(input_size) is int else (n_channel * 4, *input_size)
-    z_shapes.append(shape)
-
-    return z_shapes
-
-
-def calc_cond_shapes(orig_shape, in_channels, img_size, n_block, mode):
-    z_shapes = calc_z_shapes(in_channels, img_size, n_block)
-
-    if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
-        return z_shapes
-
-    # flows_outs are before split while z_shapes are calculated for z's after they are split
-    # ===> channels should be multiplied by 2 (except for the last shape)
-    # if mode == 'flows_outs' or mode == 'flows_outs + bmap':
-    if mode == 'segment' or mode == 'segment_boundary':
-        for i in range(len(z_shapes)):
-            z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
-
-            if i < len(z_shapes) - 1:
-                z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
-                if mode == 'segment_boundary':
-                    z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-            elif mode == 'segment_boundary':  # last layer - adding dim only for boundaries
-                # no need to have z_shapes[i][0] * 2 since this layer does not have split
-                z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-            z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
-            # print(f'z[{i}] cond shape = {z_shapes[i]}')
-            # input()
-        return z_shapes
-
-    # for 'segment' or 'segment_id' modes
-    cond_shapes = []
-    for z_shape in z_shapes:
-        h, w = z_shape[1], z_shape[2]
-        if mode == 'segment':
-            channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
-
-        elif mode == 'segment_id':
-            channels = 34 + (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)
-
-        else:
-            raise NotImplementedError
-
-        cond_shapes.append((channels, h, w))
-
-    return cond_shapes
+# # to be removed
+# def calc_z_shapes(n_channel, input_size, n_block):
+#     """
+#     This function calculates z shapes given the desired number of blocks in the Glow model. After each block, the
+#     spatial dimension is halved and the number of channels is doubled.
+#     :param n_channel:
+#     :param input_size:
+#     :param n_flow:
+#     :param n_block:
+#     :return:
+#     """
+#     z_shapes = []
+#     for i in range(n_block - 1):
+#         input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
+#         n_channel *= 2
+#
+#         shape = (n_channel, input_size, input_size) if type(input_size) is int else (n_channel, *input_size)
+#         z_shapes.append(shape)
+#
+#     # for the very last block where we have no split operation
+#     input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
+#     shape = (n_channel * 4, input_size, input_size) if type(input_size) is int else (n_channel * 4, *input_size)
+#     z_shapes.append(shape)
+#
+#     return z_shapes
+#
+# # to be removed
+# def calc_cond_shapes(params, mode):
+#     in_channels, img_size, n_block = params['channels'], params['img_size'], params['n_block']
+#     z_shapes = calc_z_shapes(in_channels, img_size, n_block)
+#
+#     # print_and_wait(f'z shapes: {z_shapes}')
+#
+#     if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
+#         return z_shapes
+#
+#     # flows_outs are before split while z_shapes are calculated for z's after they are split
+#     # ===> channels should be multiplied by 2 (except for the last shape)
+#     # if mode == 'flows_outs' or mode == 'flows_outs + bmap':
+#
+#     # REFACTORING NEEDED, I THINK THIS IF CONDITION IS NOT NEEDED
+#     # if mode == 'segment' or mode == 'segment_boundary' or mode == 'real_cond':
+#     for i in range(len(z_shapes)):
+#         z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
+#
+#         if i < len(z_shapes) - 1:
+#             z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
+#             if mode is not None and mode == 'segment_boundary':
+#                 z_shapes[i][0] += 12  # extra channel dimension for the boundary
+#
+#         elif mode is not None and mode == 'segment_boundary':  # last layer - adding dim only for boundaries
+#             # no need to have z_shapes[i][0] * 2 since this layer does not have split
+#             z_shapes[i][0] += 12  # extra channel dimension for the boundary
+#
+#         z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
+#         # print(f'z[{i}] cond shape = {z_shapes[i]}')
+#         # input()
+#
+#     # print_and_wait(f'cond shapes: {z_shapes}')
+#     return z_shapes
+#
+#     # REFACTORING NEEDED: I THINK THIS PART IS NOT REACHABLE
+#     # for 'segment' or 'segment_id' modes
+#     '''cond_shapes = []
+#     for z_shape in z_shapes:
+#         h, w = z_shape[1], z_shape[2]
+#         if mode == 'segment':
+#             channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
+#
+#         elif mode == 'segment_id':
+#             channels = 34 + (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)
+#
+#         else:
+#             raise NotImplementedError
+#
+#         cond_shapes.append((channels, h, w))
+#
+#     return cond_shapes'''
 
 
 def print_info(args, params, model, which_info='all'):
@@ -238,24 +246,56 @@ def compute_paths(args, params, additional_info=None):
     """
     dataset = args.dataset
     model = args.model
-    img = 'segment' if args.train_on_segment else 'real'
-    cond = args.cond_mode
+
+    if model == 'glow':
+        img = 'segment' if args.train_on_segment else 'real'  # --train_on_segment, if used, is always used with glow
+        cond = None
+
+    elif model == 'c_flow':
+        if dataset == 'cityscapes' and args.direction == 'label2photo':
+            img = 'real'
+            cond = args.cond_mode
+
+        elif dataset == 'cityscapes' and args.direction == 'photo2label':
+            img = 'segment'
+            cond = 'real'
+
+        else:
+            raise NotImplementedError
+    else:
+        raise NotImplementedError('mode not implemented')
+
+    # cond = args.cond_mode
     w_conditional = args.w_conditional
     act_conditional = args.act_conditional
 
-    # (could be refactored based on --exp)
-    run_mode = 'infer' if (args.exp or
-                           args.infer_on_val or
-                           args.random_samples or
-                           args.new_condition or
-                           args.evaluate or
-                           args.eval_complete or
-                           args.resize_for_fcn) else 'train'
+    run_mode = 'infer' if args.exp else 'train'
+    # run_mode = 'infer' if (args.exp or
+    #                        args.infer_on_val or
+    #                        args.random_samples or
+    #                        args.new_condition or
+    #                        args.evaluate or
+    #                        args.eval_complete or
+    #                        args.resize_for_fcn) else 'train'
     h, w = params['img_size'][0], params['img_size'][1]
 
     # used for checkpoints only
     coupling_str_checkpts = '/coupling_net' if args.coupling_cond_net else ''
-    cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
+
+    if args.dataset == 'cityscapes':
+        if args.direction == 'label2photo':
+            cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
+
+        elif args.direction == 'photo2label':
+            cond_with_ceil = 'real'
+        else:
+            raise NotImplementedError
+
+    elif args.dataset == 'transient':
+        cond_with_ceil = cond
+
+    else:
+        raise NotImplementedError
 
     # used for samples only
     cond_variant = 'baseline'
@@ -307,7 +347,7 @@ def compute_paths(args, params, additional_info=None):
             paths['left_glow_path'] = left_glow_path
 
         samples_path += f'/{run_mode}'  # adding run mode # e.g.: left_lr=1e-4/freezed/left_step=10000/train
-        checkpoints_path += f'/lr={lr}'  # adding lr
+        checkpoints_path += f'/lr={lr}'  # adding lr only to checkpoints path (backward compatibility)
 
         # ========= infer: also adding optimization step (step is specified after lr)
         if run_mode == 'infer':
@@ -421,7 +461,7 @@ def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):
 
 
 def resize_for_fcn(args, params):
-    if args.gt:
+    if args.gt:  # photo2label only
         load_path = '/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'
         save_path = '/Midgard/home/sorkhei/glow2/data/cityscapes/resized/val'
     else:

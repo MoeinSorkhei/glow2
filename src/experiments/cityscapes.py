@@ -1,20 +1,17 @@
 import torch
 import matplotlib.pyplot as plt
 from torchvision import utils
-from PIL import Image
 import os
 
 import helper
 from data_handler import CityDataset
 from data_handler import create_cond
-import data_handler
-from train import sample_z
-from helper import calc_z_shapes, load_checkpoint
-from models import TwoGlows
+from helper import load_checkpoint
+
+from models import sample_z, calc_z_shapes
 import models
 import data_handler
 from globals import device, sampling_real_imgs, new_cond_reals
-import train
 
 
 def visualize_img(img_path, data_folder, dataset_name, desired_size):
@@ -155,21 +152,35 @@ def infer_on_validation_set(args, params, device):
 
         print('In [infer_on_validation_set]: starting inference on validation set')
         for i_batch, batch in enumerate(val_loader):
+            img_batch = batch['real'].to(device)
             segment_batch = batch['segment'].to(device)
             boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
             real_paths = batch['real_path']  # list: used to save samples with the same name as original images
-            z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
-            z_samples = sample_z(z_shapes, batch_size, params['temperature'], device)  # batch_size samples in each iter
+
+            # z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+            # z_samples = sample_z(z_shapes, batch_size, params['temperature'], device)  # batch_size samples in each iter
+
+            rev_cond = models.arrange_rev_cond(args, img_batch, segment_batch, boundary_batch)
+            samples = models.take_samples(args, params, model, rev_cond)
 
             # take samples
-            if args.model == 'c_flow':
-                samples = model.reverse(x_a=segment_batch,
-                                        b_map=boundary_batch,
-                                        z_b_samples=z_samples,
-                                        mode='sample_x_b').cpu().data
+            '''if args.model == 'c_flow':
+                # change here if else
+                if args.direction == 'label2photo':
+                    samples = model.reverse(x_a=segment_batch,
+                                            b_map=boundary_batch,
+                                            z_b_samples=z_samples,
+                                            mode='sample_x_b').cpu().data
+                elif args.direction == 'photo2label':
+                    samples = model.reverse(x_a=img_batch,
+                                            z_b_samples=z_samples,
+                                            mode='samples_x_b').cpu().data
+
+                else:
+                    raise NotImplementedError
 
             else:
-                raise NotImplementedError('In [infer_on_validation_set]: no support for the desired model')
+                raise NotImplementedError('In [infer_on_validation_set]: no support for the desired model')'''
 
             # save inferred images separately
             save_one_by_one(samples, real_paths, val_path)
@@ -283,9 +294,9 @@ def sample_c_flow(args, params, model):  # with the specified temperature
         print(f'In [sample_c_flow]: doing for images: {img_pure_name} {"=" * 50}')
 
         # ========== take samples from the model
-        z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
-        z_samples = train.sample_z(z_shapes, params['n_samples'], params['temperature'], device)
-        samples = train.take_samples(args, model, z_samples, rev_cond)  # (n_samples, C, H, W)
+        z_shapes = models.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+        z_samples = models.sample_z(z_shapes, params['n_samples'], params['temperature'], device)
+        samples = models.take_samples(args, model, z_samples, rev_cond)  # (n_samples, C, H, W)
         save_one_by_one2(samples, save_paths)
         print(f'In [sample_c_flow]: for images: {img_pure_name}: done {"=" * 50}\n\n')
 

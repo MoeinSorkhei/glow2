@@ -5,7 +5,7 @@ from torchvision import transforms
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# global image transforms
+# global image transforms (IMPROVEMENT, CITY DATASET SHOULD ALSO USE THIS RATHER THAN HAVING IT IN ITSELF)
 city_transforms = transforms.Compose([transforms.Resize([256, 256]),
                                       transforms.ToTensor()])
 
@@ -14,14 +14,14 @@ base_seg_path = "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gt
 base_real_path = "/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/train"
 
 # =====================================  for training
-# fixed conditioning
-segmentations = [
+# fixed conditioning - names of real images are specified, the segmentations will be retrieved automatically
+'''segmentations = [
     "/jena/jena_000078_000019_gtFine_color.png",
     "/jena/jena_000067_000019_gtFine_color.png",
     "/jena/jena_000011_000019_gtFine_color.png",
     "/jena/jena_000066_000019_gtFine_color.png",
     "/strasbourg/strasbourg_000001_061472_gtFine_color.png"
-]
+]'''
 
 real_imgs = [
     "/jena/jena_000078_000019_leftImg8bit.png",
@@ -32,7 +32,7 @@ real_imgs = [
 ]
 
 # for fixed conditioning during training
-desired_segmentations = [base_seg_path + segmentations[i] for i in range(len(segmentations))]
+# desired_segmentations = [base_seg_path + segmentations[i] for i in range(len(segmentations))]
 desired_real_imgs = [base_real_path + real_imgs[i] for i in range(len(real_imgs))]
 
 
@@ -42,7 +42,16 @@ random_sampling_reals = [    # whose segmentations will be used for random sampl
     "/jena/jena_000067_000019_leftImg8bit.png",
     "/jena/jena_000011_000019_leftImg8bit.png",
     "/jena/jena_000066_000019_leftImg8bit.png",
+    # "/jena/jena_000066_000019",
+    # "/jena/jena_000067_000019",
+    # "/jena/jena_000078_000019",
     "/strasbourg/strasbourg_000001_061472_leftImg8bit.png"
+
+
+
+    # "/strasbourg/strasbourg_000001_018432_leftImg8bit.png",
+    # "/strasbourg/strasbourg_000001_031683_leftImg8bit.png",
+    # "/strasbourg/strasbourg_000001_039374_leftImg8bit.png"
 ]
 
 # for random sampling experiments

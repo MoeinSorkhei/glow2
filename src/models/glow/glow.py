@@ -1,7 +1,8 @@
 from torch import nn
 
 import helper
-from .block import Block, prep_coupling_cond, reverse_conditions
+from ..interface import calc_z_shapes
+from .block import Block, corresponding_coupling_cond, reverse_conditions
 
 
 class Glow(nn.Module):
@@ -78,7 +79,7 @@ class Glow(nn.Module):
         all_act_outs = []  # 2d list
 
         for i, block in enumerate(self.blocks):
-            coupling_conditions = prep_coupling_cond('block', i, coupling_conds)
+            coupling_conditions = corresponding_coupling_cond('block', i, coupling_conds)
 
             # specifying w_outs for the corresponding block
             left_block_w_outs, left_block_act_outs = None, None
@@ -156,11 +157,11 @@ class Glow(nn.Module):
         for i, block in enumerate(self.blocks[::-1]):  # it starts from the last Block
             # preparing coupling conditions
             reversed_i = len(self.blocks) - 1 - i  # i = 0 ==> reversed_i = 3, i = 1 ==> reversed_i = 2, ...
-            coupling_conditions = prep_coupling_cond('block',
-                                                     level=i,
-                                                     cond=coupling_conds,
-                                                     in_reverse=True,
-                                                     reverse_level=reversed_i)
+            coupling_conditions = corresponding_coupling_cond('block',
+                                                              level=i,
+                                                              cond=coupling_conds,
+                                                              in_reverse=True,
+                                                              reverse_level=reversed_i)
             # preparing w and actnorm conditions
             left_block_w_outs, left_block_act_outs = None, None
             if self.w_conditionals is not None and self.w_conditionals[::-1][i]:
@@ -181,10 +182,13 @@ class Glow(nn.Module):
 
 
 def compute_inp_shapes(n_channels, input_size, n_blocks):
-    z_shapes = helper.calc_z_shapes(n_channels, input_size, n_blocks)
+    z_shapes = calc_z_shapes(n_channels, input_size, n_blocks)
     input_shapes = []
     for i in range(len(z_shapes)):
-        input_shapes.append((z_shapes[i][0] * 2, z_shapes[i][1], z_shapes[i][2]))
+        if i < len(z_shapes) - 1:
+            input_shapes.append((z_shapes[i][0] * 2, z_shapes[i][1], z_shapes[i][2]))
+        else:
+            input_shapes.append((z_shapes[i][0], z_shapes[i][1], z_shapes[i][2]))
     return input_shapes
 
 

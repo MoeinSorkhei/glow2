@@ -1,6 +1,6 @@
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from helper import read_params
-from train import train
+import trainer
 import experiments
 import helper
 import models
@@ -8,7 +8,7 @@ import evaluation
 
 import argparse
 import torch
-from torch import nn, optim
+from torch import optim
 
 
 # this device is accessible in all the functions in this file
@@ -54,6 +54,8 @@ def read_params_and_args():
     # args for Cityscapes
     parser.add_argument('--model', type=str, default='glow', help='which model to be used: glow, c_flow, ...')
     parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
+    parser.add_argument('--direction', type=str, default='label2photo')
+
     parser.add_argument('--train_on_segment', action='store_true')  # train/synthesis with vanilla Glow on segmentations
     parser.add_argument('--sanity_check', action='store_true')
     parser.add_argument('--test_invertibility', action='store_true')
@@ -138,7 +140,6 @@ def run_training(args, params):
     # ======== preparing model and optimizer
     model, reverse_cond = models.init_model(args, params, device)
 
-    # lr = args.lr if args.lr is not None else params['lr']
     lr = params['lr']
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -157,18 +158,15 @@ def run_training(args, params):
         checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
         model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer, device)
 
-        train(args, params, model, optimizer,
+        trainer.train(args, params, model, optimizer,
               device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
 
     # train from scratch
     else:
-        train(args, params, model, optimizer, device, tracker, reverse_cond=reverse_cond)
+        trainer.train(args, params, model, optimizer, device, tracker, reverse_cond=reverse_cond)
 
 
 def main():
-    # NOTE: EVERY NEWLY ADDED ARGUMENT FOR INFERENCE MODE SHOULD ALSO BE ADDED TO:
-    #   1. COMPUTE_PATHS FUNCTION (IN HELPER)  2. Comet experiment tags
-
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
@@ -182,26 +180,26 @@ def main():
         helper.create_boundary_maps(params, device)
 
     # ================ evaluation
-    elif args.eval_complete:
+    elif args.exp and args.eval_complete:
         evaluation.eval_complete(args, params, device)
 
-    elif args.infer_on_val:
+    elif args.exp and args.infer_on_val:
         experiments.infer_on_validation_set(args, params, device)
 
-    elif args.resize_for_fcn:
+    elif args.exp and args.resize_for_fcn:
         helper.resize_for_fcn(args, params)
 
-    elif args.evaluate:
+    elif args.exp and args.evaluate:
         evaluation.evaluate_city(args, params)
 
-    elif args.eval_ssim:
+    elif args.exp and args.eval_ssim:
         evaluation.compute_ssim_all(args, params)
 
     # ================ experiments
     if args.exp and args.test_invertibility:
         models.verify_invertibility(args, params)
 
-    elif args.random_samples:
+    elif args.exp and args.random_samples:
         experiments.take_random_samples(args, params)
 
     elif args.exp and args.new_condition:
@@ -220,7 +218,7 @@ def main():
         # run_c_flow_trials(args, params)
         experiments.sample_trained_c_flow(args, params, device)
 
-    elif args.compute_val_bpd:
+    elif args.exp and args.compute_val_bpd:
         evaluation.compute_val_bpd(args, params)
 
     # ================ training

@@ -19,13 +19,11 @@ conda activate workshop
 # Note: no need to change dir beforehand, just ssh moria and run this sbatch file: sbatch glow2/run.sbatch
 # shellcheck disable=SC2164
 cd glow2/src/
-# ps aux |grep python3 |awk '{print $2}' |xargs kill -9
 
-
-python3 main.py --dataset cityscapes --model c_flow --cond_mode segment \
-                --img_size 256 512 --bsize 1 \
-                --n_block 4 --n_flow 14 \
-                --left_pretrained --left_lr 1e-4 --left_step 136000 \
-                --lr 1e-4 \
-                --resume_train --last_optim_step 228000 \
-                --use_comet
+python3 main.py --dataset transient --model c_flow --direction spring2autumn+summer2winter+dry2rain \
+                 --coupling_cond_net \
+                 --img_size 256 512 --bsize 1 \
+                 --n_block 4 --n_flow 14 \
+                 --lr 1e-4 \
+                 --no_validation \
+                 --use_comet  # no val images

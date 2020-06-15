@@ -16,22 +16,22 @@ def gaussian_sample(eps, mean, log_sd):
     return mean + torch.exp(log_sd) * eps
 
 
-def prep_coupling_cond(module, level, cond, in_reverse=False, reverse_level=None):
+def corresponding_coupling_cond(module, level, cond, in_reverse=False, reverse_level=None):
     """
-    This takes the condition corresponding to the given level. For obtaining the 'segment' condition, if it is used for
-    Blocks, it takes the 1D list with the given index from the 2D list, and if used for Flows, it takes the condition
+    This retrieves the condition corresponding to the given level. For obtaining the 'segment' condition, if it is used for
+    Blocks, it retrieves the 1D list with the given index from the 2D list, and if used for Flows, it retrieves the condition
     tensor with the given index from the 1D list.
     Currently, the boundaries are specific for Block levels only. For obtaining the 'boundary' condition, if it is used
     for Blocks, it takes the corresponding (down-sampled) boundary from the 1D list. If used for Flows, it directly
     uses the boundary since all the Flows in a block use the same boundary at the moment.
 
-    :param reverse_level:
+    :param reverse_level: used for down-sampling the boundaries for blocks that deal with lower resolution tensors.
     :param in_reverse:
     :param module: the module that is going to use the condition. Either 'block' or 'flow'.
     :param level: the level (index) of the Block or Flow which will use this condition.
     :param cond: the condition in the form of a dictionary from which the condition with the wanted level (index) will
     be obtained.
-    :return: the condition corresponding to the given index in the form of a dictionary.
+    :return: the condition (in the form of dictionary) corresponding to the given index in the form of a dictionary.
 
     Notes: The boundary condition now only works with batch size of 1.
 
@@ -66,6 +66,11 @@ def prep_coupling_cond(module, level, cond, in_reverse=False, reverse_level=None
 
     if cond is None:
         condition = None
+    elif cond['name'] == 'transient':
+        condition = {'name': 'transient', 'transient_cond': cond['transient_cond'][level]}
+
+    elif cond['name'] == 'real_cond':
+        condition = {'name': 'real_cond', 'real_cond': cond['real_cond'][level]}
 
     elif cond['name'] == 'segment':
         condition = {'name': 'segment', 'segment': cond['segment'][level]}
@@ -87,12 +92,31 @@ def prep_coupling_cond(module, level, cond, in_reverse=False, reverse_level=None
 
 
 def reverse_conditions(coupling_conds, left_glow_w_outs, left_glow_act_outs, w_is_conditional, act_is_conditional):
+    """
+    :param coupling_conds:
+    :param left_glow_w_outs:
+    :param left_glow_act_outs:
+    :param w_is_conditional:
+    :param act_is_conditional:
+    :return:
+    """
     # in the 'c_flow' case: reversing the condition so it matches the reverse direction for each Flow
     # [F1, F2, F3] => [F3, F2, F1] where each Fi denotes the condition tensor for the corresponding Flow
     # 'segment_boundary' does not need reverse here since all Flows use the same bmap
-    if coupling_conds is not None \
-            and (coupling_conds['name'] == 'segment' or coupling_conds['name'] == 'segment_boundary'):
-        coupling_conds['segment'] = coupling_conds['segment'][::-1]
+
+    if coupling_conds is not None:  # IMPROVEMNT: I THINK IT COULD BE REMOVED LATER
+        if coupling_conds['name'] == 'segment' or coupling_conds['name'] == 'segment_boundary':
+            coupling_conds['segment'] = coupling_conds['segment'][::-1]
+
+        elif coupling_conds['name'] == 'transient':  # IMPROVE
+            coupling_conds['transient_cond'] = coupling_conds['transient_cond'][::-1]
+
+        else:  # IMPROVE
+            coupling_conds['real_cond'] = coupling_conds['real_cond'][::-1]
+
+    # if coupling_conds is not None:
+    #    name = 'boundary' if coupling_conds['name'] == 'segment_boundary' else coupling_conds['name']
+    #    coupling_conds[name] = coupling_conds[name][::-1]
 
     if w_is_conditional:
         left_glow_w_outs = left_glow_w_outs[::-1]
@@ -168,7 +192,7 @@ class Block(nn.Module):
         total_log_det = 0
         for i, flow in enumerate(self.flows):
             # preparing conditions
-            coupling_condition = prep_coupling_cond('flow', i, coupling_conds)
+            coupling_condition = corresponding_coupling_cond('flow', i, coupling_conds)
             left_w_out = left_w_outs[i] if self.w_conditionals else None  # done by the right glow
             left_act_out = left_act_outs[i] if self.act_conditionals else None
 
@@ -264,7 +288,7 @@ class Block(nn.Module):
         # reverse Flow operations one by one
         for i, flow in enumerate(self.flows[::-1]):
             # preparing conditions - for prep_coupling_cond: we do not need reverse_i as all Flows use the same b_map
-            coupling_condition = prep_coupling_cond('flow', i, coupling_conds)
+            coupling_condition = corresponding_coupling_cond('flow', i, coupling_conds)
             left_w_out = left_block_w_outs[i] if self.w_conditionals else None
             left_act_out = left_block_act_outs[i] if self.act_conditionals else None
 

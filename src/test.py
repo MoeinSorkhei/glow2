@@ -7,11 +7,17 @@
 from helper import resize_imgs, read_params, resize_for_fcn
 # import evaluation
 import helper
+from torchvision import utils
+
+import data_handler
+import helper
 
 import matplotlib.pyplot as plt
 # import json
 
 import torch
+# import evaluation
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import models
 
@@ -372,6 +378,129 @@ def test_ssim_from_skimage():
     # plt.show()
 
 
+def eval_seg():
+    generated = torch.zeros((3, 3, 2))
+
+    generated[0, 0, 0] = 126
+    generated[1, 0, 0] = 64
+    generated[2, 0, 0] = 128
+
+    generated[0, 0, 1] = 126
+    generated[1, 0, 1] = 64
+    generated[2, 0, 1] = 128
+
+    generated[0, 1, 0] = 242
+    generated[1, 1, 0] = 35
+    generated[2, 1, 0] = 232
+
+    generated[0, 1, 1] = 242
+    generated[1, 1, 1] = 35
+    generated[2, 1, 1] = 232
+
+    generated[0, 2, 0] = 1  # (0, 0, 230)
+    generated[1, 2, 0] = 1
+    generated[2, 2, 0] = 234
+
+    generated[0, 2, 1] = 118  # (119, 11, 32)
+    generated[1, 2, 1] = 10
+    generated[2, 2, 1] = 31
+    # print(generated.shape)
+    # print(generated / 255)
+
+    generated /= 255
+    nearest = evaluation.to_nearest_label_color(generated)
+    print(nearest[:, 0, 0])
+    print(nearest[:, 0, 1])
+    print(nearest[:, 1, 0])
+    print(nearest[:, 1, 1])
+    print(nearest[:, 2, 0])
+    print(nearest[:, 2, 1])
+
+
+def test_transient0():
+    import data_handler
+    import os
+
+    # print(os.listdir('.'))
+    # input()
+    annotations, webcams = data_handler.read_annotations("data/transient/annotations/annotations.tsv")
+
+    ind_spring, ind_winter = 2, 19
+    ind_day, ind_night = 2, 3
+    ind_warm, inc_cold = 11, 12
+
+    # CREATE LIST OF ALL FEATURES
+    # TRAIN TEST SPLIT
+    all_uniques = []
+    all_names = []
+
+    # for ind in [ind_spring, ind_winter, ind_day, ind_night, ind_warm, inc_cold]:
+    for ind in [ind_day, ind_night]:
+        # 2 daylight, 3 night, 11 warm, 12 cold, 16 spring, 18 autumn, 19 winter
+        imgs = data_handler.retrieve_imgs_with_attribute(annotations, ind)
+        names = [img[0] for img in imgs]
+        uniques = list(set([name.split('/')[0] for name in names]))
+
+        all_names.append(names)
+        all_uniques.append(uniques)
+
+    # min_len = min([len(unique) for unique in uniques])
+    # equal = [all_uniques[0][i] == all_uniques[1][i] for i in range(min_len)]
+
+    # equal = set(all_uniques[0]) & set(all_uniques[1]) & set(all_uniques[2]) & \
+     #       set(all_uniques[3]) & set(all_uniques[4]) & set(all_uniques[5])
+
+    equals = list(set(all_uniques[0]) & set(all_uniques[1]))
+    print('equal:', len(equals))
+
+    for unique in equals:
+        days = []
+        nights = []
+
+        print()
+        input()
+
+        # permute
+
+
+def test_transient():
+    import data_handler
+    minorities = ['spring2autumn', 'summer2winter', 'dry2rain']  # then this
+    type_2 = ['warm2cold', 'sunny2clouds']   # first this
+
+
+    # pairs = data_handler.create_pairs_for_direction("data/transient/annotations/annotations.tsv", 'summer2winter', 'train')
+    # print(pairs)
+    # input()
+
+    all = 0
+    for direction in minorities:
+        print('Doing for direction:', direction)
+        train_pairs = data_handler.create_pairs_for_direction("data/transient/annotations/annotations.tsv", direction, split='train')
+        val_pairs = data_handler.create_pairs_for_direction("data/transient/annotations/annotations.tsv", direction, split='val')
+        test_pairs = data_handler.create_pairs_for_direction("data/transient/annotations/annotations.tsv", direction, split='test')
+
+        all += len(train_pairs) + len(val_pairs) + len(test_pairs)
+        print(f'all in all pairs: {len(train_pairs) + len(val_pairs) + len(test_pairs):,}')
+
+    print('ALL:', all)
+
+
+def test_datast_transient():
+    params = helper.read_params('params.json')['transient']
+    params['paths'] = params['local_paths']
+
+    train_loader, _, _ = data_handler.init_transient_loaders(params)
+
+    for i_batch, batch in enumerate(train_loader):
+        im = torch.cat([batch['left'], batch['right']], dim=0)
+        utils.save_image(im, f'tmp/0_transient/{i_batch}.png')
+
+        if i_batch > 20:
+            break
+
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -399,7 +528,10 @@ def main():
     # test_cond_net()
     # test_cond_coupling()
 
-    test_ssim_from_skimage()
+    # test_ssim_from_skimage()
+    # eval_seg()
+    test_transient()
+    # test_datast_transient()
 
 
 if __name__ == '__main__':

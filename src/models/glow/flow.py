@@ -57,6 +57,9 @@ class AffineCoupling(nn.Module):
             conv_channels = (in_channel // 2) + cond_shape[0]
 
         else:  # with cond net. e.g. z shape: (12, 128, 256) --> conv_shape: (12, 128, 256),  12 for inp shape
+            '''import helper
+            helper.print_and_wait(f'inp shape: {inp_shape}')'''
+
             conv_channels = (in_channel // 2) + inp_shape[0]
 
         self.do_affine = do_affine
@@ -91,13 +94,16 @@ class AffineCoupling(nn.Module):
                     # truncate spatial dimension so it spatially fits the actual tensor
                     cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
 
-                elif cond['name'] == 'segment':  # c_flow: getting z's from left glow
-                    # cond_tensor = cond['segment']  # the whole xA with all the channels
-                    # the whole xA with all the channels
+                elif cond['name'] == 'transient':
+                    cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']
+
+                elif cond['name'] == 'real_cond':
+                    cond_tensor = self.cond_net(cond['real_cond']) if self.use_cond_net else cond['real_cond']
+
+                elif cond['name'] == 'segment':  # the whole xA with all the channels
                     cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
 
                 elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    # cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
                     cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
                     cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
 
@@ -131,13 +137,16 @@ class AffineCoupling(nn.Module):
                     label, n_samples = cond[1], cond[2]
                     cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
 
-                elif cond['name'] == 'segment':
-                    # cond_tensor = cond['segment']  # the whole xA with all the channels
-                    # the whole xA with all the channels
+                elif cond['name'] == 'transient':
+                    cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']
+
+                elif cond['name'] == 'real_cond':
+                    cond_tensor = self.cond_net(cond['real_cond']) if self.use_cond_net else cond['real_cond']
+
+                elif cond['name'] == 'segment':  # the whole xA with all the channels
                     cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
 
                 elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    # cond_tensor = torch.cat([cond['segment'], cond['boundary']], dim=1)
                     cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
                     cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
 
@@ -199,6 +208,9 @@ class Flow(nn.Module):
                 return_w_out=False, return_act_out=False):
         # actnorm forward
         if self.act_conditional:
+            '''import helper
+            helper.print_and_wait(f'act_left shape: {act_left_out.shape}')'''
+
             actnorm_out, act_logdet = self.act_norm(inp, act_left_out)  # conditioned on left actnorm
         else:
             actnorm_out, act_logdet = self.act_norm(inp)

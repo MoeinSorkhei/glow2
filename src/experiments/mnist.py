@@ -4,7 +4,7 @@ import numpy as np
 import os
 from torchvision import utils
 
-from train import sample_z
+from models import sample_z
 from helper import load_checkpoint, make_dir_if_not_exists
 from models import init_glow
 from data_handler import MnistDataset

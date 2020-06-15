@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # shellcheck disable=SC2164
 # cd src
 # echo 'In [runs.sh]: Changed dir to the "src" directory'

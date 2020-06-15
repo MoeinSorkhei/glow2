@@ -166,8 +166,9 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_t
 
 
 # could be renamed to create_cond_batch
-def create_cond(params, fixed_conds=None, save_path=None):
+def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo'):
     """
+    :param direction:
     :param params:
     :param fixed_conds:
     :param save_path:
@@ -187,10 +188,6 @@ def create_cond(params, fixed_conds=None, save_path=None):
                 'real': data_folder['real'] + '/train'}
 
     city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=fixed_conds)
-    # if fixed_conds:  # fixed conditions
-    #    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=fixed_conds)
-    # else:  # random segmentation
-    #    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=False)
     print(f'In [create_cond]: created dataset of len {len(city_dataset)}')
 
     segs = [city_dataset[i]['segment'] for i in range(n_samples)]
@@ -218,9 +215,15 @@ def create_cond(params, fixed_conds=None, save_path=None):
 
     if save_path:
         make_dir_if_not_exists(save_path)
-        utils.save_image(segmentations.clone(), f'{save_path}/condition.png', nrow=10)  # .clone(): very important
-        utils.save_image(real_imgs.clone(), f'{save_path}/real_imgs.png', nrow=10)
-        utils.save_image(boundaries.clone(), f'{save_path}/boundaries.png', nrow=10)
+        seg_img_name = 'condition' if direction == 'label2photo' else 'real_imgs'
+        utils.save_image(segmentations.clone(), f'{save_path}/{seg_img_name}.png', nrow=10)  # .clone(): very important
+
+        real_img_name = 'real_imgs' if direction == 'label2photo' else 'condition'
+        utils.save_image(real_imgs.clone(), f'{save_path}/{real_img_name}.png', nrow=10)
+
+        if direction == 'label2photo':
+            utils.save_image(boundaries.clone(), f'{save_path}/boundaries.png', nrow=10)
+
         print(f'In [create_cond]: saved the condition and real images to: "{save_path}"')
 
         with open(f'{save_path}/img_paths.txt', 'a') as f:

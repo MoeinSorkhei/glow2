@@ -19,14 +19,25 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         # return loss, log_p, log_det
         return log_p, logdet
 
+    # THIS CHEKCING SHOULD BE DONE OUTSIDE THIS FUNCTION
     elif args.model == 'c_flow':
-        if args.direction == 'label2photo':
+        if args.direction == 'label2photo':  # IMPROVE: args.dataset should also be checked
+            # IMPROVE: x_a=segment_batch + torch.rand_like(segment_batch) / n_bins ==> is used in if and else: take it out
             left_glow_outs, right_glow_outs = model(x_a=segment_batch + torch.rand_like(segment_batch) / n_bins,
                                                     x_b=img_batch + torch.rand_like(img_batch) / n_bins,
                                                     b_map=boundary_batch)
         elif args.direction == 'photo2label':
             left_glow_outs, right_glow_outs = model(x_a=img_batch + torch.rand_like(img_batch) / n_bins,
                                                     x_b=segment_batch + torch.rand_like(segment_batch) / n_bins)
+
+        elif args.dataset == 'maps' and args.direction == 'map2photo':
+            left_glow_outs, right_glow_outs = model(x_a=segment_batch + torch.rand_like(segment_batch) / n_bins,
+                                                    x_b=img_batch + torch.rand_like(img_batch) / n_bins)
+
+        elif args.dataset == 'maps' and args.direction == 'photo2map':
+            left_glow_outs, right_glow_outs = model(x_a=img_batch + torch.rand_like(img_batch) / n_bins,
+                                                    x_b=segment_batch + torch.rand_like(segment_batch) / n_bins)
+
         else:
             raise NotImplementedError
 
@@ -63,11 +74,48 @@ def take_samples(args, params, model, reverse_cond):
                 sampled_images = model.reverse(x_a=reverse_cond['real_cond'],
                                                z_b_samples=z_samples,
                                                mode='sample_x_b').cpu().data
+
+            elif args.dataset == 'maps':
+                sampled_images = model.reverse(x_a=reverse_cond,  # reverse cond is already extracted based on direction
+                                               z_b_samples=z_samples,
+                                               mode='sample_x_b').cpu().data
+
+            # elif args.dataset == 'maps' and args.direction == 'map2photo':
+            #     sampled_images = model.reverse(x_a=reverse_cond)
+            #
+            # elif args.dataset == 'maps' and args.direction == 'photo2map':
+            #     pass
+
             else:
                 raise NotImplementedError
         else:
             raise NotImplementedError
         return sampled_images
+
+
+def arrange_rev_cond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
+    # ======= only support for c_flow mode now
+    if args.direction == 'label2photo':
+        b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None
+        reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
+
+    elif args.direction == 'photo2label':  # 'photo2label'
+        reverse_cond = {'real_cond': img_batch}
+
+    else:
+        raise NotImplementedError('Direction not implemented')
+    return reverse_cond
+
+
+def sample_z(n_samples, temperature, channels, img_size, n_block):
+    # n_samples, temperature = params['n_samples'], params['temperature']
+    # z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+    z_shapes = calc_z_shapes(channels, img_size, n_block)
+    z_samples = []
+    for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
+        z_new = torch.randn(n_samples, *z) * temperature
+        z_samples.append(z_new.to(device))
+    return z_samples
 
 
 def calc_z_shapes(n_channel, input_size, n_block):
@@ -148,27 +196,3 @@ def calc_cond_shapes(params, mode):
 
     return cond_shapes'''
 
-
-def sample_z(n_samples, temperature, channels, img_size, n_block):
-    # n_samples, temperature = params['n_samples'], params['temperature']
-    # z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
-    z_shapes = calc_z_shapes(channels, img_size, n_block)
-    z_samples = []
-    for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
-        z_new = torch.randn(n_samples, *z) * temperature
-        z_samples.append(z_new.to(device))
-    return z_samples
-
-
-def arrange_rev_cond(args, img_batch, segment_batch, boundary_batch):
-    # ======= only support for c_flow mode now
-    if args.direction == 'label2photo':
-        b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None
-        reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
-
-    elif args.direction == 'photo2label':  # 'photo2label'
-        reverse_cond = {'real_cond': img_batch}
-
-    else:
-        raise NotImplementedError('Direction not implemented')
-    return reverse_cond

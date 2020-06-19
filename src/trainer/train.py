@@ -34,6 +34,10 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                                                        image_size=(params['img_size']),
                                                        remove_alpha=True,  # removing the alpha channel
                                                        loader_params=loader_params)
+
+    elif args.dataset == 'maps':
+        train_loader, val_loader = data_handler.maps.init_maps_loaders(args, params)
+
     elif args.dataset == 'transient':
         train_loader, val_loader, _ = transient.init_transient_loaders(args, params)
 
@@ -87,6 +91,11 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                         boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
                     else:  # 'photo2label'
                         boundary_batch = None
+
+                elif args.dataset == 'maps':
+                    right_img_batch = batch['photo'].to(device)
+                    left_img_batch = batch['the_map'].to(device)
+                    boundary_batch = None
 
                 elif args.dataset == 'transient':
                     right_img_batch = batch['right'].to(device)

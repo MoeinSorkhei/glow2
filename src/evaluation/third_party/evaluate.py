@@ -56,7 +56,7 @@ def evaluate(data_folder, output_dir, result_dir, split='val', save_output_image
         im = np.array(Image.open(im_file))  # im shape: (1024, 2048, 3)
         im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
 
-        out = segrun(net, CS.preprocess(im))
+        out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
         hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)
         if save_output_images > 0:
             label_im = CS.palette(label)

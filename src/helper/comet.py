@@ -68,7 +68,9 @@ def create_tags(args, params):
     else:  # from scratch
         tags.append('scratch')'''
 
-    if args.dataset == 'transient':
-        tags.append('transient')
-        tags.append(args.direction)
+    tags.append(args.dataset)
+    tags.append(args.direction)
+    # if args.dataset == 'transient':
+    #     tags.append('transient')
+    #     tags.append(args.direction)
     return tags

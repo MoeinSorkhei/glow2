@@ -215,14 +215,14 @@ def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo
 
     if save_path:
         make_dir_if_not_exists(save_path)
-        seg_img_name = 'condition' if direction == 'label2photo' else 'real_imgs'
-        utils.save_image(segmentations.clone(), f'{save_path}/{seg_img_name}.png', nrow=10)  # .clone(): very important
+        # seg_img_name = 'condition' if direction == 'label2photo' else 'real_imgs'
+        utils.save_image(segmentations.clone(), f'{save_path}/segmentation.png', nrow=10)  # .clone(): very important
 
-        real_img_name = 'real_imgs' if direction == 'label2photo' else 'condition'
-        utils.save_image(real_imgs.clone(), f'{save_path}/{real_img_name}.png', nrow=10)
+        # real_img_name = 'real_imgs' if direction == 'label2photo' else 'condition'
+        utils.save_image(real_imgs.clone(), f'{save_path}/real_img.png', nrow=10)
 
         if direction == 'label2photo':
-            utils.save_image(boundaries.clone(), f'{save_path}/boundaries.png', nrow=10)
+            utils.save_image(boundaries.clone(), f'{save_path}/boundary.png', nrow=10)
 
         print(f'In [create_cond]: saved the condition and real images to: "{save_path}"')
 

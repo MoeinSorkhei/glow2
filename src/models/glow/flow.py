@@ -95,6 +95,9 @@ class AffineCoupling(nn.Module):
                     # truncate spatial dimension so it spatially fits the actual tensor
                     cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
 
+                elif cond['name'] == 'maps':
+                    cond_tensor = self.cond_net(cond['maps_cond']) if self.use_cond_net else cond['maps_cond']
+
                 elif cond['name'] == 'transient':
                     cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']
 
@@ -137,6 +140,9 @@ class AffineCoupling(nn.Module):
                     # concatenate with the same condition as in the forward pass
                     label, n_samples = cond[1], cond[2]
                     cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
+
+                elif cond['name'] == 'maps':
+                    cond_tensor = self.cond_net(cond['maps_cond']) if self.use_cond_net else cond['maps_cond']
 
                 elif cond['name'] == 'transient':
                     cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']

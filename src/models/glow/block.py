@@ -66,6 +66,10 @@ def corresponding_coupling_cond(module, level, cond, in_reverse=False, reverse_l
 
     if cond is None:
         condition = None
+
+    elif cond['name'] == 'maps':
+        condition = {'name': 'maps', 'maps_cond': cond['maps_cond'][level]}
+
     elif cond['name'] == 'transient':
         condition = {'name': 'transient', 'transient_cond': cond['transient_cond'][level]}
 
@@ -107,6 +111,9 @@ def reverse_conditions(coupling_conds, left_glow_w_outs, left_glow_act_outs, w_i
     if coupling_conds is not None:  # IMPROVEMNT: I THINK IT COULD BE REMOVED LATER
         if coupling_conds['name'] == 'segment' or coupling_conds['name'] == 'segment_boundary':
             coupling_conds['segment'] = coupling_conds['segment'][::-1]
+
+        elif coupling_conds['name'] == 'maps':  # IMPROVE
+            coupling_conds['maps_cond'] = coupling_conds['maps_cond'][::-1]
 
         elif coupling_conds['name'] == 'transient':  # IMPROVE
             coupling_conds['transient_cond'] = coupling_conds['transient_cond'][::-1]

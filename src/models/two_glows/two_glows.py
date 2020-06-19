@@ -5,10 +5,10 @@ from ..interface import calc_cond_shapes
 
 
 class TwoGlows(nn.Module):
-    def __init__(self, params, dataset, direction, mode, pretrained_left_glow=None, w_conditionals=None, act_conditionals=None,
+    def __init__(self, params, dataset_name, direction, mode, pretrained_left_glow=None, w_conditionals=None, act_conditionals=None,
                  use_coupling_cond_nets=None):
         super().__init__()
-        self.dataset = dataset
+        self.dataset = dataset_name
         self.direction = direction
         self.mode = mode   # this will not be used if mode is 'photo2label'
 
@@ -27,12 +27,17 @@ class TwoGlows(nn.Module):
         :return:
         """
         # if self.direction == 'daylight2night':
-        if self.dataset == 'transient':
+        if self.dataset == 'maps':
+            cond = {'name': 'maps', 'maps_cond': flows_outs_left}
+
+        elif self.dataset == 'transient':
             cond = {'name': 'transient', 'transient_cond': flows_outs_left}
 
+        # for cityscapes
         elif self.direction == 'photo2label':
             cond = {'name': 'real_cond', 'real_cond': flows_outs_left}
 
+        # for cityscapes
         elif self.direction == 'label2photo':
             if self.mode == 'segment':
                 cond = {'name': 'segment', 'segment': flows_outs_left}

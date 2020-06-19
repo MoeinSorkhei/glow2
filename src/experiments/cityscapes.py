@@ -243,10 +243,12 @@ def prep_for_sampling(args, params, img_name, additional_info):
     # ========== duplicate condition for n_samples times (not used by all exp_modes)
     seg_batch_dup = seg_batch.repeat((params['n_samples'], 1, 1, 1))  # duplicated: (n_samples, C, H, W)
     boundary_dup = boundary_batch.repeat((params['n_samples'], 1, 1, 1))
+    real_batch_dup = real_batch.repeat((params['n_samples'], 1, 1, 1))
 
     if additional_info['exp_type'] == 'random_samples':
         seg_rev_cond = seg_batch_dup  # (n_samples, C, H, W) - duplicate for random samples
         bmap_rev_cond = boundary_dup
+        real_rev_cond = real_batch_dup
 
     elif additional_info['exp_type'] == 'new_cond':
         seg_rev_cond = seg_batch  # (1, C, H, W) - no duplicate needed
@@ -261,6 +263,9 @@ def prep_for_sampling(args, params, img_name, additional_info):
 
     elif args.cond_mode == 'segment_boundary':
         rev_cond = {'segment': seg_rev_cond, 'boundary': bmap_rev_cond}
+
+    elif args.direction == 'photo2label':
+        rev_cond = {'real_cond': real_rev_cond}
 
     else:
         raise NotImplementedError
@@ -294,14 +299,21 @@ def sample_c_flow(args, params, model):  # with the specified temperature
         print(f'In [sample_c_flow]: doing for images: {img_pure_name} {"=" * 50}')
 
         # ========== take samples from the model
-        z_shapes = models.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
-        z_samples = models.sample_z(z_shapes, params['n_samples'], params['temperature'], device)
-        samples = models.take_samples(args, model, z_samples, rev_cond)  # (n_samples, C, H, W)
+        # z_shapes = models.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+        # z_samples = models.sample_z(z_shapes, params['n_samples'], params['temperature'], device)
+        samples = models.take_samples(args, params, model, rev_cond)  # (n_samples, C, H, W)
         save_one_by_one2(samples, save_paths)
         print(f'In [sample_c_flow]: for images: {img_pure_name}: done {"=" * 50}\n\n')
 
 
 def take_random_samples(args, params):
+    """
+    This function takes random samples from a model specified in the args. See scripts for example usage of this function.
+    Uses the globals.py file for obtaining the conditions for sampling.
+    :param args:
+    :param params:
+    :return:
+    """
     model = models.init_and_load(args, params, run_mode='infer')
     print(f'In [take_random_samples]: model init: done')
 

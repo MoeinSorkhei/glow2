@@ -55,6 +55,29 @@
     "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
   },
 
+  "maps": {
+    "sample_freq": 500,
+    "checkpoint_freq": 1000,
+    "val_freq": 2000,
+    "iter": 5000000,
+    "n_flow": 32,
+    "n_block": 4,
+    "lu": true,
+    "affine": true,
+    "n_bits": 8,
+    "lr": 1e-4,
+    "temperature": 0.7,
+    "n_samples": 5,
+    "channels": 3,
+    "img_size": [512, 512],
+    "batch_size": 1,
+    "monitor_val": true,
+
+    "data_folder": "/local_storage/datasets/moein/maps",
+    "samples_path": "/Midgard/home/sorkhei/glow2/samples",
+    "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
+  },
+
   "transient": {
     "sample_freq": 500,
     "checkpoint_freq": 1000,

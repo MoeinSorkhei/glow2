@@ -49,11 +49,17 @@ def calc_val_loss(args, params, device, model, val_loader):
 
     with torch.no_grad():
         val_list = []
-        for i_batch, batch in enumerate(val_loader):
+        for i_batch, batch in enumerate(val_loader):  # IMRPVE: SHOULD USE make_batch function
             if args.dataset == 'cityscapes':
                 right_img_batch = batch['real'].to(device)
                 left_img_batch = batch['segment'].to(device)
                 boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
+
+            elif args.dataset == 'maps':
+                right_img_batch = batch['photo'].to(device)
+                left_img_batch = batch['the_map'].to(device)
+                boundary_batch = None
+
             else:
                 raise NotImplementedError
 

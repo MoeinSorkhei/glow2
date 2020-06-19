@@ -93,3 +93,15 @@ Number of params for 128x256 images:
 Note: SSIM computation needs no GPU (inference on validation images should already be done)
 All the sbatch or sh files should be run from the outside of the glow2 folder, they will cd to the corresponding
 folder they need for running.
+
+
+
+
+========= For code maintainance:
+For training, functions that need to change for a new dataset or direction:
+    - compute_paths in helper package
+    - do_forward, take_samples, arrange_rev_cond in interface.py in model package
+    - prep_coupling_conds in two_glows
+    - prepare_reverse_cond, init_model in utility.py in models.package  ==> they should be moved to interface
+    - train function in train.py and calc_val_loss and take_sample
+    - block.py and two_glows.py and flow.py

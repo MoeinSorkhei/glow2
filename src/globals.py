@@ -92,3 +92,12 @@ new_cond_reals = {
 
     ]
 }
+
+
+maps_fixed_conds = [  # for both map2photo and photo2map
+    '1.jpg',  # only the image name is needed, full address is inferred from the params inside the maps dataset
+    '2.jpg',
+    '3.jpg',
+    '4.jpg',
+    '5.jpg'
+]

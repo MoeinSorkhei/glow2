@@ -34,6 +34,13 @@ def evaluate_city(args, params):
 
 
 def eval_complete(args, params, device):
+    """
+    Performs steps needed for evaluation with all the temperatures.
+    :param args:
+    :param params:
+    :param device:
+    :return:
+    """
     for temp in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
         print(f'In [eval_complete]: evaluating for temperature = {temp}')
         params['temperature'] = temp
@@ -58,6 +65,12 @@ def eval_complete(args, params, device):
     print('In [eval_complete]: all done \n')
 
 
+def evaluate_single_img(syn_img, ref_img):
+    nearest_rgb = to_nearest_label_color(syn_img)
+
+    pass
+
+
 def compute_val_bpd(args, params):
     loader_params = {'batch_size': params['batch_size'], 'shuffle': False, 'num_workers': 0}
     _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
@@ -73,15 +86,18 @@ def compute_val_bpd(args, params):
 
 def to_nearest_label_color(img):
     """
+    Takes a synthesized image and converts the pixels to the nearest color defined in the Cityscapes classes (see the
+    code for classes and their corresponding colors).
     Part of the code inspired and taken from: https://github.com/phillipi/pix2pix/issues/115.
+
     :param img:
     :return:
-    """
-    # 1. CHEKCK THESE RGB VALUES AGAIN
-    # 2. what about the classes that are not used for evaluation? -- see get_score function
-    # 3. / 255 again
 
-    # classes used for evaluation, ordered by their trainIDs
+    Notes:
+        - The input image is assumed to have float values.
+        - The output image will have int values as defined in the label colors of Cityscapes.
+    """
+    # 19 classes used for evaluation, ordered by their trainIDs
     label_colors_as_list = [(128, 64, 128), # road
                      (244, 35, 232), # sidewalk
                      (70, 70, 70), # building
@@ -100,7 +116,7 @@ def to_nearest_label_color(img):
                      (0, 60, 100), # bus
                      (0, 80, 100), # train
                     (0, 0, 230), # motorcycle
-                    (119, 11, 32)] # bicycle
+                    (119, 11, 32)]  # bicycle
 
     h, w = img.shape[1], img.shape[2]  # img (C, H, W)
     n_labels = len(label_colors_as_list)

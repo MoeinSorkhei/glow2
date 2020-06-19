@@ -5,7 +5,7 @@
 # import experiments
 # import helper
 from helper import resize_imgs, read_params, resize_for_fcn
-# import evaluation
+import evaluation
 import helper
 from torchvision import utils
 
@@ -379,6 +379,7 @@ def test_ssim_from_skimage():
 
 
 def eval_seg():
+    import evaluation
     generated = torch.zeros((3, 3, 2))
 
     generated[0, 0, 0] = 126
@@ -500,6 +501,18 @@ def test_datast_transient():
             break
 
 
+def eval_single_image():
+    syn_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
+              "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
+              "/strasbourg_000001_061472/temp=0.7/sample 1.png"
+
+    ref_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
+              "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
+              "/strasbourg_000001_061472/temp=0.7/segmentation.png"
+
+    evaluation.evaluate_single_img(syn_img, ref_img)
+
+
 
 def main():
     # which_fn = 'initialize'
@@ -530,8 +543,10 @@ def main():
 
     # test_ssim_from_skimage()
     # eval_seg()
-    test_transient()
+    # test_transient()
     # test_datast_transient()
+
+    eval_seg()
 
 
 if __name__ == '__main__':

@@ -1,12 +1,15 @@
 from torch import optim
 
+from .glow import *
 from .two_glows import *
 from data_handler import *
+from data_handler import maps, transient
 import data_handler
-from globals import desired_real_imgs, device
+from globals import desired_real_imgs, device, maps_fixed_conds
 
 
-def prepare_reverse_cond(args, params, run_mode='train'):
+# this function is only for cityscapes, should be refactored and brough into city data_handler
+def prepare_city_reverse_cond(args, params, run_mode='train'):
     if args.dataset == 'mnist':
         reverse_cond = ('mnist', 1, params['n_samples'])
         return reverse_cond
@@ -22,7 +25,6 @@ def prepare_reverse_cond(args, params, run_mode='train'):
                                                                              fixed_conds=desired_real_imgs,
                                                                              save_path=save_path,
                                                                              direction=direction)
-
         # IMRPVEMEN: THIS HOULS CALL ARRANGE REVERSE COND
         # ======= only support for c_flow mode now
         if direction == 'label2photo':
@@ -40,7 +42,7 @@ def init_model(args, params, device, run_mode='train'):
     # ======== preparing reverse condition and initializing models
     if args.dataset == 'mnist':
         model = init_glow(params)
-        reverse_cond = prepare_reverse_cond(args, params, run_mode)  # NOTE: needs to be refactored
+        reverse_cond = prepare_city_reverse_cond(args, params, run_mode)  # NOTE: needs to be refactored
 
     # ======== init glow
     elif args.model == 'glow':  # glow with no condition
@@ -48,14 +50,18 @@ def init_model(args, params, device, run_mode='train'):
         model = init_glow(params)
 
     # ======== init c_flow
-    elif args.model == 'c_flow':
+    elif args.model == 'c_flow':  # change here for new datasets
         if args.dataset == 'transient':
-            reverse_cond = data_handler.create_rev_cond(args, params)
+            reverse_cond = data_handler.transient.create_rev_cond(args, params)
             # direction = args.direction
             mode = None
 
+        elif args.dataset == 'maps':
+            reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
+            mode = None
+
         else:  # cityscapes
-            reverse_cond = None if args.exp else prepare_reverse_cond(args, params, run_mode)  # uses direction in itself
+            reverse_cond = None if args.exp else prepare_city_reverse_cond(args, params, run_mode)  # uses direction in itself
             # direction = args.direction
             # mode: 'segment', 'segment_boundary', etc.
             mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'

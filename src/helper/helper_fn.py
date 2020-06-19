@@ -251,7 +251,7 @@ def compute_paths(args, params, additional_info=None):
         img = 'segment' if args.train_on_segment else 'real'  # --train_on_segment, if used, is always used with glow
         cond = None
 
-    elif model == 'c_flow':
+    elif model == 'c_flow':  # only this part needs to be changed for new datasets
         if dataset == 'cityscapes' and args.direction == 'label2photo':
             img = 'real'
             cond = args.cond_mode
@@ -260,8 +260,17 @@ def compute_paths(args, params, additional_info=None):
             img = 'segment'
             cond = 'real'
 
+        elif dataset == 'maps' and args.direction == 'map2photo':
+            img = 'photo'
+            cond = 'map'
+
+        elif dataset == 'maps' and args.direction == 'photo2map':
+            img = 'map'
+            cond = 'photo'
+
         else:
             raise NotImplementedError
+
     else:
         raise NotImplementedError('mode not implemented')
 
@@ -286,16 +295,16 @@ def compute_paths(args, params, additional_info=None):
         if args.direction == 'label2photo':
             cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
 
-        elif args.direction == 'photo2label':
-            cond_with_ceil = 'real'
+        # elif args.direction == 'photo2label':
         else:
-            raise NotImplementedError
+            cond_with_ceil = 'real'
+        # else:
+        #     raise NotImplementedError
 
-    elif args.dataset == 'transient':
+    # elif args.dataset == 'transient':
+    #    cond_with_ceil = cond
+    else:  # for all other datasets
         cond_with_ceil = cond
-
-    else:
-        raise NotImplementedError
 
     # used for samples only
     cond_variant = 'baseline'
@@ -385,8 +394,6 @@ def compute_paths(args, params, additional_info=None):
                     #                f'/new_cond={additional_info["cond_img_name"]}' \
                     #                f'/temp={params["temperature"]}'
                     #paths['new_cond_path'] = new_cond_path
-
-
 
     # ========= glow paths
     else:  # e.g.: img=real/cond=segment/train/lr=1e-4

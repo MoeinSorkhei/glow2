@@ -13,7 +13,7 @@ from .cityscapes import cityscapes
 import sys
 
 
-def evaluate(data_folder, output_dir, result_dir, split='val', save_output_images=False, gpu_id=0):
+def evaluate_real_imgs_with_temp(data_folder, output_dir, result_dir, split='val', save_output_images=False, gpu_id=0):
     # output_dir = paths['eval_results']  # Where to save the evaluation result
     # result_dir = paths['resized_path']  # Path to the (resized) generated images to be evaluated
     cityscapes_dir = data_folder
@@ -48,8 +48,9 @@ def evaluate(data_folder, output_dir, result_dir, split='val', save_output_image
         if i % 50 == 0:
             print('Evaluating: %d/%d' % (i, len(label_frames)))
 
-        city = idx.split('_')[0]
+        city = idx.split('_')[0]  # e.g. for lindau_000000_000019 -> city: lindau, idx: lindau_000000_000019
         # idx is city_shot_frame
+        # the IDs in the label are 0-18, 255, or -1 depending or trainIDs
         label = CS.load_label(split, city, idx)  # label shape: (1, 1024, 2048)
         im_file = result_dir + '/' + idx + '_leftImg8bit.png'
 
@@ -57,7 +58,7 @@ def evaluate(data_folder, output_dir, result_dir, split='val', save_output_image
         im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
 
         out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
-        hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)
+        hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)  # fast_hist ignores trainId 0 and 255, not used in evaluation
         if save_output_images > 0:
             label_im = CS.palette(label)
             pred_im = CS.palette(out)

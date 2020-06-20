@@ -62,6 +62,7 @@ def read_params_and_args():
 
     # preparation
     parser.add_argument('--create_boundaries', action='store_true')
+    parser.add_argument('--clean_midgard', action='store_true')
 
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
@@ -87,7 +88,11 @@ def read_params_and_args():
     parser.add_argument('--trials', type=int)
 
     arguments = parser.parse_args()
-    parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
+
+    if arguments.clean_midgard:
+        parameters = None
+    else:
+        parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
 
     return arguments, parameters
 
@@ -170,10 +175,20 @@ def main():
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
+    # evaluation.evaluate_segmentations(args, params)
+    # helper.print_and_wait('In main: wainting...')
+
+    if args.clean_midgard:
+        helper.clean_midgard()
+        return
+
     # show important params and the paths (could be refactored based on --exp)
     if not args.exp:
         if not args.eval_complete and not args.create_boundaries and not args.random_samples and not args.new_condition:
             helper.print_info(args, params, model=None, which_info='params')  # print run info (mainly for training)
+
+    if not args.exp:
+        run_training(args, params)
 
     # ================ preparation
     if args.create_boundaries:
@@ -181,7 +196,7 @@ def main():
 
     # ================ evaluation
     elif args.exp and args.eval_complete:
-        evaluation.eval_complete(args, params, device)
+        evaluation.eval_city_with_all_temps(args, params, device)
 
     elif args.exp and args.infer_on_val:
         experiments.infer_on_validation_set(args, params, device)
@@ -190,7 +205,7 @@ def main():
         helper.resize_for_fcn(args, params)
 
     elif args.exp and args.evaluate:
-        evaluation.evaluate_city(args, params)
+        evaluation.eval_city_with_temp(args, params)
 
     elif args.exp and args.eval_ssim:
         evaluation.compute_ssim_all(args, params)
@@ -220,10 +235,6 @@ def main():
 
     elif args.exp and args.compute_val_bpd:
         evaluation.compute_val_bpd(args, params)
-
-    # ================ training
-    else:
-        run_training(args, params)
 
 
 if __name__ == '__main__':

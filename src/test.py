@@ -197,7 +197,7 @@ def test_city(mode):
 
 def test_eval():
     params = read_params('../params.json')['city_evaluation']
-    evaluation.evaluate_city(params)
+    evaluation.eval_city_with_temp(params)
 
 
 def test_resize():
@@ -502,16 +502,17 @@ def test_datast_transient():
 
 
 def eval_single_image():
-    syn_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
-              "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
-              "/strasbourg_000001_061472/temp=0.7/sample 1.png"
+    # syn_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
+    #           "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
+    #           "/strasbourg_000001_061472/temp=0.7/sample 1.png"
+    #
+    # ref_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
+    #           "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
+    #           "/strasbourg_000001_061472/temp=0.7/segmentation.png"
 
-    ref_img = "/Midgard/home/sorkhei/glow2/samples/cityscapes/256x256/model=c_flow/img=segment/cond=real" \
-              "/baseline + act_cond + w_cond + coupling_net/from_scratch/infer/step=83000/random_samples" \
-              "/strasbourg_000001_061472/temp=0.7/segmentation.png"
-
-    evaluation.evaluate_single_img(syn_img, ref_img)
-
+    # evaluation.evaluate_single_img(syn_img, ref_img)
+    # evaluation.evaluate_single_img()
+    pass
 
 
 def main():

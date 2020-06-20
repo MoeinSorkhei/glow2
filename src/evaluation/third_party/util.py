@@ -1,5 +1,6 @@
 # The following code is modified from https://github.com/shelhamer/clockwork-fcn
 import numpy as np
+import os
 
 
 def get_out_scoremap(net):
@@ -21,6 +22,7 @@ def segrun(net, in_):
 
 
 def fast_hist(a, b, n):
+    # this first line takes out negative elements and those classes that are not used for evaluation (trainIds -1 and 255)
     k = np.where((a >= 0) & (a < n))[0]
     bc = np.bincount(n * a[k].astype(int) + b[k], minlength=n**2)
     if len(bc) != n**2:
@@ -40,3 +42,29 @@ def get_scores(hist):
     iu = np.diag(hist) / (hist.sum(1) + hist.sum(0) - np.diag(hist) + 1e-12)
 
     return acc, np.nanmean(cl_acc), np.nanmean(iu), cl_acc, iu
+
+
+def get_score_and_print(hist_perframe, city_classes, verbose=False, save_to=None):
+    mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
+    print('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
+    print('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
+    print('Mean class IoU: %f\n' % round(mean_class_iou, 2))
+
+    if verbose:
+        print('************ Per class numbers below ************\n')
+        for i, cl in enumerate(city_classes):
+            while len(cl) < 15:
+                cl = cl + ' '  # adding spaces
+            print('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
+
+    if save_to:
+        with open(os.path.join(save_to, 'evaluation_results.txt'), 'w') as f:
+            f.write('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
+            f.write('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
+            f.write('Mean class IoU: %f\n' % round(mean_class_iou, 2))
+            f.write('************ Per class numbers below ************\n')
+            for i, cl in enumerate(city_classes):
+                while len(cl) < 15:
+                    cl = cl + ' '
+                f.write('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
+

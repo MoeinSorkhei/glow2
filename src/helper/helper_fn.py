@@ -369,7 +369,7 @@ def compute_paths(args, params, additional_info=None):
             paths['eval_path'] = eval_path
             paths['val_path'] = eval_path + '/val_imgs'
             paths['resized_path'] = eval_path + '/val_imgs_resized'
-            paths['eval_results'] = eval_path  # no need to a separate dir because we don not save segmented images
+            paths['eval_results'] = eval_path  # no need to a separate dir because we do not save segmented images
             paths['eval_path_base'] = eval_path_base
 
             # ========= adding random_samples_path only if the city name is given in additional info
@@ -476,3 +476,31 @@ def resize_for_fcn(args, params):
         load_path, save_path = paths['val_path'], paths['resized_path']
 
     resize_imgs(load_path, save_path, package='scipy')
+
+
+def clean_midgard():
+    # The current code cleans for cityscapes dataset, with segment_boundary condition
+    # base_path = '~/glow2/checkpoints/cityscapes/256x256/model=c_flow/img=real/cond=segment'
+    base_path = '/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/model=c_flow/img=real/cond=segment_boundary/do_ceil=True'
+
+    run_paths = [
+        'w_conditional=False/act_conditional=False/from_scratch/lr=1e-4',
+        'w_conditional=False/act_conditional=True/from_scratch/lr=1e-4',
+        'w_conditional=True/act_conditional=False/from_scratch/lr=1e-4',
+        'w_conditional=True/act_conditional=True/from_scratch/lr=1e-4',
+        'w_conditional=True/act_conditional=True/coupling_net/from_scratch/lr=1e-4',
+    ]
+    max_step = 130000
+
+    for run_path in run_paths:
+        checkpoints = os.listdir(os.path.join(base_path, run_path))
+
+        for checkpoint in checkpoints:
+            step = int(checkpoint.split('=')[-1][:-3])
+
+            if step < max_step:
+                full_path = os.path.join(base_path, run_path, checkpoint)
+                os.remove(full_path)
+        print(f'Cleaning for folder "{run_path}": done')
+
+

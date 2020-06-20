@@ -14,7 +14,7 @@ class cityscapes:
         self.classes = ['road', 'sidewalk', 'building', 'wall', 'fence',
                         'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain',
                         'sky', 'person', 'rider', 'car', 'truck',
-                        'bus', 'train', 'motorcycle', 'bicycle']
+                        'bus', 'train', 'motorcycle', 'bicycle']  # only these classes will be sued in the evaluate function
         self.mean = np.array((72.78044, 83.21195, 73.45286), dtype=np.float32)
 
         # path to modules like labels.py provided by Cityscapes dataset
@@ -22,10 +22,9 @@ class cityscapes:
         labels = __import__('labels')
 
         # dictionary mapping from raw IDs to train IDs
-        self.id2trainId = {label.id: label.trainId for label in labels.labels}
-        self.id_to_trainId_map_func = np.vectorize(self.id2trainId.get)  # for down-sampled labels
+        self.id2trainId = {label.id: label.trainId for label in labels.labels}  # of len 35
         # dictionary mapping train IDs to colors as 3-tuples
-        self.trainId2color = {label.trainId: label.color for label in labels.labels}
+        self.trainId2color = {label.trainId: label.color for label in labels.labels}  # of len 21
 
     # not used
     def get_dset(self, split):
@@ -64,9 +63,9 @@ class cityscapes:
         Load label image as 1 x height x width integer array of label indices.
         The leading singleton dimension is required by the loss.
         """
-        label = Image.open('{}/gtFine_trainvaltest/gtFine/{}/{}/{}_gtFine_labelIds.png'.
+        label = Image.open('{}/gtFine_trainvaltest/gtFine/{}/{}/{}_gtFine_labelIds.png'.  # the label image
                            format(self.dir, split, city, idx))
-        label = self.assign_trainIds(label)  # get proper labels for eval
+        label = self.assign_trainIds(label)  # changing IDs to trainIds
         label = np.array(label, dtype=np.uint8)
         label = label[np.newaxis, ...]
         return label

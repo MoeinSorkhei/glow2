@@ -156,10 +156,12 @@ def infer_on_validation_set(args, params, device):
             segment_batch = batch['segment'].to(device)
             boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
             real_paths = batch['real_path']  # list: used to save samples with the same name as original images
+            seg_paths = batch['segment_path']
 
             # z_shapes = helper.calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
             # z_samples = sample_z(z_shapes, batch_size, params['temperature'], device)  # batch_size samples in each iter
 
+            # create reverse conditions and samples based on args.direction
             rev_cond = models.arrange_rev_cond(args, img_batch, segment_batch, boundary_batch)
             samples = models.take_samples(args, params, model, rev_cond)
 
@@ -183,7 +185,8 @@ def infer_on_validation_set(args, params, device):
                 raise NotImplementedError('In [infer_on_validation_set]: no support for the desired model')'''
 
             # save inferred images separately
-            save_one_by_one(samples, real_paths, val_path)
+            paths_list = real_paths if args.direction == 'label2photo' else seg_paths
+            save_one_by_one(samples, paths_list, val_path)
 
             if i_batch > 0 and i_batch % 20 == 0:
                 print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')

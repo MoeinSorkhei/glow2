@@ -43,6 +43,10 @@ rm gtFine_trainvaltest.zip
 rm leftImg8bit_trainvaltest.zip
 
 
+# removing files in directory through bash
+for ((i=1000;i<130000;i=i+1000)); do rm optim_step=$i.pt; done
+
+
 # moving boundaries from Midgard to compute node
 rsync -Pav /Midgard/Data/moein/cityscapes/boundaries/ /local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/
 

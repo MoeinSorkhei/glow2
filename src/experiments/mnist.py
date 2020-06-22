@@ -77,7 +77,7 @@ def interpolate(cond_config, interp_config, params, args, device, mode='conditio
 
     # init model and load checkpoint
     model = init_glow(params)
-    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, device, resume_train=False)
+    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, resume_train=False)
 
     # assumption: the two images are of the same condition (label), so I am only using label1
     forward_cond = (args.dataset, label1)
@@ -124,7 +124,7 @@ def new_condition(img_list, params, args, device):
 
     # init model and load checkpoint
     model = init_glow(params)
-    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, device, resume_train=False)
+    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, resume_train=False)
 
     for img_num in img_list:
         all_sampled = []
@@ -204,7 +204,7 @@ def prepare_experiment(params, args, device, exp_name):
 
     # init model and load checkpoint
     model = init_glow(params)
-    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, device, resume_train=False)
+    model, _, _ = load_checkpoint(checkpoint_pth, optim_step, model, None, resume_train=False)
 
     return model, save_path
 

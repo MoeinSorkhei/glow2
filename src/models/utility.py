@@ -37,7 +37,7 @@ def prepare_city_reverse_cond(args, params, run_mode='train'):
         return reverse_cond
 
 
-def init_model(args, params, device, run_mode='train'):
+def init_model(args, params, run_mode='train'):
     # IMPROVEMENT: FUNCTIONS THAT USE THIS AND THE LOAD THE CHECKPOINT THEMSELVES COULD USE INIT_AND_LOAD FUNCTION
     # ======== preparing reverse condition and initializing models
     if args.dataset == 'mnist':
@@ -75,11 +75,8 @@ def init_model(args, params, device, run_mode='train'):
             # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
             left_glow_path = helper.compute_paths(args, params)['left_glow_path']
             pre_trained_left_glow = init_glow(params)  # init the model
-            pretrained_left_glow, _, _ = helper.load_checkpoint(path_to_load=left_glow_path,
-                                                                optim_step=args.left_step,
-                                                                model=pre_trained_left_glow,
-                                                                optimizer=None,
-                                                                device=device,
+            pretrained_left_glow, _, _ = helper.load_checkpoint(path_to_load=left_glow_path, optim_step=args.left_step,
+                                                                model=pre_trained_left_glow, optimizer=None,
                                                                 resume_train=False)  # left-glow always freezed
 
             model = TwoGlows(params, args.dataset, args.direction, mode,
@@ -100,19 +97,17 @@ def init_model(args, params, device, run_mode='train'):
 def init_and_load(args, params, run_mode):
     checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
     optim_step = args.last_optim_step
-    model, reverse_cond = init_model(args, params, device, run_mode)
+    model, reverse_cond = init_model(args, params, run_mode)
 
     if run_mode == 'infer':
-        model, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None,
-                                             device, resume_train=False)
+        model, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None, resume_train=False)
         print(f'In [init_and_load]: returned model for inference')
         return model
 
     else:  # train
         optimizer = optim.Adam(model.parameters(), lr=params['lr'])
         print(f'In [init_and_load]: returned model and optimizer for training')
-        model, optimizer, _ = helper.load_checkpoint(checkpoints_path, optim_step, model,
-                                                     optimizer, device, resume_train=True)
+        model, optimizer, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, optimizer, resume_train=True)
         return model, optimizer
 
 
@@ -162,7 +157,7 @@ def verify_invertibility(args, params, path=None):
         print(f'In [verify_invertibility]: model loaded \n')'''
     # else:
     # init a new model
-    model, rev_cond = init_model(args, params, device, run_mode='infer')
+    model, rev_cond = init_model(args, params, run_mode='infer')
     print(f'In [verify_invertibility]: model initialized \n')
 
     imgs = [desired_real_imgs[0]]  # one image for now

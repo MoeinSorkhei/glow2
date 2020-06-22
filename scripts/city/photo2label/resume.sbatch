@@ -26,5 +26,5 @@ python3 main.py --dataset cityscapes --model c_flow --direction photo2label \
                  --n_block 4 --n_flow 16 \
                  --lr 1e-4 \
                  --resume_train --last_optim_step 83000 \
-                 --use_comet
+                 --use_comet --prev_exp_id fcada6d251b5425e93fd658bb874ac40
                  # --no_validation --sample_freq 10 --checkpoint_freq 100 \

@@ -4,6 +4,7 @@ import os
 import json
 import matplotlib.pyplot as plt
 from PIL import Image
+from globals import device
 
 
 def print_and_wait(to_be_printed):
@@ -39,7 +40,7 @@ def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
     print(f'In [save_checkpoint]: save state dict done at: "{name}"')
 
 
-def load_checkpoint(path_to_load, optim_step, model, optimizer, device, resume_train=True):
+def load_checkpoint(path_to_load, optim_step, model, optimizer, resume_train=True):
     name = path_to_load + f'/optim_step={optim_step}.pt'
     checkpoint = torch.load(name, map_location=device)
 

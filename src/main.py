@@ -143,7 +143,7 @@ def adjust_params(args, params):
 
 def run_training(args, params):
     # ======== preparing model and optimizer
-    model, reverse_cond = models.init_model(args, params, device)
+    model, reverse_cond = models.init_model(args, params)
 
     lr = params['lr']
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -161,7 +161,7 @@ def run_training(args, params):
 
         optim_step = args.last_optim_step
         checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
-        model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer, device)
+        model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
 
         trainer.train(args, params, model, optimizer,
               device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
@@ -196,10 +196,10 @@ def main():
 
     # ================ evaluation
     elif args.exp and args.eval_complete:
-        evaluation.eval_city_with_all_temps(args, params, device)
+        evaluation.eval_city_with_all_temps(args, params)
 
     elif args.exp and args.infer_on_val:
-        experiments.infer_on_validation_set(args, params, device)
+        experiments.infer_on_validation_set(args, params)
 
     elif args.exp and args.resize_for_fcn:
         helper.resize_for_fcn(args, params)
@@ -231,7 +231,7 @@ def main():
 
     elif args.exp and args.sample_c_flow:
         # run_c_flow_trials(args, params)
-        experiments.sample_trained_c_flow(args, params, device)
+        experiments.sample_trained_c_flow(args, params)
 
     elif args.exp and args.compute_val_bpd:
         evaluation.compute_val_bpd(args, params)

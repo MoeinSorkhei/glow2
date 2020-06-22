@@ -37,20 +37,20 @@ def visualize_img(img_path, data_folder, dataset_name, desired_size):
     plt.show()
 
 
-def sample_trained_c_flow(args, params, device):
+def sample_trained_c_flow(args, params):
     checkpt_pth = params['checkpoints_path']['real'][args.cond_mode][args.model]
     # model = TwoGlows(params, do_ceil=args.do_ceil)  # initializing the model
-    model = models.init_model(args, params, device, run_mode='infer')
-    model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, device, False)  # loading the model
+    model = models.init_model(args, params, run_mode='infer')
+    model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, False)  # loading the model
 
     if args.conditional:
-        sample_c_flow_conditional(args, params, model, device)
+        sample_c_flow_conditional(args, params, model)
 
     if args.syn_segs:
-        syn_new_segmentations(args, params, model, device)
+        syn_new_segmentations(args, params, model)
 
 
-def sample_c_flow_conditional(args, params, model, device):
+def sample_c_flow_conditional(args, params, model):
     trials_pth = params['samples_path']['real'][args.cond_mode][args.model] + \
                  f'/trials/optim_step={args.last_optim_step}'
     helper.make_dir_if_not_exists(trials_pth)
@@ -93,7 +93,7 @@ def sample_c_flow_conditional(args, params, model, device):
             utils.save_image(all_imgs, f'{path}/temp={temp}.png', nrow=n_samples)
 
 
-def syn_new_segmentations(args, params, model, device):
+def syn_new_segmentations(args, params, model):
     # only one trial for now
     z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
     path = params['samples_path']['segment'][args.cond_mode][args.model] + \
@@ -118,7 +118,7 @@ def syn_new_segmentations(args, params, model, device):
         print(f'Trial={trial}: done')
 
 
-def infer_on_validation_set(args, params, device):
+def infer_on_validation_set(args, params):
     """
     The model name and paths should be equivalent to the name used in the resize_for_fcn function
     in evaluation.third_party.prepare.py module.
@@ -135,9 +135,9 @@ def infer_on_validation_set(args, params, device):
         helper.make_dir_if_not_exists(val_path)
 
         # init and load model
-        model, _ = models.init_model(args, params, device, run_mode='infer')  # init model based on args and params
+        model, _ = models.init_model(args, params, run_mode='infer')  # init model based on args and params
         optim_step = args.last_optim_step
-        model, _, _ = load_checkpoint(checkpt_path, optim_step, model, None, device)
+        model, _, _ = load_checkpoint(checkpt_path, optim_step, model, None)
         print(f'In [infer_on_validation_set]: init model and load checkpoint: done')
 
         # validation loader

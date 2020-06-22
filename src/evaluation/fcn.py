@@ -1,86 +1,94 @@
-import torch
 from torchvision import utils
+from torchvision import transforms
+import scipy.misc
+from .third_party import segrun, fast_hist, get_scores
 
 from . import third_party
 from helper import *
 import helper
-import experiments
-import data_handler
-from trainer import calc_val_loss
-from globals import device
-import helper
-import models
-
-import numpy as np
-import os
-from PIL import Image
-from torchvision import transforms
 
 
-def eval_city_with_all_temps(args, params, device):
+def evaluate_real_imgs_with_temp(data_folder, output_dir, result_dir, split='val', save_output_images=False, gpu_id=0):
     """
-    Performs steps needed for evaluation with all the temperatures.
-    :param args:
-    :param params:
-    :param device:
+    Adapted from: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix.
+    :param data_folder:
+    :param output_dir:
+    :param result_dir:
+    :param split:
+    :param save_output_images:
+    :param gpu_id:
     :return:
     """
-    for temp in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
-        print(f'In [eval_city_with_all_temps]: evaluating for temperature = {temp}')
-        params['temperature'] = temp
+    os.environ['GLOG_minloglevel'] = '2'  # level 2: warnings - suppressing caffe verbose prints
+    import caffe
 
-        # inference
-        experiments.infer_on_validation_set(args, params, device)
-        torch.cuda.empty_cache()  # very important
-        print('In [eval_city_with_all_temps]: inference done \n')
+    cityscapes_dir = data_folder
+    # IMPORTANT ASSUMPTION: the program is run from the main.py module
+    caffemodel_dir = 'evaluation/third_party/caffemodel'
 
-        # current implementation fo label2photo requires that generated images are resized and save to the folder
-        if args.direction == 'label2photo':
-            # resize if not 256x256
-            if params['img_size'] == [256, 256]:
-                print(f'In [eval_city_with_all_temps]: no resize since the image size already is {params["img_size"]} \n')
-            else:
-                helper.resize_for_fcn(args, params)
-                print('In [eval_city_with_all_temps]: resize done \n')
+    print(f'In [evaluate]: images will be read from: "{result_dir}"')
+    print(f'In [evaluate]: results will be saved to: "{output_dir}"')
 
-        # evaluate
-        eval_city_with_temp(args, params)
-        print(f'In [eval_city_with_all_temps]: evaluating for temperature = {temp}: done \n')
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+    if save_output_images > 0:
+        output_image_dir = output_dir + '/image_outputs'
+        print(f'In [evaluate]: output images will be saved to: "{output_image_dir}"')
+        if not os.path.isdir(output_image_dir):
+            os.makedirs(output_image_dir)
 
-    torch.cuda.empty_cache()  # very important
-    print('In [eval_city_with_all_temps]: all done \n')
+    CS = third_party.cityscapes(cityscapes_dir)
+    n_cl = len(CS.classes)
+    label_frames = CS.list_label_frames(split)
+    caffe.set_device(gpu_id)
+    caffe.set_mode_gpu()
+    # caffe.set_mode_cpu()
+    net = caffe.Net(caffemodel_dir + '/deploy.prototxt',
+                    caffemodel_dir + '/fcn-8s-cityscapes.caffemodel',
+                    caffe.TEST)
+    os.environ['GLOG_minloglevel'] = '1'  # level 1: info - back to normal
+    print('In [evaluate]: Caffe model setup: done')
 
+    hist_perframe = np.zeros((n_cl, n_cl))
+    for i, idx in enumerate(label_frames):
+        if i % 50 == 0:
+            print('Evaluating: %d/%d' % (i, len(label_frames)))
 
-def eval_city_with_temp(args, params):
-    """
-    Evaluate the generated validation images wit the given temperature. This function is called from
-    eval_city_with_all_temps function that tries different temperatures.
-    If this function is called individually, the it used the temperature specified in params to find the correct path for
-    the images that are to be evaluated.
+        city = idx.split('_')[0]  # e.g. for lindau_000000_000019 -> city: lindau, idx: lindau_000000_000019
+        # idx is city_shot_frame
+        # the IDs in the label are 0-18, 255, or -1 depending or trainIDs
+        label = CS.load_label(split, city, idx)  # label shape: (1, 1024, 2048)
+        im_file = result_dir + '/' + idx + '_leftImg8bit.png'
 
-    :param args:
-    :param params:
-    :return:
-    """
-    if args.direction == 'label2photo':
-        if args.gt:  # for ground-truth images (photo2label only)
-            paths = {'resized_path': '/Midgard/home/sorkhei/glow2/data/cityscapes/resized/val',
-                     'eval_results': '/Midgard/home/sorkhei/glow2/gt_eval_results'}
-        else:
-            paths = helper.compute_paths(args, params)
+        im = np.array(Image.open(im_file))  # im shape: (1024, 2048, 3)
+        im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
 
-        output_dir = paths['eval_results']
-        # no resize for 256x256, so we read from validation path directly
-        result_dir = paths['resized_path'] if params['img_size'] != [256, 256] else paths['val_path']
+        out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
+        hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)  # fast_hist ignores trainId 0 and 255, not used in evaluation
+        if save_output_images > 0:
+            label_im = CS.palette(label)
+            pred_im = CS.palette(out)
 
-        third_party.evaluate_real_imgs_with_temp(data_folder=params['data_folder']['base'],
-                                                 output_dir=output_dir,
-                                                 result_dir=result_dir,
-                                                 split='val')
+            # assumption: scipy=1.0.0 installed
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_pred.jpg', pred_im)
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_gt.jpg', label_im)
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_input.jpg', im)
 
-    else:
-        evaluate_segmentations_with_temp(args, params)
-    print(f'In [eval_city_with_temp]: evaluation done')
+    mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
+    print(f'Histogram: \n'
+          f'mean_pixel_acc = {mean_pixel_acc} \n'
+          f'mean_class_acc = {mean_class_acc} \n'
+          f'mean_class_iou = {mean_class_iou} \n')
+
+    with open(output_dir + '/evaluation_results.txt', 'w') as f:
+        f.write('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
+        f.write('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
+        f.write('Mean class IoU: %f\n' % round(mean_class_iou, 2))
+        f.write('************ Per class numbers below ************\n')
+        for i, cl in enumerate(CS.classes):
+            while len(cl) < 15:
+                cl = cl + ' '
+            f.write('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
 
 
 def evaluate_segmentations_with_temp(args, params):
@@ -252,15 +260,3 @@ def to_nearest_label_color(img):
         nearest_image += mask_unsqueezed
     return nearest_image
 
-
-def compute_val_bpd(args, params):
-    loader_params = {'batch_size': params['batch_size'], 'shuffle': False, 'num_workers': 0}
-    _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                  image_size=(params['img_size']),
-                                                  remove_alpha=True,  # removing the alpha channel
-                                                  loader_params=loader_params)
-
-    model = models.init_and_load(args, params, run_mode='infer')
-
-    mean, std = calc_val_loss(args, params, device, model, val_loader)
-    print(f'In [compute_val_bpd]: mean = {mean} - std = {std}')

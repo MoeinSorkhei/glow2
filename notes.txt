@@ -3,7 +3,7 @@ For running:
     - We should be in the 'src' folder to run the. Do not run 'main.py' from any other folder.
 
 For evaluation: Caffe model should be present in the corresponding directory in the evaluation package
-    - Change dir to src/evaluation/third_party/caffemodel and, check the bash file and run it
+    - Change dir to src/evaluation/third_party/caffemodel and, check the download bash file and run it
 
 
 OBSERVATIONS:

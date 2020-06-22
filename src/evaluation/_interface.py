@@ -3,6 +3,7 @@ import models
 from globals import device
 from trainer import calc_val_loss
 from .fcn import *
+import experiments
 
 
 def eval_city_with_all_temps(args, params):

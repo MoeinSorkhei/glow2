@@ -93,20 +93,6 @@ def take_samples(args, params, model, reverse_cond):
         return sampled_images
 
 
-def arrange_rev_cond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
-    # ======= only support for c_flow mode now
-    if args.direction == 'label2photo':
-        b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None
-        reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
-
-    elif args.direction == 'photo2label':  # 'photo2label'
-        reverse_cond = {'real_cond': img_batch}
-
-    else:
-        raise NotImplementedError('Direction not implemented')
-    return reverse_cond
-
-
 def sample_z(n_samples, temperature, channels, img_size, n_block):
     # n_samples, temperature = params['n_samples'], params['temperature']
     # z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
@@ -195,4 +181,18 @@ def calc_cond_shapes(params, mode):
         cond_shapes.append((channels, h, w))
 
     return cond_shapes'''
+
+
+def arrange_rev_cond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
+    # ======= only support for c_flow mode now
+    if args.direction == 'label2photo':
+        b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None
+        reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
+
+    elif args.direction == 'photo2label':  # 'photo2label'
+        reverse_cond = {'real_cond': img_batch}
+
+    else:
+        raise NotImplementedError('Direction not implemented')
+    return reverse_cond
 

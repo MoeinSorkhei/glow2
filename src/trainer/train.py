@@ -21,8 +21,19 @@ def track_metrics(args, params, comet_tracker, metrics, optim_step):
         # comet_tracker.track_metric('log_p_right', round(metrics['log_p_right'].item(), 3), optim_step)
 
 
-def train(args, params, model, optimizer, device, comet_tracker=None,
-          resume=False, last_optim_step=0, reverse_cond=None):
+def train(args, params, model, optimizer, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
+    """
+    This function depends on the dataset and direction.
+    :param args:
+    :param params:
+    :param model:
+    :param optimizer:
+    :param comet_tracker:
+    :param resume:
+    :param last_optim_step:
+    :param reverse_cond:
+    :return:
+    """
     # ============ setting params
     batch_size = params['batch_size']
     loader_params = {'batch_size': batch_size, 'shuffle': True, 'num_workers': 0}
@@ -74,39 +85,18 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
                 return  # ============ terminate training if max steps reached
 
             # ============ forward pass, calculating loss
-            # need to re-write here for MNIST
             if args.model == 'glow':
-                right_img_batch = batch['real'].to(device)
-                left_img_batch = batch['segment'].to(device)
-                # right_img_batch, left_img_batch = batches['right_img_batch'], batches['left_img_batch']
-                loss, log_p, log_det = models.do_forward(args, params, model, right_img_batch, left_img_batch)
+                img_batch = batch['real'].to(device)
+                segment_batch = batch['segment'].to(device)
+                loss, log_p, log_det = models.do_forward(args, params, model, img_batch, segment_batch)
                 metrics = {'loss': loss, 'log_p': log_p}
 
             elif args.model == 'c_flow':
-                if args.dataset == 'cityscapes':
-                    right_img_batch = batch['real'].to(device)
-                    left_img_batch = batch['segment'].to(device)
-
-                    if args.direction == 'label2photo':
-                        boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
-                    else:  # 'photo2label'
-                        boundary_batch = None
-
-                elif args.dataset == 'maps':
-                    right_img_batch = batch['photo'].to(device)
-                    left_img_batch = batch['the_map'].to(device)
-                    boundary_batch = None
-
-                elif args.dataset == 'transient':
-                    right_img_batch = batch['right'].to(device)
-                    left_img_batch = batch['left'].to(device)
-                    boundary_batch = None
-
-                else:
-                    raise NotImplementedError
+                # boundary_batch is None for datasets other than cityscapes
+                img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
 
                 loss, loss_left, loss_right = \
-                    forward_and_loss(args, params, model, right_img_batch, left_img_batch, boundary_batch)
+                    forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
 
                 metrics = {'loss': loss,
                            'loss_right': loss_right}
@@ -126,7 +116,7 @@ def train(args, params, model, optimizer, device, comet_tracker=None,
 
             # ============ validation loss
             if params['monitor_val'] and optim_step % params['val_freq'] == 0:
-                val_loss_mean, _ = calc_val_loss(args, params, device, model, val_loader)
+                val_loss_mean, _ = calc_val_loss(args, params, model, val_loader)
                 metrics['val_loss'] = val_loss_mean
                 print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)}')
 

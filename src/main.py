@@ -163,12 +163,12 @@ def run_training(args, params):
         checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
         model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
 
-        trainer.train(args, params, model, optimizer,
-              device, tracker, resume=True, last_optim_step=optim_step, reverse_cond=reverse_cond)
+        trainer.train(args, params, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
+                      reverse_cond=reverse_cond)
 
     # train from scratch
     else:
-        trainer.train(args, params, model, optimizer, device, tracker, reverse_cond=reverse_cond)
+        trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)
 
 
 def main():

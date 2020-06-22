@@ -80,5 +80,5 @@ def compute_val_bpd(args, params):
 
     model = models.init_and_load(args, params, run_mode='infer')
 
-    mean, std = calc_val_loss(args, params, device, model, val_loader)
+    mean, std = calc_val_loss(args, params, model, val_loader)
     print(f'In [compute_val_bpd]: mean = {mean} - std = {std}')

@@ -4,6 +4,16 @@ from globals import device
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
+    """
+    Does the forward operation of the model based on the model and the data batches.
+    :param args:
+    :param params:
+    :param model:
+    :param img_batch:
+    :param segment_batch:
+    :param boundary_batch:
+    :return:
+    """
     n_bins = 2. ** params['n_bits']
 
     if args.model == 'glow':
@@ -19,24 +29,23 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         # return loss, log_p, log_det
         return log_p, logdet
 
-    # THIS CHEKCING SHOULD BE DONE OUTSIDE THIS FUNCTION
     elif args.model == 'c_flow':
-        if args.direction == 'label2photo':  # IMPROVE: args.dataset should also be checked
-            # IMPROVE: x_a=segment_batch + torch.rand_like(segment_batch) / n_bins ==> is used in if and else: take it out
-            left_glow_outs, right_glow_outs = model(x_a=segment_batch + torch.rand_like(segment_batch) / n_bins,
-                                                    x_b=img_batch + torch.rand_like(img_batch) / n_bins,
+        if args.dataset == 'cityscapes' and args.direction == 'label2photo':
+            left_glow_outs, right_glow_outs = model(x_a=noise_added(segment_batch, n_bins),
+                                                    x_b=noise_added(img_batch, n_bins),
                                                     b_map=boundary_batch)
-        elif args.direction == 'photo2label':
-            left_glow_outs, right_glow_outs = model(x_a=img_batch + torch.rand_like(img_batch) / n_bins,
-                                                    x_b=segment_batch + torch.rand_like(segment_batch) / n_bins)
+
+        elif args.dataset == 'cityscapes' and args.direction == 'photo2label':
+            left_glow_outs, right_glow_outs = model(x_a=noise_added(img_batch, n_bins),
+                                                    x_b=noise_added(segment_batch, n_bins))
 
         elif args.dataset == 'maps' and args.direction == 'map2photo':
-            left_glow_outs, right_glow_outs = model(x_a=segment_batch + torch.rand_like(segment_batch) / n_bins,
-                                                    x_b=img_batch + torch.rand_like(img_batch) / n_bins)
+            left_glow_outs, right_glow_outs = model(x_a=noise_added(segment_batch, n_bins),
+                                                    x_b=noise_added(img_batch, n_bins))
 
         elif args.dataset == 'maps' and args.direction == 'photo2map':
-            left_glow_outs, right_glow_outs = model(x_a=img_batch + torch.rand_like(img_batch) / n_bins,
-                                                    x_b=segment_batch + torch.rand_like(segment_batch) / n_bins)
+            left_glow_outs, right_glow_outs = model(x_a=noise_added(img_batch, n_bins),
+                                                    x_b=noise_added(segment_batch, n_bins))
 
         else:
             raise NotImplementedError
@@ -44,12 +53,11 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         # =========== the rest is the same for any configuration
         log_p_left, log_det_left = left_glow_outs['log_p'].mean(), left_glow_outs['log_det'].mean()
         log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
-
-        # loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
-        # loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
-        # loss = loss_left + loss_right
-        # return loss, loss_left, log_p_left, log_det_left, loss_right, log_p_right, log_det_right
         return log_p_left, log_det_left, log_p_right, log_det_right
+
+
+def noise_added(batch, n_bins):  # add uniform noise
+    return batch + torch.rand_like(batch) / n_bins
 
 
 def take_samples(args, params, model, reverse_cond):
@@ -183,7 +191,15 @@ def calc_cond_shapes(params, mode):
     return cond_shapes'''
 
 
-def arrange_rev_cond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
+def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
+    """
+    Takes batches of data and arranges them as reverse condition based on the args.
+    :param args:
+    :param img_batch:
+    :param segment_batch:
+    :param boundary_batch:
+    :return:
+    """
     # ======= only support for c_flow mode now
     if args.direction == 'label2photo':
         b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None

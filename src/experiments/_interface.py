@@ -64,7 +64,7 @@ def infer_on_validation_set(args, params):
             seg_paths = batch['segment_path']
 
             # create reverse conditions and samples based on args.direction
-            rev_cond = models.arrange_rev_cond(args, img_batch, segment_batch, boundary_batch)
+            rev_cond = models.batch2revcond(args, img_batch, segment_batch, boundary_batch)
             samples = models.take_samples(args, params, model, rev_cond)
 
             # save inferred images separately

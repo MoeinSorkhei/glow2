@@ -1,6 +1,9 @@
-import torch
+from torch import optim
 
-from globals import device
+from .glow import *
+from .two_glows import *
+import data_handler
+from globals import maps_fixed_conds
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
@@ -211,4 +214,75 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
     else:
         raise NotImplementedError('Direction not implemented')
     return reverse_cond
+
+
+def init_model(args, params, run_mode='train'):
+    # ======== preparing reverse condition and initializing models
+    if args.dataset == 'mnist':
+        model = init_glow(params)
+        # reverse_cond = prepare_city_reverse_cond(args, params, run_mode)  # NOTE: needs to be refactored
+        reverse_cond = None  # NOTE: needs to be refactored
+
+    # ======== init glow
+    elif args.model == 'glow':  # glow with no condition
+        reverse_cond = None
+        model = init_glow(params)
+
+    # ======== init c_flow
+    elif args.model == 'c_flow':  # change here for new datasets
+        if args.dataset == 'transient':
+            reverse_cond = data_handler.transient.create_rev_cond(args, params)
+            mode = None
+
+        elif args.dataset == 'maps':
+            reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
+            mode = None
+
+        else:  # cityscapes
+            reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
+            mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'
+
+        # only two Blocks with conditional w - IMPROVEMENT: THIS SHOULD BE MOVED TO GLOBALS.PY
+        w_conditionals = [True, True, False, False] if args.w_conditional else None
+        act_conditionals = [True, True, False, False] if args.act_conditional else None
+        coupling_use_cond_nets = [True, True, True, True] if args.coupling_cond_net else None
+
+        if args.left_pretrained:  # use pre-trained left Glow
+            # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
+            left_glow_path = helper.compute_paths(args, params)['left_glow_path']
+            pre_trained_left_glow = init_glow(params)  # init the model
+            pretrained_left_glow, _, _ = helper.load_checkpoint(path_to_load=left_glow_path, optim_step=args.left_step,
+                                                                model=pre_trained_left_glow, optimizer=None,
+                                                                resume_train=False)  # left-glow always freezed
+
+            model = TwoGlows(params, args.dataset, args.direction, mode,
+                             pretrained_left_glow=pretrained_left_glow,
+                             w_conditionals=w_conditionals,
+                             act_conditionals=act_conditionals,
+                             use_coupling_cond_nets=coupling_use_cond_nets)
+        else:  # also train left Glow
+            model = TwoGlows(params, args.dataset, args.direction, mode,
+                             w_conditionals=w_conditionals,
+                             act_conditionals=act_conditionals,
+                             use_coupling_cond_nets=coupling_use_cond_nets)
+    else:
+        raise NotImplementedError
+    return model.to(device), reverse_cond
+
+
+def init_and_load(args, params, run_mode):
+    checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
+    optim_step = args.last_optim_step
+    model, reverse_cond = init_model(args, params, run_mode)
+
+    if run_mode == 'infer':
+        model, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None, resume_train=False)
+        print(f'In [init_and_load]: returned model for inference')
+        return model
+
+    else:  # train
+        optimizer = optim.Adam(model.parameters(), lr=params['lr'])
+        print(f'In [init_and_load]: returned model and optimizer for training')
+        model, optimizer, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, optimizer, resume_train=True)
+        return model, optimizer
 

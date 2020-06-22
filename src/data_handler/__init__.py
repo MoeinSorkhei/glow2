@@ -1,6 +1,7 @@
-from .cityscapes_loader import *
-from .mnist_loader import *
+from .city import *
+from .mnist import *
 from .transient import *
 from .maps import *
+from ._interface import *
 
 

@@ -5,8 +5,8 @@ from .._interface import calc_cond_shapes
 
 
 class TwoGlows(nn.Module):
-    def __init__(self, params, dataset_name, direction, mode, pretrained_left_glow=None, w_conditionals=None, act_conditionals=None,
-                 use_coupling_cond_nets=None):
+    def __init__(self, params, dataset_name, direction, mode, pretrained_left_glow=None, w_conditionals=None,
+                 act_conditionals=None, use_coupling_cond_nets=None):
         super().__init__()
         self.dataset = dataset_name
         self.direction = direction
@@ -26,7 +26,6 @@ class TwoGlows(nn.Module):
         :param b_map:
         :return:
         """
-        # if self.direction == 'daylight2night':
         if self.dataset == 'maps':
             cond = {'name': 'maps', 'maps_cond': flows_outs_left}
 

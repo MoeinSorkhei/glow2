@@ -21,6 +21,7 @@ import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import models
 
+
 def test_actnorm(which_fn):
     act = model.ActNorm(in_channel=2)
     mu, std = act.loc + 1, act.scale
@@ -515,6 +516,16 @@ def eval_single_image():
     pass
 
 
+from models import third_party
+
+
+def test_c_glow():
+    # import models.third_party.c_glow as c_glow
+    # from models import third_party
+
+    third_party.init_c_glow()
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -547,7 +558,8 @@ def main():
     # test_transient()
     # test_datast_transient()
 
-    eval_seg()
+    # eval_seg()
+    test_c_glow()
 
 
 if __name__ == '__main__':

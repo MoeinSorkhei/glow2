@@ -7,7 +7,7 @@ from torchvision import utils
 from models import sample_z
 from helper import load_checkpoint, make_dir_if_not_exists
 from models import init_glow
-from data_handler import MnistDataset
+from data_handler.mnist import MnistDataset
 
 
 def get_image(img_index, mnist_folder, img_size, ret_type):

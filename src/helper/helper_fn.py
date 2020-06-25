@@ -173,7 +173,7 @@ def compute_paths(args, params, additional_info=None):
         img = 'segment' if args.train_on_segment else 'real'  # --train_on_segment, if used, is always used with glow
         cond = None
 
-    elif model == 'c_flow':  # only this part needs to be changed for new datasets
+    elif model == 'c_flow' or model == 'c_glow':  # only this part needs to be changed for new datasets
         if dataset == 'cityscapes' and args.direction == 'label2photo':
             img = 'real'
             cond = args.cond_mode
@@ -194,7 +194,7 @@ def compute_paths(args, params, additional_info=None):
             raise NotImplementedError
 
     else:
-        raise NotImplementedError('mode not implemented')
+        raise NotImplementedError('model not implemented')
 
     # cond = args.cond_mode
     w_conditional = args.w_conditional

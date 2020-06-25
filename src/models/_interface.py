@@ -1,7 +1,10 @@
 from torch import optim
 
 from .glow import *
-from .two_glows import *
+from .two_glows import TwoGlows
+from .utility import *
+
+from .third_party import *
 import data_handler
 from globals import maps_fixed_conds
 
@@ -58,6 +61,14 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
         return log_p_left, log_det_left, log_p_right, log_det_right
 
+    elif args.model == 'c_glow':
+        if args.dataset == 'cityscapes' and args.direction == 'label2photo':
+            z, loss = model(x=noise_added(segment_batch, n_bins),
+                            y=noise_added(img_batch, n_bins))
+        else:
+            raise NotImplementedError
+        return z, loss
+
 
 def noise_added(batch, n_bins):  # add uniform noise
     return batch + torch.rand_like(batch) / n_bins
@@ -99,99 +110,106 @@ def take_samples(args, params, model, reverse_cond):
 
             else:
                 raise NotImplementedError
+
+        elif args.model == 'c_glow':
+            if args.direction == 'label2photo':
+                sampled_images, _ = model(x=reverse_cond['segment'], reverse=True)  # it takes samples from prior in itself
+
+            else:
+                raise NotImplementedError
         else:
             raise NotImplementedError
+
         return sampled_images
 
 
-def sample_z(n_samples, temperature, channels, img_size, n_block):
-    # n_samples, temperature = params['n_samples'], params['temperature']
-    # z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
-    z_shapes = calc_z_shapes(channels, img_size, n_block)
-    z_samples = []
-    for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
-        z_new = torch.randn(n_samples, *z) * temperature
-        z_samples.append(z_new.to(device))
-    return z_samples
+# def sample_z(n_samples, temperature, channels, img_size, n_block):
+#     # n_samples, temperature = params['n_samples'], params['temperature']
+#     # z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
+#     z_shapes = calc_z_shapes(channels, img_size, n_block)
+#     z_samples = []
+#     for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
+#         z_new = torch.randn(n_samples, *z) * temperature
+#         z_samples.append(z_new.to(device))
+#     return z_samples
+#
+#
+# def calc_z_shapes(n_channel, input_size, n_block):
+#     """
+#     This function calculates z shapes given the desired number of blocks in the Glow model. After each block, the
+#     spatial dimension is halved and the number of channels is doubled.
+#     :param n_channel:
+#     :param input_size:
+#     :param n_flow:
+#     :param n_block:
+#     :return:
+#     """
+#     z_shapes = []
+#     for i in range(n_block - 1):
+#         input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
+#         n_channel *= 2
+#
+#         shape = (n_channel, input_size, input_size) if type(input_size) is int else (n_channel, *input_size)
+#         z_shapes.append(shape)
+#
+#     # for the very last block where we have no split operation
+#     input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
+#     shape = (n_channel * 4, input_size, input_size) if type(input_size) is int else (n_channel * 4, *input_size)
+#     z_shapes.append(shape)
+#
+#     return z_shapes
 
-
-def calc_z_shapes(n_channel, input_size, n_block):
-    """
-    This function calculates z shapes given the desired number of blocks in the Glow model. After each block, the
-    spatial dimension is halved and the number of channels is doubled.
-    :param n_channel:
-    :param input_size:
-    :param n_flow:
-    :param n_block:
-    :return:
-    """
-    z_shapes = []
-    for i in range(n_block - 1):
-        input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
-        n_channel *= 2
-
-        shape = (n_channel, input_size, input_size) if type(input_size) is int else (n_channel, *input_size)
-        z_shapes.append(shape)
-
-    # for the very last block where we have no split operation
-    input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
-    shape = (n_channel * 4, input_size, input_size) if type(input_size) is int else (n_channel * 4, *input_size)
-    z_shapes.append(shape)
-
-    return z_shapes
-
-
-def calc_cond_shapes(params, mode):
-    in_channels, img_size, n_block = params['channels'], params['img_size'], params['n_block']
-    z_shapes = calc_z_shapes(in_channels, img_size, n_block)
-
-    # print_and_wait(f'z shapes: {z_shapes}')
-
-    if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
-        return z_shapes
-
-    # flows_outs are before split while z_shapes are calculated for z's after they are split
-    # ===> channels should be multiplied by 2 (except for the last shape)
-    # if mode == 'flows_outs' or mode == 'flows_outs + bmap':
-
-    # REFACTORING NEEDED, I THINK THIS IF CONDITION IS NOT NEEDED
-    # if mode == 'segment' or mode == 'segment_boundary' or mode == 'real_cond':
-    for i in range(len(z_shapes)):
-        z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
-
-        if i < len(z_shapes) - 1:
-            z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
-            if mode is not None and mode == 'segment_boundary':
-                z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-        elif mode is not None and mode == 'segment_boundary':  # last layer - adding dim only for boundaries
-            # no need to have z_shapes[i][0] * 2 since this layer does not have split
-            z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-        z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
-        # print(f'z[{i}] cond shape = {z_shapes[i]}')
-        # input()
-
-    # print_and_wait(f'cond shapes: {z_shapes}')
-    return z_shapes
-
-    # REFACTORING NEEDED: I THINK THIS PART IS NOT REACHABLE
-    # for 'segment' or 'segment_id' modes
-    '''cond_shapes = []
-    for z_shape in z_shapes:
-        h, w = z_shape[1], z_shape[2]
-        if mode == 'segment':
-            channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
-
-        elif mode == 'segment_id':
-            channels = 34 + (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)
-
-        else:
-            raise NotImplementedError
-
-        cond_shapes.append((channels, h, w))
-
-    return cond_shapes'''
+# def calc_cond_shapes(params, mode):
+#     in_channels, img_size, n_block = params['channels'], params['img_size'], params['n_block']
+#     z_shapes = calc_z_shapes(in_channels, img_size, n_block)
+#
+#     # print_and_wait(f'z shapes: {z_shapes}')
+#
+#     if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
+#         return z_shapes
+#
+#     # flows_outs are before split while z_shapes are calculated for z's after they are split
+#     # ===> channels should be multiplied by 2 (except for the last shape)
+#     # if mode == 'flows_outs' or mode == 'flows_outs + bmap':
+#
+#     # REFACTORING NEEDED, I THINK THIS IF CONDITION IS NOT NEEDED
+#     # if mode == 'segment' or mode == 'segment_boundary' or mode == 'real_cond':
+#     for i in range(len(z_shapes)):
+#         z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
+#
+#         if i < len(z_shapes) - 1:
+#             z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
+#             if mode is not None and mode == 'segment_boundary':
+#                 z_shapes[i][0] += 12  # extra channel dimension for the boundary
+#
+#         elif mode is not None and mode == 'segment_boundary':  # last layer - adding dim only for boundaries
+#             # no need to have z_shapes[i][0] * 2 since this layer does not have split
+#             z_shapes[i][0] += 12  # extra channel dimension for the boundary
+#
+#         z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
+#         # print(f'z[{i}] cond shape = {z_shapes[i]}')
+#         # input()
+#
+#     # print_and_wait(f'cond shapes: {z_shapes}')
+#     return z_shapes
+#
+#     # REFACTORING NEEDED: I THINK THIS PART IS NOT REACHABLE
+#     # for 'segment' or 'segment_id' modes
+#     '''cond_shapes = []
+#     for z_shape in z_shapes:
+#         h, w = z_shape[1], z_shape[2]
+#         if mode == 'segment':
+#             channels = (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)  # new channels with new h and w
+#
+#         elif mode == 'segment_id':
+#             channels = 34 + (orig_shape[0] * orig_shape[1] * orig_shape[2]) // (h * w)
+#
+#         else:
+#             raise NotImplementedError
+#
+#         cond_shapes.append((channels, h, w))
+#
+#     return cond_shapes'''
 
 
 def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
@@ -218,29 +236,42 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
 
 def init_model(args, params, run_mode='train'):
     # ======== preparing reverse condition and initializing models
+
+    # ======== prepare reverse condition
     if args.dataset == 'mnist':
-        model = init_glow(params)
+        raise NotImplementedError
+        # model = init_glow(params)
         # reverse_cond = prepare_city_reverse_cond(args, params, run_mode)  # NOTE: needs to be refactored
-        reverse_cond = None  # NOTE: needs to be refactored
+        # reverse_cond = None  # NOTE: needs to be refactored
+
+    elif args.dataset == 'cityscapes':
+        reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
+        mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'
+
+    elif args.dataset == 'maps':
+        reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
+        mode = None
+    else:
+        raise NotImplementedError('Dataset not implemented')
 
     # ======== init glow
-    elif args.model == 'glow':  # glow with no condition
+    if args.model == 'glow':  # glow with no condition
         reverse_cond = None
         model = init_glow(params)
 
     # ======== init c_flow
     elif args.model == 'c_flow':  # change here for new datasets
-        if args.dataset == 'transient':
-            reverse_cond = data_handler.transient.create_rev_cond(args, params)
-            mode = None
-
-        elif args.dataset == 'maps':
-            reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
-            mode = None
-
-        else:  # cityscapes
-            reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
-            mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'
+        # if args.dataset == 'transient':
+        #     reverse_cond = data_handler.transient.create_rev_cond(args, params)
+        #     mode = None
+        #
+        # elif args.dataset == 'maps':
+        #     reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
+        #     mode = None
+        #
+        # else:  # cityscapes
+        #     reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
+        #     mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'
 
         # only two Blocks with conditional w - IMPROVEMENT: THIS SHOULD BE MOVED TO GLOBALS.PY
         w_conditionals = [True, True, False, False] if args.w_conditional else None
@@ -265,6 +296,10 @@ def init_model(args, params, run_mode='train'):
                              w_conditionals=w_conditionals,
                              act_conditionals=act_conditionals,
                              use_coupling_cond_nets=coupling_use_cond_nets)
+
+    elif args.model == 'c_glow':
+        model = init_c_glow(args, params)
+
     else:
         raise NotImplementedError
     return model.to(device), reverse_cond

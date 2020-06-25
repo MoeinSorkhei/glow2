@@ -1,6 +1,8 @@
+from torchvision import utils
+
 import helper
 from .cityscapes_loader import *
-from globals import desired_real_imgs
+from globals import desired_real_imgs, device
 
 
 def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_type='for_train'):
@@ -107,7 +109,7 @@ def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo
         id_repeats_batch[i] = id_repeats
 
     if save_path:
-        make_dir_if_not_exists(save_path)
+        helper.make_dir_if_not_exists(save_path)
         # seg_img_name = 'condition' if direction == 'label2photo' else 'real_imgs'
         utils.save_image(segmentations.clone(), f'{save_path}/segmentation.png', nrow=10)  # .clone(): very important
 

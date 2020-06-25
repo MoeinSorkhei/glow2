@@ -9,14 +9,21 @@ from globals import device
 def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch=None):
     n_bins = 2. ** params['n_bits']
 
-    log_p_left, log_det_left, log_p_right, log_det_right = \
-        models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+    # log_p_left, log_det_left, log_p_right, log_det_right = \
+    # forward_out = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+    if args.model == 'c_flow':
+        log_p_left, log_det_left, log_p_right, log_det_right = \
+             models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
 
-    loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
-    loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
-    loss = loss_left + loss_right
+        loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
+        loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
+        loss = loss_left + loss_right
 
-    return loss, loss_left, loss_right
+        return loss, loss_left, loss_right
+
+    elif args.model == 'c_glow':
+        z, loss = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+        return z, loss
 
 
 def extract_batches(batch, args):
@@ -86,6 +93,9 @@ def calc_val_loss(args, params, model, val_loader):
             elif args.model == 'c_flow':
                 loss, loss_left, loss_right = \
                     forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
+
+            elif args.model == 'c_glow':
+                z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
 
             else:
                 raise NotImplementedError

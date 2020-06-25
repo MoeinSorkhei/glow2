@@ -1,7 +1,8 @@
 from torch import nn
 
 import helper
-from ..interface import calc_z_shapes
+# from .._interface import calc_z_shapes
+from ..utility import calc_z_shapes
 from .block import Block, corresponding_coupling_cond, reverse_conditions
 
 

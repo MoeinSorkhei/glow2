@@ -84,6 +84,8 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 print(f'In [train]: reaching max_step: {max_optim_steps}. Terminating...')
                 return  # ============ terminate training if max steps reached
 
+            img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
+
             # ============ forward pass, calculating loss
             if args.model == 'glow':
                 img_batch = batch['real'].to(device)
@@ -92,9 +94,6 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 metrics = {'loss': loss, 'log_p': log_p}
 
             elif args.model == 'c_flow':
-                # boundary_batch is None for datasets other than cityscapes
-                img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
-
                 loss, loss_left, loss_right = \
                     forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
 
@@ -103,8 +102,14 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
 
                 if args.left_pretrained:
                     pass
+
                 else:  # normal c_flow OR pre-trained left glow unfreezed
                     metrics['loss_left'] = loss_left
+
+            elif args.model == 'c_glow':
+                z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
+                metrics = {'loss': loss}
+
             else:
                 raise NotImplementedError
 

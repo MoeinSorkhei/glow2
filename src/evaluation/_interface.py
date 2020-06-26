@@ -44,7 +44,8 @@ def eval_city_with_temp(args, params):
     Evaluate the generated validation images wit the given temperature. This function is called from
     eval_city_with_all_temps function that tries different temperatures.
     If this function is called individually, the it used the temperature specified in params to find the correct path for
-    the images that are to be evaluated.
+    the images that are to be evaluated. In this case, it is assumed that the inferred images are already available
+    (called after infer_on_validation_set).
 
     :param args:
     :param params:
@@ -69,6 +70,27 @@ def eval_city_with_temp(args, params):
     else:
         evaluate_segmentations_with_temp(args, params)
     print(f'In [eval_city_with_temp]: evaluation done')
+
+
+def infer_and_evaluate_c_glow(args, params):
+    """
+    This now only works for temperature 1.
+    :param args:
+    :param params:
+    :return:
+    """
+    if args.dataset == 'cityscapes':
+        params['temperature'] = 1.
+        experiments.infer_on_validation_set(args, params)
+        eval_city_with_temp(args, params)
+        # if args.direction == 'label2photo':
+        #
+        # elif args.direction == 'photo2label':
+        #     raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
+    else:
+        raise NotImplementedError
 
 
 def compute_val_bpd(args, params):

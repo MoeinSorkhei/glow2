@@ -68,6 +68,7 @@ def read_params_and_args():
     parser.add_argument('--infer_on_val', action='store_true')
     parser.add_argument('--resize_for_fcn', action='store_true')
     parser.add_argument('--evaluate', action='store_true')
+    parser.add_argument('--infer_and_evaluate_c_glow', action='store_true')
     parser.add_argument('--eval_complete', action='store_true')
     parser.add_argument('--eval_ssim', action='store_true')
     parser.add_argument('--gt', action='store_true')  # used only as --evaluate --gt for evaluating ground-truth images
@@ -206,6 +207,9 @@ def main():
 
     elif args.exp and args.evaluate:
         evaluation.eval_city_with_temp(args, params)
+
+    elif args.exp and args.infer_and_evaluate_c_glow:  # inference and evaluate
+        evaluation.infer_and_evaluate_c_glow(args, params)
 
     elif args.exp and args.eval_ssim:
         evaluation.compute_ssim_all(args, params)

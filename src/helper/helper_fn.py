@@ -201,13 +201,6 @@ def compute_paths(args, params, additional_info=None):
     act_conditional = args.act_conditional
 
     run_mode = 'infer' if args.exp else 'train'
-    # run_mode = 'infer' if (args.exp or
-    #                        args.infer_on_val or
-    #                        args.random_samples or
-    #                        args.new_condition or
-    #                        args.evaluate or
-    #                        args.eval_complete or
-    #                        args.resize_for_fcn) else 'train'
     h, w = params['img_size'][0], params['img_size'][1]
 
     # used for checkpoints only
@@ -216,15 +209,8 @@ def compute_paths(args, params, additional_info=None):
     if args.dataset == 'cityscapes':
         if args.direction == 'label2photo':
             cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
-
-        # elif args.direction == 'photo2label':
         else:
             cond_with_ceil = 'real'
-        # else:
-        #     raise NotImplementedError
-
-    # elif args.dataset == 'transient':
-    #    cond_with_ceil = cond
     else:  # for all other datasets
         cond_with_ceil = cond
 
@@ -280,51 +266,78 @@ def compute_paths(args, params, additional_info=None):
         samples_path += f'/{run_mode}'  # adding run mode # e.g.: left_lr=1e-4/freezed/left_step=10000/train
         checkpoints_path += f'/lr={lr}'  # adding lr only to checkpoints path (backward compatibility)
 
-        # ========= infer: also adding optimization step (step is specified after lr)
-        if run_mode == 'infer':
-            optim_step = args.last_optim_step    # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
-            samples_path += f'/step={optim_step}'
-
-            eval_path_base = f'{samples_path}/eval'  # without including the temperature (for saving ssim results)
-            eval_path = f'{samples_path}/eval/temp={params["temperature"]}'  # with temperature
-
-            paths['eval_path'] = eval_path
-            paths['val_path'] = eval_path + '/val_imgs'
-            paths['resized_path'] = eval_path + '/val_imgs_resized'
-            paths['eval_results'] = eval_path  # no need to a separate dir because we do not save segmented images
-            paths['eval_path_base'] = eval_path_base
-
-            # ========= adding random_samples_path only if the city name is given in additional info
-            if additional_info is not None:
-                if additional_info['exp_type'] == 'random_samples':
-                    random_samples_path = f'{samples_path}' \
-                                          f'/random_samples' \
-                                          f'/{additional_info["cond_img_name"]}' \
-                                          f'/temp={params["temperature"]}'
-                    # adding to dict
-                    paths['random_samples_path'] = random_samples_path
-
-                elif additional_info['exp_type'] == 'new_cond':
-                    new_cond_path = f'{samples_path}' \
-                                f'/new_condition' \
-                                f'/orig={additional_info["orig_pure_name"]}' \
-                                f' - new_cond={additional_info["new_cond_pure_name"]}'
-                    # adding to dict
-                    paths['new_cond_path'] = new_cond_path
-
-                    #new_cond_path = f'{orig_path}' \
-                    #                f'/new_cond={additional_info["cond_img_name"]}' \
-                    #                f'/temp={params["temperature"]}'
-                    #paths['new_cond_path'] = new_cond_path
+        # # ========= infer: also adding optimization step (step is specified after lr)
+        # if run_mode == 'infer':
+        #     optim_step = args.last_optim_step    # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
+        #     samples_path += f'/step={optim_step}'
+        #
+        #     eval_path_base = f'{samples_path}/eval'  # without including the temperature (for saving ssim results)
+        #     eval_path = f'{samples_path}/eval/temp={params["temperature"]}'  # with temperature
+        #
+        #     paths['eval_path'] = eval_path
+        #     paths['val_path'] = eval_path + '/val_imgs'
+        #     paths['resized_path'] = eval_path + '/val_imgs_resized'
+        #     paths['eval_results'] = eval_path  # no need to a separate dir because we do not save segmented images
+        #     paths['eval_path_base'] = eval_path_base
+        #
+        #     # ========= adding random_samples_path only if the city name is given in additional info
+        #     if additional_info is not None:
+        #         if additional_info['exp_type'] == 'random_samples':
+        #             random_samples_path = f'{samples_path}' \
+        #                                   f'/random_samples' \
+        #                                   f'/{additional_info["cond_img_name"]}' \
+        #                                   f'/temp={params["temperature"]}'
+        #             # adding to dict
+        #             paths['random_samples_path'] = random_samples_path
+        #
+        #         elif additional_info['exp_type'] == 'new_cond':
+        #             new_cond_path = f'{samples_path}' \
+        #                         f'/new_condition' \
+        #                         f'/orig={additional_info["orig_pure_name"]}' \
+        #                         f' - new_cond={additional_info["new_cond_pure_name"]}'
+        #             # adding to dict
+        #             paths['new_cond_path'] = new_cond_path
 
     # ========= glow paths
     else:  # e.g.: img=real/cond=segment/train/lr=1e-4
         samples_path = f'{samples_base_dir}/{run_mode}/lr={lr}'
         checkpoints_path = f'{checkpoints_base_dir}/lr={lr}'
 
-        if run_mode == 'infer':
-            step = args.last_optim_step
-            samples_path += f'/step={step}'
+        # if run_mode == 'infer':
+        #     step = args.last_optim_step
+        #     samples_path += f'/step={step}'
+
+    # ========= infer (regardless of the model): also adding optimization step (step is specified after lr)
+    if run_mode == 'infer':
+        optim_step = args.last_optim_step  # e.g.: left_lr=1e-4/freezed/left_step=10000/infer/lr=1e-5/step=1000
+        samples_path += f'/step={optim_step}'
+
+        eval_path_base = f'{samples_path}/eval'  # without including the temperature (for saving ssim results)
+        eval_path = f'{samples_path}/eval/temp={params["temperature"]}'  # with temperature
+
+        paths['eval_path'] = eval_path
+        paths['val_path'] = eval_path + '/val_imgs'
+        paths['resized_path'] = eval_path + '/val_imgs_resized'
+        paths['eval_results'] = eval_path  # no need to a separate dir because we do not save segmented images
+        paths['eval_path_base'] = eval_path_base
+
+        # ========= adding random_samples_path only if the city name is given in additional info
+        if additional_info is not None:
+            if additional_info['exp_type'] == 'random_samples':
+                random_samples_path = f'{samples_path}' \
+                                      f'/random_samples' \
+                                      f'/{additional_info["cond_img_name"]}' \
+                                      f'/temp={params["temperature"]}'
+                # adding to dict
+                paths['random_samples_path'] = random_samples_path
+
+            elif additional_info['exp_type'] == 'new_cond':
+                new_cond_path = f'{samples_path}' \
+                                f'/new_condition' \
+                                f'/orig={additional_info["orig_pure_name"]}' \
+                                f' - new_cond={additional_info["new_cond_pure_name"]}'
+                # adding to dict
+                paths['new_cond_path'] = new_cond_path
 
     paths['samples_path'] = samples_path
     paths['checkpoints_path'] = checkpoints_path

@@ -55,6 +55,7 @@ def infer_on_validation_set(args, params):
         print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
         helper.print_info(args, params, model)
 
+        # inference on validation set
         print('In [infer_on_validation_set]: starting inference on validation set')
         for i_batch, batch in enumerate(val_loader):
             img_batch = batch['real'].to(device)
@@ -159,12 +160,24 @@ def take_random_samples(args, params):
     :param params:
     :return:
     """
-    model = models.init_and_load(args, params, run_mode='infer')
+    model, reverse_cond = models.init_model(args, params, run_mode='infer')
     print(f'In [take_random_samples]: model init: done')
 
     # temperature specified
     if args.temp:
-        sample_c_flow(args, params, model)
+        if args.model == 'c_flow':
+            sample_c_flow(args, params, model)
+
+        elif args.model == 'c_glow':
+            if args.direction == 'label2photo':
+                rev_cond = reverse_cond['segment']
+            else:
+                raise NotImplementedError
+
+            models.take_samples(args, params, model, reverse_cond=rev_cond)
+
+        else:
+            raise NotImplementedError
         print(f'In [take_random_samples]: temperature = {params["temperature"]}: done')
 
     # try different temperatures
@@ -173,7 +186,15 @@ def take_random_samples(args, params):
             print(f'In [take_random_samples]: doing for temperature = {temp}')
             params['temperature'] = temp
 
-            sample_c_flow(args, params, model)
-            print(f'In [take_random_samples]: temperature = {temp}: done \n')
+            if args.model == 'c_flow':
+                sample_c_flow(args, params, model)
 
+            elif args.model == 'c_glow':
+                models.take_samples(args, params, model, reverse_cond=reverse_cond)
+
+            else:
+                raise NotImplementedError
+
+            print(f'In [take_random_samples]: temperature = {temp}: done \n')
     print(f'In [take_random_samples]: all done \n')
+

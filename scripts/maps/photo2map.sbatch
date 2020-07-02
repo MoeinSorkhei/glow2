@@ -21,10 +21,19 @@ conda activate workshop
 cd glow2/src/
 
 # --resume_train --last_optim_step 1000 --prev_exp_id e6c829d69b3947a8b852a33edf3d7ad5 \
+# python3 main.py --dataset maps --model c_flow --direction photo2map \
+#                --coupling_cond_net \
+#                --img_size 256 256 --bsize 1 \
+#                --n_block 4 --n_flow 16 \
+#                --lr 1e-4 \
+#                --use_comet
+
+
+# ========= 512x512
+# --resume_train --last_optim_step 1000 --prev_exp_id e6c829d69b3947a8b852a33edf3d7ad5 \
 python3 main.py --dataset maps --model c_flow --direction photo2map \
                 --coupling_cond_net \
-                --img_size 256 256 --bsize 1 \
-                --n_block 4 --n_flow 16 \
+                --img_size 512 512 --bsize 1 \
+                --n_block 3 --n_flow 8 \
                 --lr 1e-4 \
                 --use_comet
-

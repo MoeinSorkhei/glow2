@@ -7,12 +7,12 @@ from .loss import *
 
 
 def track_metrics(args, params, comet_tracker, metrics, optim_step):
-    # ============ tracking by comet
     comet_tracker.track_metric('loss', round(metrics['loss'].item(), 3), optim_step)
     # also track the val_loss at the desired frequency
     if params['monitor_val'] and optim_step % params['val_freq'] == 0:
         comet_tracker.track_metric('val_loss', round(metrics['val_loss'], 3), optim_step)
 
+    # track other specific things for specific models
     if args.model == 'glow':
         comet_tracker.track_metric('log_p', round(metrics['log_p'].item(), 3), optim_step)
 
@@ -106,7 +106,8 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 else:  # normal c_flow OR pre-trained left glow unfreezed
                     metrics['loss_left'] = loss_left
 
-            elif args.model == 'c_glow':
+            # elif args.model == 'c_glow':
+            elif 'c_glow' in args.model:
                 z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
                 metrics = {'loss': loss}
 

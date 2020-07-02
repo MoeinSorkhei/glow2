@@ -61,13 +61,16 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
         return log_p_left, log_det_left, log_p_right, log_det_right
 
-    elif args.model == 'c_glow':
+    # elif args.model == 'c_glow':
+    elif 'c_glow' in args.model:
         if args.dataset == 'cityscapes' and args.direction == 'label2photo':
             z, loss = model(x=noise_added(segment_batch, n_bins),
                             y=noise_added(img_batch, n_bins))
+            return z, loss
         else:
             raise NotImplementedError
-        return z, loss
+    else:
+        raise NotImplementedError
 
 
 def noise_added(batch, n_bins):  # add uniform noise
@@ -101,22 +104,15 @@ def take_samples(args, params, model, reverse_cond):
                 sampled_images = model.reverse(x_a=reverse_cond,  # reverse cond is already extracted based on direction
                                                z_b_samples=z_samples,
                                                mode='sample_x_b').cpu().data
-
-            # elif args.dataset == 'maps' and args.direction == 'map2photo':
-            #     sampled_images = model.reverse(x_a=reverse_cond)
-            #
-            # elif args.dataset == 'maps' and args.direction == 'photo2map':
-            #     pass
-
             else:
                 raise NotImplementedError
 
-        elif args.model == 'c_glow':
+        # elif args.model == 'c_glow':
+        elif 'c_glow' in args.model:
             if args.direction == 'label2photo':
                 temp = params['temperature']
                 # the forward function with reverse=True takes samples from prior
                 sampled_images, _ = model(x=reverse_cond['segment'], reverse=True, eps_std=temp)
-                # print(f'In [take_samples]: took samples with temperature {temp} from c_glow')
 
             else:
                 raise NotImplementedError
@@ -199,7 +195,8 @@ def init_model(args, params, run_mode='train'):
                              act_conditionals=act_conditionals,
                              use_coupling_cond_nets=coupling_use_cond_nets)
 
-    elif args.model == 'c_glow':
+    # elif args.model == 'c_glow':
+    elif 'c_glow' in args.model:
         model = init_c_glow(args, params)
 
     else:

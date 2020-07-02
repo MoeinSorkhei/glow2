@@ -176,9 +176,6 @@ def main():
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
-    # evaluation.evaluate_segmentations(args, params)
-    # helper.print_and_wait('In main: wainting...')
-
     if args.clean_midgard:
         helper.clean_midgard()
         return

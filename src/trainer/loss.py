@@ -21,9 +21,14 @@ def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_bat
 
         return loss, loss_left, loss_right
 
-    elif args.model == 'c_glow':
-        z, loss = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+    # elif args.model == 'c_glow':
+    elif 'c_glow' in args.model:
+        z, nll = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+        loss = torch.mean(nll)
         return z, loss
+
+    else:
+        raise NotImplementedError
 
 
 def extract_batches(batch, args):
@@ -94,7 +99,8 @@ def calc_val_loss(args, params, model, val_loader):
                 loss, loss_left, loss_right = \
                     forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
 
-            elif args.model == 'c_glow':
+            # elif args.model == 'c_glow':
+            elif 'c_glow' in args.model:
                 z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
 
             else:

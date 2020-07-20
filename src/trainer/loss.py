@@ -54,7 +54,7 @@ def extract_batches(batch, args):
     return img_batch, segment_batch, boundary_batch
 
 
-def calc_loss(log_p, logdet, image_size, n_bins):  # how does it work
+def calc_loss(log_p, logdet, image_size, n_bins):
     """
     :param log_p:
     :param logdet:

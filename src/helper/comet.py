@@ -64,14 +64,6 @@ def create_tags(args, params):
     if args.coupling_cond_net:
         tags.append('coupling_net')
 
-    '''if args.left_pretrained:  # left_pretrained
-        tags.append('left_pretrained')
-    else:  # from scratch
-        tags.append('scratch')'''
-
     tags.append(args.dataset)
     tags.append(args.direction)
-    # if args.dataset == 'transient':
-    #     tags.append('transient')
-    #     tags.append(args.direction)
     return tags

@@ -2,7 +2,7 @@ from torchvision import utils
 
 import helper
 from .cityscapes_loader import *
-from globals import desired_real_imgs, device
+from globals import real_conds_abs_path, device
 
 
 def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_type='for_train'):
@@ -46,7 +46,7 @@ def prepare_city_reverse_cond(args, params, run_mode='train'):
         save_path = samples_path if run_mode == 'train' else None  # no need for reverse_cond at inference time
         direction = args.direction
         segmentations, id_repeats_batch, real_imgs, boundaries = create_cond(params,
-                                                                             fixed_conds=desired_real_imgs,
+                                                                             fixed_conds=real_conds_abs_path,
                                                                              save_path=save_path,
                                                                              direction=direction)
         # ======= only support for c_flow mode now

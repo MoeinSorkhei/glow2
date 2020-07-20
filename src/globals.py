@@ -13,6 +13,18 @@ city_transforms = transforms.Compose([transforms.Resize([256, 256]),
 base_seg_path = "/local_storage/datasets/moein/cityscapes/gtFine_trainvaltest/gtFine/train"
 base_real_path = "/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/train"
 
+
+seg_conds = [
+    "/jena/jena_000078_000019_gtFine_color.png",
+    "/jena/jena_000067_000019_gtFine_color.png",
+    "/jena/jena_000011_000019_gtFine_color.png",
+    "/jena/jena_000066_000019_gtFine_color.png",
+    "/strasbourg/strasbourg_000001_061472_gtFine_color.png"
+]
+
+seg_conds_abs_paths = [base_seg_path + seg_conds[i] for i in range(len(seg_conds))]
+
+
 # =====================================  for training
 # fixed conditioning - names of real images are specified, the segmentations will be retrieved automatically
 '''segmentations = [
@@ -33,7 +45,7 @@ real_imgs = [
 
 # for fixed conditioning during training
 # desired_segmentations = [base_seg_path + segmentations[i] for i in range(len(segmentations))]
-desired_real_imgs = [base_real_path + real_imgs[i] for i in range(len(real_imgs))]
+real_conds_abs_path = [base_real_path + real_imgs[i] for i in range(len(real_imgs))]
 
 
 # =====================================  for experiments

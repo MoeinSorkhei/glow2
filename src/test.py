@@ -4,22 +4,22 @@
 # import train
 # import experiments
 # import helper
-from helper import resize_imgs, read_params, resize_for_fcn
-import evaluation
-import helper
-from torchvision import utils
-
-import data_handler
-import helper
-
-import matplotlib.pyplot as plt
-# import json
-
-import torch
+# from helper import resize_imgs, read_params, resize_for_fcn
+# import evaluation
+# import helper
+# from torchvision import utils
+#
+# import data_handler
+# import helper
+#
+# import matplotlib.pyplot as plt
+# # import json
+#
+# import torch
 # import evaluation
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-import models
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# import models
 
 
 def test_actnorm(which_fn):
@@ -526,6 +526,11 @@ def test_c_glow():
     third_party.init_c_glow()
 
 
+def test_dual_glow():
+    import models
+    models.init_and_train_dual_glow()
+
+
 def main():
     # which_fn = 'initialize'
     # test_actnorm(which_fn)
@@ -559,7 +564,9 @@ def main():
     # test_datast_transient()
 
     # eval_seg()
-    test_c_glow()
+
+    # test_c_glow()
+    test_dual_glow()
 
 
 if __name__ == '__main__':

@@ -199,6 +199,9 @@ def init_model(args, params, run_mode='train'):
     elif 'c_glow' in args.model:
         model = init_c_glow(args, params)
 
+    elif 'dual_glow' in args.model:
+        model = init_and_train_dual_glow(args, params)
+
     else:
         raise NotImplementedError
     return model.to(device), reverse_cond

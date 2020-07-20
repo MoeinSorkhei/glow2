@@ -174,7 +174,8 @@ def compute_paths(args, params, additional_info=None):
         cond = None
 
     # elif model == 'c_flow' or model == 'c_glow':  # only this part needs to be changed for new datasets
-    elif model == 'c_flow' or 'c_glow' in model:  # only this part needs to be changed for new datasets
+    # elif model == 'c_flow' or 'c_glow' in model:  # only this part needs to be changed for new datasets
+    else:
         if dataset == 'cityscapes' and args.direction == 'label2photo':
             img = 'real'
             cond = args.cond_mode
@@ -193,9 +194,8 @@ def compute_paths(args, params, additional_info=None):
 
         else:
             raise NotImplementedError
-
-    else:
-        raise NotImplementedError('model not implemented')
+    # else:
+    #    raise NotImplementedError('model not implemented')
 
     # cond = args.cond_mode
     w_conditional = args.w_conditional
@@ -306,6 +306,21 @@ def compute_paths(args, params, additional_info=None):
 
     paths['samples_path'] = samples_path
     paths['checkpoints_path'] = checkpoints_path
+
+    if 'dual_glow' in model:
+        paths['checkpoints_path'] = f'{params["checkpoints_path"]}' \
+                                    f'/{dataset}' \
+                                    f'/{h}x{w}' \
+                                    f'/model={model}' \
+                                    f'/img={img}' \
+                                    f'/cond={cond_with_ceil}'
+
+        paths['samples_path'] = f'{params["samples_path"]}' \
+                                f'/{dataset}' \
+                                f'/{h}x{w}' \
+                                f'/model={model}' \
+                                f'/img={img}' \
+                                f'/cond={cond_with_ceil}'
     return paths
 
 

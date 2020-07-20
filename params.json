@@ -51,6 +51,11 @@
       "real": "/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit"
     },
 
+    "tfrecords_file": {
+      "train": "/local_storage/datasets/moein/cityscapes/tfrecords/train.tfrecords",
+      "val": "/local_storage/datasets/moein/cityscapes/tfrecords/val.tfrecords"
+    },
+
     "samples_path": "/Midgard/home/sorkhei/glow2/samples",
     "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
   },

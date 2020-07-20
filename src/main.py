@@ -1,3 +1,6 @@
+import os
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
+
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from helper import read_params
 import trainer
@@ -63,6 +66,7 @@ def read_params_and_args():
     # preparation
     parser.add_argument('--create_boundaries', action='store_true')
     parser.add_argument('--clean_midgard', action='store_true')
+    parser.add_argument('--create_tf_records', action='store_true')
 
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
@@ -143,33 +147,37 @@ def adjust_params(args, params):
 
 
 def run_training(args, params):
-    # ======== preparing model and optimizer
-    model, reverse_cond = models.init_model(args, params)
-
-    lr = params['lr']
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-
     # ======== setting comet tracker
     tracker = None
     if args.use_comet:
         tracker = init_comet(args, params)
         print("In [run_training]: Comet experiment initialized...")
 
-    # ======== training
-    if args.resume_train:
-        if args.dataset == 'mnist':
-            raise NotImplementedError('In [run_training]: consider the checkpoint path for MNIST...')
+    if 'dual_glow' in args.model:
+        models.init_and_train_dual_glow(args, params, tracker)
 
-        optim_step = args.last_optim_step
-        checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
-        model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
-
-        trainer.train(args, params, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
-                      reverse_cond=reverse_cond)
-
-    # train from scratch
     else:
-        trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)
+        # ======== preparing model and optimizer
+        model, reverse_cond = models.init_model(args, params)
+
+        lr = params['lr']
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+
+        # ======== training
+        if args.resume_train:
+            if args.dataset == 'mnist':
+                raise NotImplementedError('In [run_training]: consider the checkpoint path for MNIST...')
+
+            optim_step = args.last_optim_step
+            checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
+            model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
+
+            trainer.train(args, params, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
+                          reverse_cond=reverse_cond)
+
+        # train from scratch
+        else:
+            trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)
 
 
 def main():
@@ -178,6 +186,10 @@ def main():
 
     if args.clean_midgard:
         helper.clean_midgard()
+        return
+
+    if args.create_tf_records:
+        models.create_tf_records(args, params)
         return
 
     # show important params and the paths (could be refactored based on --exp)

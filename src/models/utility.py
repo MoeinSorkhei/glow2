@@ -1,6 +1,6 @@
 from data_handler import *
 import data_handler
-from globals import desired_real_imgs
+from globals import real_conds_abs_path
 # from ._interface import init_model
 
 
@@ -144,7 +144,7 @@ def verify_invertibility(args, params, path=None):
     model, rev_cond = init_model(args, params, run_mode='infer')
     print(f'In [verify_invertibility]: model initialized \n')
 
-    imgs = [desired_real_imgs[0]]  # one image for now
+    imgs = [real_conds_abs_path[0]]  # one image for now
     segmentations, _, real_imgs, boundaries = data_handler.create_cond(params,
                                                                        fixed_conds=imgs,
                                                                        save_path=path)

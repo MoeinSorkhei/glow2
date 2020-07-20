@@ -42,6 +42,11 @@ unzip -q leftImg8bit_trainvaltest.zip -d leftImg8bit_trainvaltest
 rm gtFine_trainvaltest.zip
 rm leftImg8bit_trainvaltest.zip
 
+# Or move directly
+mkdir -p /local_storage/datasets/moein/cityscapes
+cp -a /Midgard/home/sorkhei/glow2/data/cityscapes/gtFine_trainvaltest /local_storage/datasets/moein/cityscapes/
+cp -a /Midgard/home/sorkhei/glow2/data/cityscapes/leftImg8bit_trainvaltest /local_storage/datasets/moein/cityscapes/
+
 
 # removing files in directory through bash
 for ((i=1000;i<130000;i=i+1000)); do rm optim_step=$i.pt; done

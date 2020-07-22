@@ -14,11 +14,13 @@ from . import data_io
 def count_trainable_params():
     total_parameters = 0
     for variable in tf.trainable_variables():
-        # shape is an array of tf.Dimension
         shape = variable.get_shape()
+
+        print(f'variable name: {variable.name} - shape: {shape} - shape prod: {np.prod(shape)}')
+
+        # shape is an array of tf.Dimension
         variable_parameters = 1
         for dim in shape:
-            # print(dim)
             variable_parameters *= dim.value
         total_parameters += variable_parameters
     return total_parameters
@@ -111,7 +113,7 @@ def train(args, params, hps, sess, model, conditions, tracker):
         iteration += 1
 
 
-def init_dual_glow_and_train(args, params, hps, tracker):
+def init_model_and_train(args, params, hps, tracker):
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     sess = create_tensorflow_session()  # init session with GPU
 

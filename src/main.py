@@ -45,6 +45,7 @@ def read_params_and_args():
     parser.add_argument('--act_conditional', action='store_true')
     parser.add_argument('--coupling_cond_net', action='store_true')
     parser.add_argument('--no_validation', action='store_true')
+    parser.add_argument('--investigate_dual_glow', action='store_true')
     # parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
     # parser.add_argument('--do_ceil', action='store_true')
     # parser.add_argument('--left_unfreeze', action='store_true')  # freeze the left glow of unfreeze it
@@ -186,6 +187,11 @@ def main():
 
     if args.clean_midgard:
         helper.clean_midgard()
+        return
+
+    if args.investigate_dual_glow:
+        hps = models.init_hps_for_dual_glow(args, params)
+        models.investigate_model(args, hps, write_tf_records=False)
         return
 
     if args.create_tf_records:

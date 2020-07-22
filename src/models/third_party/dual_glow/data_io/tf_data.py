@@ -114,10 +114,10 @@ def read_tfrecords(tfrecord_file, dataset_name, direction, batch_size, is_traini
     return itr
 
 
-def write_data_for_tf(tfrecord_file, gt_train_folder):
+def write_data_for_tf(tfrecord_file, gt_folder):
     tf.enable_eager_execution()  # needed for writing tfrecords
 
-    segment_imgs = read_image_ids(data_folder=gt_train_folder, dataset_name='cityscapes_segmentation')
+    segment_imgs = read_image_ids(data_folder=gt_folder, dataset_name='cityscapes_segmentation')
     real_imgs = [real_name_from_segment_name(segment_name) for segment_name in segment_imgs]
     write_tfrecords(tfrecord_file, segment_imgs, real_imgs)
 

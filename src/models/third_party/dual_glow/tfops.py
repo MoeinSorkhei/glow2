@@ -237,7 +237,8 @@ def add_edge_padding(x, filter_size):
 
 
 @add_arg_scope
-def conv3d(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="SAME", do_weightnorm=False, do_actnorm=True, context1d=None, skip=1, edge_bias=True):
+def conv3d(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="SAME", do_weightnorm=False,
+           do_actnorm=True, context1d=None, skip=1, edge_bias=True):
     with tf.variable_scope(name):
         if edge_bias and pad == "SAME":
             x = add_edge_padding(x, filter_size)
@@ -269,29 +270,29 @@ def conv3d(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="SAME", 
     return x
 
 
-@add_arg_scope
-def separable_conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], padding="SAME", do_actnorm=True, std=0.05):
-    n_in = int(x.get_shape()[3])
-    with tf.variable_scope(name):
-        assert filter_size[0] % 2 == 1 and filter_size[1] % 2 == 1
-        strides = [1] + stride + [1]
-        w1_shape = filter_size + [n_in, 1]
-        w1_init = np.zeros(w1_shape, dtype='float32')
-        w1_init[(filter_size[0]-1)//2, (filter_size[1]-1)//2, :,
-                :] = 1.  # initialize depthwise conv as identity
-        w1 = tf.get_variable("W1", dtype=tf.float32, initializer=w1_init)
-        w2_shape = [1, 1, n_in, width]
-        w2 = tf.get_variable("W2", w2_shape, tf.float32,
-                             initializer=default_initializer(std))
-        x = tf.nn.separable_conv2d(
-            x, w1, w2, strides, padding, data_format='NHWC')
-        if do_actnorm:
-            x = actnorm("actnorm", x)
-        else:
-            x += tf.get_variable("b", [1, 1, 1, width],
-                                 initializer=tf.zeros_initializer(std))
-
-    return x
+# @add_arg_scope
+# def separable_conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], padding="SAME", do_actnorm=True, std=0.05):
+#     n_in = int(x.get_shape()[3])
+#     with tf.variable_scope(name):
+#         assert filter_size[0] % 2 == 1 and filter_size[1] % 2 == 1
+#         strides = [1] + stride + [1]
+#         w1_shape = filter_size + [n_in, 1]
+#         w1_init = np.zeros(w1_shape, dtype='float32')
+#         w1_init[(filter_size[0]-1)//2, (filter_size[1]-1)//2, :,
+#                 :] = 1.  # initialize depthwise conv as identity
+#         w1 = tf.get_variable("W1", dtype=tf.float32, initializer=w1_init)
+#         w2_shape = [1, 1, n_in, width]
+#         w2 = tf.get_variable("W2", w2_shape, tf.float32,
+#                              initializer=default_initializer(std))
+#         x = tf.nn.separable_conv2d(
+#             x, w1, w2, strides, padding, data_format='NHWC')
+#         if do_actnorm:
+#             x = actnorm("actnorm", x)
+#         else:
+#             x += tf.get_variable("b", [1, 1, 1, width],
+#                                  initializer=tf.zeros_initializer(std))
+#
+#     return x
 
 
 @add_arg_scope
@@ -496,7 +497,8 @@ def condFun_2x_downsample(mean, logsd, z_prior, n_layer=2, trainable=True):
 
 
 @add_arg_scope
-def conv3d_zeros(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="SAME", logscale_factor=3, skip=1, edge_bias=True):
+def conv3d_zeros(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="SAME",
+                 logscale_factor=3, skip=1, edge_bias=True):
     with tf.variable_scope(name):
         if edge_bias and pad == "SAME":
             x = add_edge_padding(x, filter_size)
@@ -521,25 +523,25 @@ def conv3d_zeros(name, x, width, filter_size=[3, 3, 3], stride=[1, 1, 1], pad="S
 
 
 # 2X nearest-neighbour upsampling, also inspired by Jascha Sohl-Dickstein's code
-def upsample2d_nearest_neighbour(x):
-    shape = x.get_shape()
-    n_batch = int(shape[0])
-    height = int(shape[1])
-    width = int(shape[2])
-    n_channels = int(shape[3])
-    x = tf.reshape(x, (n_batch, height, 1, width, 1, n_channels))
-    x = tf.concat(2, [x, x])
-    x = tf.concat(4, [x, x])
-    x = tf.reshape(x, (n_batch, height*2, width*2, n_channels))
-    return x
+# def upsample2d_nearest_neighbour(x):
+#     shape = x.get_shape()
+#     n_batch = int(shape[0])
+#     height = int(shape[1])
+#     width = int(shape[2])
+#     n_channels = int(shape[3])
+#     x = tf.reshape(x, (n_batch, height, 1, width, 1, n_channels))
+#     x = tf.concat(2, [x, x])
+#     x = tf.concat(4, [x, x])
+#     x = tf.reshape(x, (n_batch, height*2, width*2, n_channels))
+#     return x
 
 
-def upsample(x, factor=2):
-    shape = x.get_shape()
-    height = int(shape[1])
-    width = int(shape[2])
-    x = tf.image.resize_nearest_neighbor(x, [height * factor, width * factor])
-    return x
+# def upsample(x, factor=2):
+#     shape = x.get_shape()
+#     height = int(shape[1])
+#     width = int(shape[2])
+#     x = tf.image.resize_nearest_neighbor(x, [height * factor, width * factor])
+#     return x
 
 
 def imitate_squeeze_3d(x, factor=2):
@@ -571,7 +573,6 @@ def squeeze3d(x, factor=2):
     return x
 
 
-
 def imitate_unsqueeze_3d(x, factor=2):
     x = tf.squeeze(x, axis=1)
     x = unsqueeze2d(x, factor=factor)
@@ -597,8 +598,6 @@ def unsqueeze3d(x, factor=2):
                            int(width*factor),
                            int(n_channels/factor**3)))
     return x
-
-
 
 
 def squeeze2d(x, factor=2):
@@ -691,12 +690,12 @@ def shuffle_features(name, h, indices=None, return_indices=False, reverse=False)
         return h
 
 
-def embedding(name, y, n_y, width):
-    with tf.variable_scope(name):
-        params = tf.get_variable(
-            "embedding", [n_y, width], initializer=default_initializer())
-        embeddings = tf.gather(params, y)
-        return embeddings
+# def embedding(name, y, n_y, width):
+#     with tf.variable_scope(name):
+#         params = tf.get_variable(
+#             "embedding", [n_y, width], initializer=default_initializer())
+#         embeddings = tf.gather(params, y)
+#         return embeddings
 
 # Random variables
 
@@ -710,8 +709,8 @@ def flatten_sum(logps):
         raise Exception()
 
 
-def standard_gaussian(shape):
-    return gaussian_diag(tf.zeros(shape), tf.zeros(shape))
+# def standard_gaussian(shape):
+#     return gaussian_diag(tf.zeros(shape), tf.zeros(shape))
 
 
 def gaussian_diag(mean, logsd):
@@ -735,39 +734,39 @@ def gaussian_diag(mean, logsd):
 #    logp = tf.log(tf.sigmoid(sample + binsize / scale) - tf.sigmoid(sample) + 1e-7)
 #    return tf.reduce_sum(logp, [1, 2, 3])
 
-def discretized_logistic(mean, logscale, binsize=1. / 256):
-    class o(object):
-        pass
-    o.mean = mean
-    o.logscale = logscale
-    scale = tf.exp(logscale)
+# def discretized_logistic(mean, logscale, binsize=1. / 256):
+#     class o(object):
+#         pass
+#     o.mean = mean
+#     o.logscale = logscale
+#     scale = tf.exp(logscale)
+#
+#     def logps(x):
+#         x = (x - mean) / scale
+#         return tf.log(tf.sigmoid(x + binsize / scale) - tf.sigmoid(x) + 1e-7)
+#     o.logps = logps
+#     o.logp = lambda x: flatten_sum(logps(x))
+#     return o
 
-    def logps(x):
-        x = (x - mean) / scale
-        return tf.log(tf.sigmoid(x + binsize / scale) - tf.sigmoid(x) + 1e-7)
-    o.logps = logps
-    o.logp = lambda x: flatten_sum(logps(x))
-    return o
 
-
-def _symmetric_matrix_square_root(mat, eps=1e-10):
-    """Compute square root of a symmetric matrix.
-    Note that this is different from an elementwise square root. We want to
-    compute M' where M' = sqrt(mat) such that M' * M' = mat.
-    Also note that this method **only** works for symmetric matrices.
-    Args:
-      mat: Matrix to take the square root of.
-      eps: Small epsilon such that any element less than eps will not be square
-        rooted to guard against numerical instability.
-    Returns:
-      Matrix square root of mat.
-    """
-    # Unlike numpy, tensorflow's return order is (s, u, v)
-    s, u, v = tf.svd(mat)
-    # sqrt is unstable around 0, just use 0 in such case
-    si = tf.where(tf.less(s, eps), s, tf.sqrt(s))
-    # Note that the v returned by Tensorflow is v = V
-    # (when referencing the equation A = U S V^T)
-    # This is unlike Numpy which returns v = V^T
-    return tf.matmul(
-        tf.matmul(u, tf.diag(si)), v, transpose_b=True)
+# def _symmetric_matrix_square_root(mat, eps=1e-10):
+#     """Compute square root of a symmetric matrix.
+#     Note that this is different from an elementwise square root. We want to
+#     compute M' where M' = sqrt(mat) such that M' * M' = mat.
+#     Also note that this method **only** works for symmetric matrices.
+#     Args:
+#       mat: Matrix to take the square root of.
+#       eps: Small epsilon such that any element less than eps will not be square
+#         rooted to guard against numerical instability.
+#     Returns:
+#       Matrix square root of mat.
+#     """
+#     # Unlike numpy, tensorflow's return order is (s, u, v)
+#     s, u, v = tf.svd(mat)
+#     # sqrt is unstable around 0, just use 0 in such case
+#     si = tf.where(tf.less(s, eps), s, tf.sqrt(s))
+#     # Note that the v returned by Tensorflow is v = V
+#     # (when referencing the equation A = U S V^T)
+#     # This is unlike Numpy which returns v = V^T
+#     return tf.matmul(
+#         tf.matmul(u, tf.diag(si)), v, transpose_b=True)

@@ -192,7 +192,8 @@ class Cond1x1Conv(nn.Module):
         y = y.view(1, B*C, H, W)
         B_k, C_i_k, C_o_k, H_k, W_k = weight.size()
         assert B == B_k and C == C_i_k and C == C_o_k, "The input and kernel dimensions are different"
-        weight = weight.view(B_k*C_i_k,C_o_k,H_k,W_k)
+        # weight = weight.view(B_k*C_i_k,C_o_k,H_k,W_k)  # raises error about tensor contiguity
+        weight = weight.reshape(B_k*C_i_k,C_o_k,H_k,W_k)
 
         if reverse == False:
             z = F.conv2d(y, weight, groups=B)

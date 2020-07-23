@@ -393,22 +393,60 @@ def resize_for_fcn(args, params):
     resize_imgs(load_path, save_path, package='scipy')
 
 
-def clean_midgard():
-    # The current code cleans for cityscapes dataset, with segment_boundary condition
-    # base_path = '~/glow2/checkpoints/cityscapes/256x256/model=c_flow/img=real/cond=segment'
-    base_path = '/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/model=c_flow/img=real/cond=segment_boundary/do_ceil=True'
+def clean_midgard(args):
+    dataset, model = args.dataset, args.model
 
-    run_paths = [
-        'w_conditional=False/act_conditional=False/from_scratch/lr=1e-4',
-        'w_conditional=False/act_conditional=True/from_scratch/lr=1e-4',
-        'w_conditional=True/act_conditional=False/from_scratch/lr=1e-4',
-        'w_conditional=True/act_conditional=True/from_scratch/lr=1e-4',
-        'w_conditional=True/act_conditional=True/coupling_net/from_scratch/lr=1e-4',
-    ]
+    if args.direction == 'label2photo':
+        img, cond = 'real', args.cond_mode
+    elif args.direction == 'photo2label':
+        img, cond = 'segment', 'real'
+    elif args.direction == 'map2photo':
+        img, cond = 'photo', 'map'
+    elif args.direction == 'photo2map':
+        img, cond = 'map', 'photo'
+    else:
+        raise NotImplementedError
+
+    # base_path = '/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/model=c_flow/img=real/cond=segment_boundary/do_ceil=True'
+    base_path = f'/Midgard/home/sorkhei/glow2/checkpoints/{dataset}/256x256/' \
+                f'model={model}/img={img}/cond={cond}'
+
+    # if args.dataset == 'cityscapes':
     max_step = 130000
+    # else:
+    #     max_step = 80000
+
+    if model == 'c_flow':
+        if cond == 'segment_boundary':
+            base_path += '/do_ceil=True'
+
+        if dataset == 'cityscapes':
+            run_paths = [
+                'w_conditional=False/act_conditional=False/from_scratch/lr=1e-4',
+                'w_conditional=False/act_conditional=True/from_scratch/lr=1e-4',
+                'w_conditional=True/act_conditional=False/from_scratch/lr=1e-4',
+                'w_conditional=True/act_conditional=True/from_scratch/lr=1e-4',
+                'w_conditional=True/act_conditional=True/coupling_net/from_scratch/lr=1e-4'
+            ]
+        elif dataset == 'maps':
+            run_paths = ['w_conditional=False/act_conditional=False/coupling_net/from_scratch/lr=1e-4']
+        else:
+            raise NotImplementedError
+
+    elif 'c_glow' in model:
+        run_paths = ['w_conditional=False/act_conditional=False/lr=1e-4']
+
+    elif 'dual_glow' in model:
+        raise NotImplementedError('Need to understand how tensorflow saves checkpoints')
+
+    else:
+        raise NotImplementedError
 
     for run_path in run_paths:
-        checkpoints = os.listdir(os.path.join(base_path, run_path))
+        checkpoints = sorted(os.listdir(os.path.join(base_path, run_path)))
+        print('Available checkpoints: \n', "\n".join(checkpoints),
+              f'\nThe ones less than {max_step} will be deleted. Press Enter to confirm.')
+        input()
 
         for checkpoint in checkpoints:
             step = int(checkpoint.split('=')[-1][:-3])
@@ -416,6 +454,7 @@ def clean_midgard():
             if step < max_step:
                 full_path = os.path.join(base_path, run_path, checkpoint)
                 os.remove(full_path)
+                print(f'Removed: "{full_path}"')
         print(f'Cleaning for folder "{run_path}": done')
 
 

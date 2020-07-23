@@ -16,7 +16,7 @@ def count_trainable_params():
     for variable in tf.trainable_variables():
         shape = variable.get_shape()
 
-        print(f'variable name: {variable.name} - shape: {shape} - shape prod: {np.prod(shape)}')
+        # print(f'variable name: {variable.name} - shape: {shape} - shape prod: {np.prod(shape)}')
 
         # shape is an array of tf.Dimension
         variable_parameters = 1

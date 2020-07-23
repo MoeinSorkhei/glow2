@@ -67,6 +67,11 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
             z, loss = model(x=noise_added(segment_batch, n_bins),
                             y=noise_added(img_batch, n_bins))
             return z, loss
+
+        elif args.dataset == 'cityscapes' and args.direction == 'photo2label':
+            z, loss = model(x=noise_added(img_batch, n_bins),
+                            y=noise_added(segment_batch, n_bins))
+            return z, loss
         else:
             raise NotImplementedError
     else:
@@ -107,12 +112,14 @@ def take_samples(args, params, model, reverse_cond):
             else:
                 raise NotImplementedError
 
-        # elif args.model == 'c_glow':
         elif 'c_glow' in args.model:
+            temp = params['temperature']
             if args.direction == 'label2photo':
-                temp = params['temperature']
                 # the forward function with reverse=True takes samples from prior
                 sampled_images, _ = model(x=reverse_cond['segment'], reverse=True, eps_std=temp)
+
+            elif args.direction == 'photo2label':
+                sampled_images, _ = model(x=reverse_cond['real_cond'], reverse=True, eps_std=temp)
 
             else:
                 raise NotImplementedError

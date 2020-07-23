@@ -186,7 +186,7 @@ def main():
     params = adjust_params(args, params)
 
     if args.clean_midgard:
-        helper.clean_midgard()
+        helper.clean_midgard(args)
         return
 
     if args.investigate_dual_glow:

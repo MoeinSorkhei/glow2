@@ -4,6 +4,8 @@ import os
 import json
 import matplotlib.pyplot as plt
 from PIL import Image
+import glob
+
 from globals import device
 
 
@@ -321,6 +323,12 @@ def compute_paths(args, params, additional_info=None):
                                 f'/model={model}' \
                                 f'/img={img}' \
                                 f'/cond={cond_with_ceil}'
+
+        eval_path = f'{samples_path}/eval/temp={params["temperature"]}'  # with temperature
+        paths['eval_path'] = eval_path
+        paths['val_path'] = eval_path + '/val_imgs'
+        paths['eval_results'] = eval_path  # no need to a separate dir because we do not save segmented images
+
     return paths
 
 
@@ -353,6 +361,71 @@ def read_image_ids(data_folder, dataset_name):
 
     # print(f'In [read_image_ids]: found {len(img_ids)} images')
     return img_ids
+
+
+def extend_val_path(val_path, number):
+    return f'{val_path}_{number}'
+
+
+# def indexed_eval_file(output_dir):
+#     file = output_dir + '/evaluation_results_1.txt'  # first time evaluation
+#     if os.path.isfile(output_dir + '/evaluation_results_1.txt'):  # second time evaluation
+#         file = output_dir + '/evaluation_results_2.txt'
+#
+#     if os.path.isfile(output_dir + '/evaluation_results_2.txt'):  # third time evaluation
+#         file = output_dir + '/evaluation_results_3.txt'
+#     return file
+
+
+def files_with_suffix(directory, suffix):
+    files = [os.path.abspath(path) for path in glob.glob(f'{directory}/**/*{suffix}', recursive=True)]  # full paths
+    return files
+
+
+def pure_name(path):
+    return os.path.split(path)[1]
+
+
+def replace_suffix(name, direction):
+    if direction == 'segment_to_real':
+        return name.replace('_gtFine_color.png', '_leftImg8bit.png')
+    return name.replace('_leftImg8bit.png', '_gtFine_color.png')
+
+
+def get_all_data_folder_images(path, partition, image_type):
+    pattern = '_color.png' if image_type == 'segment' else '_leftImg8bit.png'
+    files = [os.path.abspath(path) for path in glob.glob(f'{path}/{partition}/**/*{pattern}', recursive=True)]  # full paths
+    return files
+
+
+def get_all_partition_files(dataset, base_data_folder, img_type, partition):  # NOT VALID
+    assert dataset == 'cityscapes' and img_type == 'segment'
+
+    # partition_path = os.path.join(params['data_folder'][img_type], partition)
+    partition_path = os.path.join(base_data_folder[img_type], partition)
+    files = [os.path.abspath(path) for path in glob.glob(f'{partition_path}/**/*_color.png', recursive=True)]  # full paths
+
+    print(f'In [get_all_validation_files]: found {len(files)} images in the partition_path: "{partition_path}"')
+    return files
+
+
+def open_and_resize_image(path, for_model=None):
+    image = Image.open(path).resize((256, 256))  # read image and resize
+    image_array = (np.array(image)[:, :, :3] / 255).astype(np.float32)  # remove alpha channel
+
+    if for_model == 'dual_glow':
+        return np.expand_dims(image_array, axis=(0, 1))  # expand for dual_glow model
+    return image_array
+
+
+def rescale_image(image):
+    # just the same as torch save_image function
+    return np.clip((image * 255) + 0.5, a_min=0, a_max=255).astype(np.uint8)
+
+
+def rescale_and_save_image(image, path):
+    rescaled = rescale_image(image)
+    Image.fromarray(rescaled).save(path)
 
 
 def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):

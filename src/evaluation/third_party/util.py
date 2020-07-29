@@ -44,11 +44,11 @@ def get_scores(hist):
     return acc, np.nanmean(cl_acc), np.nanmean(iu), cl_acc, iu
 
 
-def get_score_and_print(hist_perframe, city_classes, verbose=False, save_to=None):
+def get_score_and_print(hist_perframe, city_classes, verbose=False, save_path=None, sampling_round=None):
     mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
-    print('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
-    print('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
-    print('Mean class IoU: %f\n' % round(mean_class_iou, 2))
+    print('Mean pixel accuracy: %f\n' % mean_pixel_acc)
+    print('Mean class accuracy: %f\n' % mean_class_acc)
+    print('Mean class IoU: %f\n' % mean_class_iou)
 
     if verbose:
         print('************ Per class numbers below ************\n')
@@ -57,14 +57,17 @@ def get_score_and_print(hist_perframe, city_classes, verbose=False, save_to=None
                 cl = cl + ' '  # adding spaces
             print('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
 
-    if save_to:
-        with open(os.path.join(save_to, 'evaluation_results.txt'), 'w') as f:
-            f.write('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
-            f.write('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
-            f.write('Mean class IoU: %f\n' % round(mean_class_iou, 2))
+    if save_path:
+        # file = indexed_eval_file(output_dir=save_path)
+        file = os.path.join(save_path, f'evaluation_results_{sampling_round}.txt')
+        with open(file, 'w') as f:
+            f.write('Mean pixel accuracy: %f\n' % mean_pixel_acc,)
+            f.write('Mean class accuracy: %f\n' % mean_class_acc)
+            f.write('Mean class IoU: %f\n' % mean_class_iou)
             f.write('************ Per class numbers below ************\n')
             for i, cl in enumerate(city_classes):
                 while len(cl) < 15:
                     cl = cl + ' '
                 f.write('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
+        print(f'Results written to: "{os.path.abspath(file)}"')
 

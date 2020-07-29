@@ -1,4 +1,3 @@
-from toposort import toposort
 import contextlib
 import numpy as np
 import tensorflow as tf
@@ -309,6 +308,7 @@ def gradients(ys, xs, grad_ys=None, checkpoints='collection', **kwargs):
 
 
 def tf_toposort(ts, within_ops=None):
+    from toposort import toposort
     all_ops = ge.get_forward_walk_ops(
         [x.op for x in ts], within_ops=within_ops)
 

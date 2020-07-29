@@ -11,19 +11,6 @@ from globals import device, new_cond_reals
 from helper import load_checkpoint
 
 
-def sample_trained_c_flow(args, params):
-    checkpt_pth = params['checkpoints_path']['real'][args.cond_mode][args.model]
-    # could also use the init_and_load function
-    model = models.init_model(args, params, run_mode='infer')
-    model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, False)  # loading the model
-
-    if args.conditional:
-        sample_c_flow_conditional(args, params, model)
-
-    if args.syn_segs:
-        syn_new_segmentations(args, params, model)
-
-
 def infer_on_validation_set(args, params):
     """
     The model name and paths should be equivalent to the name used in the resize_for_fcn function
@@ -35,14 +22,13 @@ def infer_on_validation_set(args, params):
     with torch.no_grad():
         paths = helper.compute_paths(args, params)
         checkpt_path, val_path = paths['checkpoints_path'], paths['val_path']
+        val_path = helper.extend_val_path(val_path, args.sampling_round)
 
         print(f'In [infer_on_validation_set]:\n====== checkpt_path: "{checkpt_path}" \n====== val_path: "{val_path}" \n')
         helper.make_dir_if_not_exists(val_path)
 
         # init and load model
-        model, _ = models.init_model(args, params, run_mode='infer')  # init model based on args and params
-        optim_step = args.last_optim_step
-        model, _, _ = load_checkpoint(checkpt_path, optim_step, model, None)
+        model = models.init_and_load(args, params, run_mode='infer')
         print(f'In [infer_on_validation_set]: init model and load checkpoint: done')
 
         # validation loader
@@ -53,7 +39,6 @@ def infer_on_validation_set(args, params):
                                                       remove_alpha=True,  # removing the alpha channel
                                                       loader_params=loader_params)
         print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
-        helper.print_info(args, params, model)
 
         # inference on validation set
         print('In [infer_on_validation_set]: starting inference on validation set')
@@ -75,6 +60,19 @@ def infer_on_validation_set(args, params):
             if i_batch > 0 and i_batch % 20 == 0:
                 print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')
         print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path} \n')
+
+
+def sample_trained_c_flow(args, params):
+    checkpt_pth = params['checkpoints_path']['real'][args.cond_mode][args.model]
+    # could also use the init_and_load function
+    model = models.init_model(args, params, run_mode='infer')
+    model, _, _ = load_checkpoint(checkpt_pth, args.last_optim_step, model, None, False)  # loading the model
+
+    if args.conditional:
+        sample_c_flow_conditional(args, params, model)
+
+    if args.syn_segs:
+        syn_new_segmentations(args, params, model)
 
 
 def sample_with_new_condition(args, params):

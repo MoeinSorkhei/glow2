@@ -187,3 +187,16 @@ python3 main.py --compute_val_bpd --dataset cityscapes --model c_flow --cond_mod
                 --lr 1e-4 \
                 --last_optim_step 67000 \
                 --bsize 1  # important
+
+
+# remove file in terminal
+rm "step={1..1000}.png"
+for i in {120000..137000..500}; do cp cond=segment/step=$i.png cond=segment_new/step=$i.png; done
+
+for i in $(seq 1 120000);
+do
+        for j in $(seq 1 5); 
+        do
+                rm -f "step=$i - sample=$j.png"; 
+        done
+done

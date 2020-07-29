@@ -8,166 +8,6 @@ from helper import *
 import helper
 
 
-def evaluate_real_imgs_with_temp(data_folder, output_dir, result_dir, split='val', save_output_images=False, gpu_id=0):
-    """
-    Adapted from: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix.
-    :param data_folder:
-    :param output_dir:
-    :param result_dir:
-    :param split:
-    :param save_output_images:
-    :param gpu_id:
-    :return:
-    """
-    os.environ['GLOG_minloglevel'] = '2'  # level 2: warnings - suppressing caffe verbose prints
-    import caffe
-
-    cityscapes_dir = data_folder
-    # IMPORTANT ASSUMPTION: the program is run from the main.py module
-    caffemodel_dir = 'evaluation/third_party/caffemodel'
-
-    print(f'In [evaluate]: images will be read from: "{result_dir}"')
-    print(f'In [evaluate]: results will be saved to: "{output_dir}"')
-
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    if save_output_images > 0:
-        output_image_dir = output_dir + '/image_outputs'
-        print(f'In [evaluate]: output images will be saved to: "{output_image_dir}"')
-        if not os.path.isdir(output_image_dir):
-            os.makedirs(output_image_dir)
-
-    CS = third_party.cityscapes(cityscapes_dir)
-    n_cl = len(CS.classes)
-    label_frames = CS.list_label_frames(split)
-    caffe.set_device(gpu_id)
-    caffe.set_mode_gpu()
-    # caffe.set_mode_cpu()
-    net = caffe.Net(caffemodel_dir + '/deploy.prototxt',
-                    caffemodel_dir + '/fcn-8s-cityscapes.caffemodel',
-                    caffe.TEST)
-    os.environ['GLOG_minloglevel'] = '1'  # level 1: info - back to normal
-    print('In [evaluate]: Caffe model setup: done')
-
-    hist_perframe = np.zeros((n_cl, n_cl))
-    for i, idx in enumerate(label_frames):
-        if i % 50 == 0:
-            print('Evaluating: %d/%d' % (i, len(label_frames)))
-
-        city = idx.split('_')[0]  # e.g. for lindau_000000_000019 -> city: lindau, idx: lindau_000000_000019
-        # idx is city_shot_frame
-        # the IDs in the label are 0-18, 255, or -1 depending or trainIDs
-        label = CS.load_label(split, city, idx)  # label shape: (1, 1024, 2048)
-        im_file = result_dir + '/' + idx + '_leftImg8bit.png'
-
-        im = np.array(Image.open(im_file))  # im shape: (1024, 2048, 3)
-        im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
-
-        out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
-        hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)  # fast_hist ignores trainId 0 and 255, not used in evaluation
-        if save_output_images > 0:
-            label_im = CS.palette(label)
-            pred_im = CS.palette(out)
-
-            # assumption: scipy=1.0.0 installed
-            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_pred.jpg', pred_im)
-            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_gt.jpg', label_im)
-            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_input.jpg', im)
-
-    mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = get_scores(hist_perframe)
-    print(f'Histogram: \n'
-          f'mean_pixel_acc = {mean_pixel_acc} \n'
-          f'mean_class_acc = {mean_class_acc} \n'
-          f'mean_class_iou = {mean_class_iou} \n')
-
-    with open(output_dir + '/evaluation_results.txt', 'w') as f:
-        f.write('Mean pixel accuracy: %f\n' % round(mean_pixel_acc, 2))
-        f.write('Mean class accuracy: %f\n' % round(mean_class_acc, 2))
-        f.write('Mean class IoU: %f\n' % round(mean_class_iou, 2))
-        f.write('************ Per class numbers below ************\n')
-        for i, cl in enumerate(CS.classes):
-            while len(cl) < 15:
-                cl = cl + ' '
-            f.write('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
-
-
-def evaluate_segmentations_with_temp(args, params):
-    paths = helper.compute_paths(args, params)
-    # val images should already be inferred: concat val_path with image name to get full address
-    syn_segs_names = os.listdir(paths['val_path'])  # e.g. munster_000109_000019_leftImg8bit.png
-    syn_segs_paths = [os.path.join(paths['val_path'], file) for file in syn_segs_names]  # full path of the files
-
-    # create cityscapes instance (needs the base dir to cityscapes data)
-    cs = third_party.cityscapes(params['data_folder']['base'])
-    n_cl = len(cs.classes)  # 19 classes used for evaluation
-    hist_perframe = np.zeros((n_cl, n_cl))  # using exactly the same functions defined in third_party for evaluation
-
-    for i in range(len(syn_segs_names)):  # each inferred image should end with _color.png
-        syn_seg_name = syn_segs_names[i]  # e.g. munster_000109_000019_leftImg8bit.png
-        syn_seg_path = syn_segs_paths[i]  # full path to the image in the val_path folder (used for inference)
-
-        # extracting city_name: e.g. for munster_000109_000019_leftImg8bit.png -> city_name: lindau
-        city_name = syn_segs_names[i].split('_')[0]
-        ref_img_path = os.path.join(params['data_folder']['segment'], 'val', city_name, syn_seg_name)  # ref image from gt data
-        hist = evaluate_single_segmentation_with_temp(syn_seg_path, ref_img_path, params['data_folder']['base'])
-        hist_perframe += hist
-
-        if i % 50 == 0:
-            print(f'In [evaluate_segmentations_with_temp]: evaluation for {i} images: done - scores so far:')
-            third_party.get_score_and_print(hist_perframe, cs.classes)
-
-    third_party.get_score_and_print(hist_perframe, cs.classes, verbose=True, save_to=paths['eval_path'])
-    print(f'[evaluate_segmentations_with_temp]: all done')
-
-
-def evaluate_single_segmentation_with_temp(syn_img_path, ref_img_path, cityscapes_base_dir, verbose=False, save_path=None):
-    """
-    Procedure:
-        - Each image should first be resized to the original segmentation image size.
-        - Each generated segmentation is converted to have the nearest RGB colors of the 19 classes defined in labels of
-          cityscapes.
-        - From the color2trainId mapping defined in the cityscapes class of the third_party package, we retrieve the trainIds
-          for each pixel based on the color.
-        - We compute the scores using the reference image and through the functions provided in the third_party package.
-    """
-    trans = transforms.Compose([transforms.ToTensor()])  # transformation for PIL image to tensor
-    ref_img = Image.open(ref_img_path)
-    ref_img = (trans(ref_img)[:3] * 255).to(torch.uint8)  # remove alpha channel and normalize to 0-255 and convert to int
-
-    # resize synthesized image to the original image size and getting nearest cityscapes class colors
-    syn_img = Image.open(syn_img_path).resize((ref_img.shape[2], ref_img.shape[1]))  # PIL takes dim order as (W, H)
-    syn_img = trans(syn_img)[:3] * 255  # should be of range 0-255 for to_nearest_label_color to work
-    nearest = to_nearest_label_color(syn_img)  # returns result with int values
-
-    if save_path:  # if we want to save: we should normalize values to 0-1
-        utils.save_image(torch.clone(nearest), f'{save_path}/nearest.png', normalize=True, nrow=1, padding=0)
-        utils.save_image(torch.clone(ref_img.float()), f'{save_path}/ref.png', normalize=True, nrow=1, padding=0)
-        print(f'In [evaluate_single_segmentation_with_temp]: saved images to "{save_path}')
-
-    cs = third_party.cityscapes(cityscapes_base_dir)  # cityscapes instance
-
-    # converting color to trainIs using the dictionaries of the cityscapes class
-    ref_label = color_to_train_id(ref_img.cpu().data.numpy(), cs)
-    syn_label = color_to_train_id(nearest.cpu().data.numpy(), cs)
-
-    # evaluate the single image
-    n_cl = len(cs.classes)  # 19 classes used for evaluation
-    hist = third_party.fast_hist(ref_label.flatten(), syn_label.flatten(), n_cl)
-
-    if verbose:
-        mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = third_party.get_scores(hist)
-        print('Mean pixel accuracy: %f\n' % mean_pixel_acc)
-        print('Mean class accuracy: %f\n' % mean_class_acc)
-        print('Mean class IoU: %f\n' % mean_class_iou)
-
-        for i, cl in enumerate(cs.classes):
-            while len(cl) < 15:
-                cl = cl + ' '  # adding spaces
-            print('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
-
-    return hist
-
-
 def color_to_train_id(img, cityscapes_instance):
     """
     :param cityscapes_instance: an instance of the cityscapes class define in the third party pakcage
@@ -232,7 +72,8 @@ def to_nearest_label_color(img):
     h, w = img.shape[1], img.shape[2]  # img (C, H, W)
     n_labels = len(label_colors_as_list)
 
-    # 4-D tensor which has the RGB colors of all the classes, each of them having a tensor 3-D tensor filled with their RGB colors
+    # 4-D tensor which has the RGB colors of all the classes, each of them having a tensor 3-D tensor f
+    # illed with their RGB colors
     label_colors_img = torch.zeros((n_labels, 3, h, w))  # (19, 3, h, w)
     for i in range(n_labels):
         label_colors_img[i, 0, :, :] = label_colors_as_list[i][0]  # fill R
@@ -260,3 +101,151 @@ def to_nearest_label_color(img):
         nearest_image += mask_unsqueezed
     return nearest_image
 
+
+def eval_single_segmentation(syn_img_path, ref_img_path, cityscapes_base_dir,
+                             verbose=False, save_path=None):
+    """
+    Procedure:
+        - Each image should first be resized to the original segmentation image size.
+        - Each generated segmentation is converted to have the nearest RGB colors of the 19 classes defined in labels of
+          cityscapes.
+        - From the color2trainId mapping defined in the cityscapes class of the third_party package, we retrieve the trainIds
+          for each pixel based on the color.
+        - We compute the scores using the reference image and through the functions provided in the third_party package.
+    """
+    trans = transforms.Compose([transforms.ToTensor()])  # transformation for PIL image to tensor
+    ref_img = Image.open(ref_img_path)
+    ref_img = (trans(ref_img)[:3] * 255).to(torch.uint8)  # remove alpha channel and normalize to 0-255 and convert to int
+
+    # resize synthesized image to the original image size and getting nearest cityscapes class colors
+    syn_img = Image.open(syn_img_path).resize((ref_img.shape[2], ref_img.shape[1]))  # PIL takes dim order as (W, H)
+    syn_img = trans(syn_img)[:3] * 255  # should be of range 0-255 for to_nearest_label_color to work
+    nearest = to_nearest_label_color(syn_img)  # returns result with int values
+
+    if save_path:  # if we want to save: we should normalize values to 0-1
+        utils.save_image(torch.clone(nearest), f'{save_path}/nearest.png', normalize=True, nrow=1, padding=0)
+        utils.save_image(torch.clone(ref_img.float()), f'{save_path}/ref.png', normalize=True, nrow=1, padding=0)
+        print(f'In [evaluate_single_segmentation_with_temp]: saved images to "{save_path}')
+
+    cs = third_party.cityscapes(cityscapes_base_dir)  # cityscapes instance
+
+    # converting color to trainIs using the dictionaries of the cityscapes class
+    ref_label = color_to_train_id(ref_img.cpu().data.numpy(), cs)
+    syn_label = color_to_train_id(nearest.cpu().data.numpy(), cs)
+
+    # evaluate the single image
+    n_cl = len(cs.classes)  # 19 classes used for evaluation
+    hist = third_party.fast_hist(ref_label.flatten(), syn_label.flatten(), n_cl)
+
+    if verbose:
+        mean_pixel_acc, mean_class_acc, mean_class_iou, per_class_acc, per_class_iou = third_party.get_scores(hist)
+        print('Mean pixel accuracy: %f\n' % mean_pixel_acc)
+        print('Mean class accuracy: %f\n' % mean_class_acc)
+        print('Mean class IoU: %f\n' % mean_class_iou)
+
+        for i, cl in enumerate(cs.classes):
+            while len(cl) < 15:
+                cl = cl + ' '  # adding spaces
+            print('%s: acc = %f, iou = %f\n' % (cl, per_class_acc[i], per_class_iou[i]))
+
+    return hist
+
+
+def eval_segmentations_with_temp(synthesized_dir, reference_dir, base_data_folder, save_dir, sampling_round):
+    print(f'In [evaluate_segmentations_with_temp]: images will be read from: "{synthesized_dir}"')
+    syn_segs_paths = helper.files_with_suffix(directory=synthesized_dir, suffix='_gtFine_color.png')
+
+    # create cityscapes instance (needs the base dir to cityscapes data)
+    cs = third_party.cityscapes(base_data_folder)
+    n_cl = len(cs.classes)  # 19 classes used for evaluation
+    hist_perframe = np.zeros((n_cl, n_cl))  # using exactly the same functions defined in third_party for evaluation
+
+    for i in range(len(syn_segs_paths)):  # each inferred image should end with _color.png
+        syn_seg_path = syn_segs_paths[i]  # full path to the image in the val_path folder (used for inference)
+        syn_seg_name = helper.pure_name(syn_seg_path)  # e.g. munster_000109_000019_leftImg8bit.png
+
+        # extracting city_name: e.g. for munster_000109_000019_leftImg8bit.png -> city_name: lindau
+        city_name = syn_seg_name.split('_')[0]
+        ref_img_path = os.path.join(reference_dir, 'val', city_name, syn_seg_name)  # ref image from gt data
+        hist = eval_single_segmentation(syn_seg_path, ref_img_path, base_data_folder)
+        hist_perframe += hist
+
+        if i % 50 == 0:
+            print(f'In [evaluate_segmentations_with_temp]: evaluation for {i} images: done')
+
+    third_party.get_score_and_print(hist_perframe, cs.classes, verbose=True,
+                                    save_path=save_dir, sampling_round=sampling_round)
+
+
+def eval_real_imgs_with_temp(base_data_folder, synthesized_dir, save_dir, sampling_round,
+                             split='val', save_output_images=False, gpu_id=0):
+    """
+    Adapted from: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix.
+    :param sampling_round:
+    :param base_data_folder:
+    :param save_dir:
+    :param synthesized_dir:
+    :param split:
+    :param save_output_images:
+    :param gpu_id:
+    :return:
+    """
+    os.environ['GLOG_minloglevel'] = '2'  # level 2: warnings - suppressing caffe verbose prints
+    import caffe
+
+    cityscapes_dir = base_data_folder
+    # IMPORTANT ASSUMPTION: the program is run from the main.py module
+    caffemodel_dir = 'evaluation/third_party/caffemodel'
+
+    print(f'In [evaluate]: images will be read from: "{synthesized_dir}"')
+    print(f'In [evaluate]: results will be saved to: "{save_dir}"')
+
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir)
+    if save_output_images > 0:
+        output_image_dir = save_dir + '/image_outputs'
+        print(f'In [evaluate]: output images will be saved to: "{output_image_dir}"')
+        if not os.path.isdir(output_image_dir):
+            os.makedirs(output_image_dir)
+
+    CS = third_party.cityscapes(cityscapes_dir)
+    n_cl = len(CS.classes)
+    label_frames = CS.list_label_frames(split)
+    caffe.set_device(gpu_id)
+    caffe.set_mode_gpu()
+    # caffe.set_mode_cpu()
+    net = caffe.Net(caffemodel_dir + '/deploy.prototxt',
+                    caffemodel_dir + '/fcn-8s-cityscapes.caffemodel',
+                    caffe.TEST)
+    os.environ['GLOG_minloglevel'] = '1'  # level 1: info - back to normal
+    print('In [evaluate]: Caffe model setup: done')
+
+    hist_perframe = np.zeros((n_cl, n_cl))
+    for i, idx in enumerate(label_frames):
+        if i % 50 == 0:
+            print('Evaluating: %d/%d' % (i, len(label_frames)))
+
+        city = idx.split('_')[0]  # e.g. for lindau_000000_000019 -> city: lindau, idx: lindau_000000_000019
+        # idx is city_shot_frame
+        # the IDs in the label are 0-18, 255, or -1 depending or trainIDs
+        label = CS.load_label(split, city, idx)  # label shape: (1, 1024, 2048)
+        im_file = synthesized_dir + '/' + idx + '_leftImg8bit.png'
+
+        im = np.array(Image.open(im_file))  # im shape: (1024, 2048, 3)
+        im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
+
+        out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
+        # fast_hist ignores trainId 0 and 255, not used in evaluation
+        hist_perframe += fast_hist(label.flatten(), out.flatten(), n_cl)
+
+        if save_output_images > 0:
+            label_im = CS.palette(label)
+            pred_im = CS.palette(out)
+
+            # assumption: scipy=1.0.0 installed
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_pred.jpg', pred_im)
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_gt.jpg', label_im)
+            scipy.misc.imsave(output_image_dir + '/' + str(i) + '_input.jpg', im)
+
+    third_party.get_score_and_print(hist_perframe, CS.classes, verbose=True,
+                                    save_path=save_dir, sampling_round=sampling_round)

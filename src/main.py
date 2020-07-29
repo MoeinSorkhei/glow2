@@ -1,6 +1,3 @@
-import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
-
 from helper import load_checkpoint, init_comet  # helper should be first imported because of Comet
 from helper import read_params
 import trainer
@@ -46,11 +43,6 @@ def read_params_and_args():
     parser.add_argument('--coupling_cond_net', action='store_true')
     parser.add_argument('--no_validation', action='store_true')
     parser.add_argument('--investigate_dual_glow', action='store_true')
-    # parser.add_argument('--batch', default=2, type=int, help='batch size')  # 256 => 2, 128 => 8, 64 => 16
-    # parser.add_argument('--do_ceil', action='store_true')
-    # parser.add_argument('--left_unfreeze', action='store_true')  # freeze the left glow of unfreeze it
-    # parser.add_argument('--use_bmap', action='store_true')  # use boundary maps when training
-    # parser.add_argument('--nearest_neighbor', action='store_true')
 
     # not used anymore
     parser.add_argument('--left_cond', type=str)  # condition used for training left glow, if any
@@ -72,9 +64,13 @@ def read_params_and_args():
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
     parser.add_argument('--resize_for_fcn', action='store_true')
-    parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--infer_and_evaluate_c_glow', action='store_true')
+    parser.add_argument('--infer_and_evaluate_dual_glow', action='store_true')
+    parser.add_argument('--infer_dual_glow', action='store_true')
+    parser.add_argument('--sampling_round', type=int)
+
     parser.add_argument('--eval_complete', action='store_true')
+    parser.add_argument('--eval_fcn', action='store_true')
     parser.add_argument('--eval_ssim', action='store_true')
     parser.add_argument('--gt', action='store_true')  # used only as --evaluate --gt for evaluating ground-truth images
 
@@ -148,23 +144,27 @@ def adjust_params(args, params):
 
 
 def run_training(args, params):
-    # ======== setting comet tracker
+    # print run info
+    helper.print_info(args, params, model=None, which_info='params')
+
+    # setting comet tracker
     tracker = None
     if args.use_comet:
         tracker = init_comet(args, params)
         print("In [run_training]: Comet experiment initialized...")
 
     if 'dual_glow' in args.model:
-        models.init_and_train_dual_glow(args, params, tracker)
+        models.train_dual_glow(args, params, tracker)
 
     else:
-        # ======== preparing model and optimizer
+        # preparing model
         model, reverse_cond = models.init_model(args, params)
 
+        # prepare optimizer
         lr = params['lr']
         optimizer = optim.Adam(model.parameters(), lr=lr)
 
-        # ======== training
+        # resume training
         if args.resume_train:
             if args.dataset == 'mnist':
                 raise NotImplementedError('In [run_training]: consider the checkpoint path for MNIST...')
@@ -181,55 +181,37 @@ def run_training(args, params):
             trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)
 
 
-def main():
-    args, params = read_params_and_args()
-    params = adjust_params(args, params)
-
-    if args.clean_midgard:
-        helper.clean_midgard(args)
-        return
-
-    if args.investigate_dual_glow:
-        hps = models.init_hps_for_dual_glow(args, params)
-        models.investigate_model(args, hps, write_tf_records=False)
-        return
-
-    if args.create_tf_records:
-        models.create_tf_records(args, params)
-        return
-
-    # show important params and the paths (could be refactored based on --exp)
-    if not args.exp:
-        if not args.eval_complete and not args.create_boundaries and not args.random_samples and not args.new_condition:
-            helper.print_info(args, params, model=None, which_info='params')  # print run info (mainly for training)
-
-    if not args.exp:
-        run_training(args, params)
-
-    # ================ preparation
-    if args.create_boundaries:
-        helper.create_boundary_maps(params, device)
-
-    # ================ evaluation
-    elif args.exp and args.eval_complete:
+def run_evaluation(args, params):
+    if args.exp and args.eval_complete:
         evaluation.eval_city_with_all_temps(args, params)
 
-    elif args.exp and args.infer_on_val:
-        experiments.infer_on_validation_set(args, params)
-
-    elif args.exp and args.resize_for_fcn:
-        helper.resize_for_fcn(args, params)
-
-    elif args.exp and args.evaluate:
-        evaluation.eval_city_with_temp(args, params)
-
-    elif args.exp and args.infer_and_evaluate_c_glow:  # inference and evaluate
-        evaluation.infer_and_evaluate_c_glow(args, params)
+    elif args.exp and args.eval_fcn:
+        evaluation.evaluate_city_fcn(args, params)
+        # if 'dual_glow' in args.model:
+        #     models.evaluate_dual_glow_fcn(args, params)
+        # else:
+        #     evaluation.evaluate_city_fcn(args, params)
 
     elif args.exp and args.eval_ssim:
         evaluation.compute_ssim_all(args, params)
 
-    # ================ experiments
+    else:
+        raise NotImplementedError
+
+
+def run_experiments(args, params):
+    if args.exp and args.infer_on_val:
+        if 'dual_glow' in args.model:
+            models.infer_dual_glow(args, params)
+        else:
+            experiments.infer_on_validation_set(args, params)
+
+    elif args.exp and args.resize_for_fcn:
+        helper.resize_for_fcn(args, params)
+
+    elif args.exp and args.infer_dual_glow:
+        models.infer_dual_glow(args, params)
+
     if args.exp and args.test_invertibility:
         models.verify_invertibility(args, params)
 
@@ -249,11 +231,44 @@ def main():
         experiments.run_resample_experiments(args, params)
 
     elif args.exp and args.sample_c_flow:
-        # run_c_flow_trials(args, params)
         experiments.sample_trained_c_flow(args, params)
 
     elif args.exp and args.compute_val_bpd:
         evaluation.compute_val_bpd(args, params)
+
+
+def main():
+    args, params = read_params_and_args()
+    params = adjust_params(args, params)
+
+    # clean midgard
+    if args.clean_midgard:
+        helper.clean_midgard(args)
+
+    # investigating how dual_glow works
+    elif args.investigate_dual_glow:
+        hps = models.init_hps_for_dual_glow(args, params)
+        models.investigate_model(args, hps, write_tf_records=False)
+
+    # creating tf records
+    elif args.create_tf_records:
+        models.create_tf_records(args, params)
+
+    # data preparation
+    elif args.create_boundaries:
+        helper.create_boundary_maps(params, device)
+
+    # training
+    elif not args.exp:
+        run_training(args, params)
+
+    # evaluation
+    elif args.exp and (args.eval_fcn or args.eval_ssim or args.eval_complete):
+        run_evaluation(args, params)
+
+    # experiments
+    else:
+        run_experiments(args, params)
 
 
 if __name__ == '__main__':

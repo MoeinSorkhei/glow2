@@ -7,12 +7,7 @@ import experiments
 
 
 def eval_city_with_all_temps(args, params):
-    """
-    Performs steps needed for evaluation with all the temperatures.
-    :param args:
-    :param params:
-    :return:
-    """
+    # might be buggy
     for temp in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
         print(f'In [eval_city_with_all_temps]: evaluating for temperature = {temp}')
         params['temperature'] = temp
@@ -32,65 +27,41 @@ def eval_city_with_all_temps(args, params):
                 print('In [eval_city_with_all_temps]: resize done \n')
 
         # evaluate
-        eval_city_with_temp(args, params)
+        # infer_and_evaluate_c_flow(args, params)
+        evaluate_city_fcn(args, params)  # NOT TESTED
         print(f'In [eval_city_with_all_temps]: evaluating for temperature = {temp}: done \n')
 
     torch.cuda.empty_cache()  # very important
     print('In [eval_city_with_all_temps]: all done \n')
 
 
-def eval_city_with_temp(args, params):
-    """
-    Evaluate the generated validation images wit the given temperature. This function is called from
-    eval_city_with_all_temps function that tries different temperatures.
-    If this function is called individually, the it used the temperature specified in params to find the correct path for
-    the images that are to be evaluated. In this case, it is assumed that the inferred images are already available
-    (called after infer_on_validation_set).
+def evaluate_city_fcn(args, params):
+    assert args.dataset == 'cityscapes' and params['img_size'] == [256, 256]  # not supported otherwise for now
 
-    :param args:
-    :param params:
-    :return:
-    """
+    # specify the paths
+    if args.direction == 'label2photo' and args.gt:  # evaluating ground-truth images
+        paths = {'resized_path': '/Midgard/home/sorkhei/glow2/data/cityscapes/resized/val',
+                 'eval_results': '/Midgard/home/sorkhei/glow2/gt_eval_results'}
+    else:
+        paths = helper.compute_paths(args, params)
+
+    syn_dir = extend_val_path(paths['val_path'], args.sampling_round)  # val_imgs_1, val_imgs_2, ...
+    eval_dir = paths['eval_results']
+    print(f'In [evaluate_city_fcn]: results will be read from: "{syn_dir}"')
+
+    # evaluation
     if args.direction == 'label2photo':
-        if args.gt:  # for ground-truth images (photo2label only)
-            paths = {'resized_path': '/Midgard/home/sorkhei/glow2/data/cityscapes/resized/val',
-                     'eval_results': '/Midgard/home/sorkhei/glow2/gt_eval_results'}
-        else:
-            paths = helper.compute_paths(args, params)
-
-        output_dir = paths['eval_results']
-        # no resize for 256x256, so we read from validation path directly
-        result_dir = paths['resized_path'] if params['img_size'] != [256, 256] else paths['val_path']
-
-        evaluate_real_imgs_with_temp(data_folder=params['data_folder']['base'],
-                                     output_dir=output_dir,
-                                     result_dir=result_dir,
-                                     split='val')
-
+        eval_real_imgs_with_temp(base_data_folder=params['data_folder']['base'],
+                                 synthesized_dir=syn_dir,
+                                 save_dir=eval_dir,
+                                 sampling_round=args.sampling_round)
     else:
-        evaluate_segmentations_with_temp(args, params)
+        eval_segmentations_with_temp(synthesized_dir=syn_dir,
+                                     reference_dir=params['data_folder']['segment'],
+                                     base_data_folder=params['data_folder']['base'],
+                                     save_dir=eval_dir,
+                                     sampling_round=args.sampling_round)
     print(f'In [eval_city_with_temp]: evaluation done')
-
-
-def infer_and_evaluate_c_glow(args, params):
-    """
-    This now only works for temperature 1.
-    :param args:
-    :param params:
-    :return:
-    """
-    if args.dataset == 'cityscapes':
-        params['temperature'] = 1.
-        experiments.infer_on_validation_set(args, params)
-        eval_city_with_temp(args, params)
-        # if args.direction == 'label2photo':
-        #
-        # elif args.direction == 'photo2label':
-        #     raise NotImplementedError
-        # else:
-        #     raise NotImplementedError
-    else:
-        raise NotImplementedError
 
 
 def compute_val_bpd(args, params):

@@ -19,10 +19,12 @@ conda activate caffe
 # shellcheck disable=SC2164
 cd glow2/src/
 
-python3 main.py --exp --infer_and_evaluate_c_glow --model c_glow \
+
+# SHOULD BE UPDATED - REFECERENCE: photo2label_eval_v3.sbatch
+python3 main.py --exp --infer_and_evaluate_c_glow --temp 1.0 --model c_glow_v3 \
                 --dataset cityscapes --direction label2photo --cond_mode segment \
                 --img_size 256 256 \
                 --n_block 4 --n_flow 16 \
                 --lr 1e-4 \
-                --last_optim_step 34000 \
+                --last_optim_step 136000 \
                 --bsize 20

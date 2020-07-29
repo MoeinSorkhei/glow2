@@ -21,7 +21,7 @@ conda activate tf2  # tf version 1
 # shellcheck disable=SC2164
 cd glow2/src/
 
-python3 main.py --dataset cityscapes --model dual_glow --direction label2photo --cond_mode segment \
+python3 main.py --dataset cityscapes --model dual_glow --direction label2photo \
                 --img_size 256 256 --bsize 1 \
                 --n_block 4 --n_flow 16 \
                 --resume_train --last_optim_step 136000 --max_step 150000 --sample_freq 1

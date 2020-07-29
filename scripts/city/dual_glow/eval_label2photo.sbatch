@@ -24,7 +24,7 @@ cd glow2/src/
 # NEED TO BE UDPATED: REFERECE: EVAL PHOTO2LABEL SCRIPT
 # --infer_dual_glow
 python3 main.py --exp --evaluate --model dual_glow --temp 1.0 \
-                --dataset cityscapes --direction label2photo --cond_mode segment \
+                --dataset cityscapes --direction label2photo \
                 --img_size 256 256 --bsize 1 \
                 --n_block 4 --n_flow 16 \
                 --lr 1e-4 \

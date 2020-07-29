@@ -20,7 +20,7 @@ conda activate caffe
 cd glow2/src/
 
 python3 main.py --exp --evaluate --temp 1.0 --model c_flow \
-                --dataset cityscapes --direction label2photo --cond_mode segment_boundary \
+                --dataset cityscapes --direction label2photo --use_bmaps \
                 --w_conditional --act_conditional --coupling_cond_net \
                 --img_size 256 256 \
                 --n_block 4 --n_flow 16 \

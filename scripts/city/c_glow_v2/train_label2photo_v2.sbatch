@@ -20,7 +20,7 @@ conda activate workshop
 # shellcheck disable=SC2164
 cd glow2/src/
 
-python3 main.py --dataset cityscapes --model c_glow_v2 --direction label2photo --cond_mode segment \
+python3 main.py --dataset cityscapes --model c_glow_v2 --direction label2photo \
                 --img_size 256 256 --bsize 1 \
                 --lr 1e-4 \
                 --use_comet

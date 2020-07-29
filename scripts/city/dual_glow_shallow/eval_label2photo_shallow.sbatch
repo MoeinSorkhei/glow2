@@ -24,7 +24,7 @@ cd glow2/src/
 # use --infer_and_evaluate_dual_glow inseated of --evaluate if inference should also be done
 # INFER AND EVALUATION NEED DIFFEEREN ENVIRONEMNTS
 python3 main.py --exp --infer_dual_glow --model dual_glow_shallow --temp 0.7 \
-                --dataset cityscapes --direction label2photo --cond_mode segment \
+                --dataset cityscapes --direction label2photo \
                 --img_size 256 256 --bsize 1 \
                 --n_block 4 --n_flow 2 \
                 --lr 1e-4 \

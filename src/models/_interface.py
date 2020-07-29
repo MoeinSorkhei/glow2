@@ -140,7 +140,7 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
     """
     # ======= only support for c_flow mode now
     if args.direction == 'label2photo':
-        b_maps = boundary_batch if args.cond_mode == 'segment_boundary' else None
+        b_maps = boundary_batch if args.use_bmaps else None
         reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
 
     elif args.direction == 'photo2label':  # 'photo2label'

@@ -167,7 +167,7 @@ def verify_invertibility(args, params, path=None):
             sanity_check_glow(x_ref=inp, x_rec=reconstructed)
 
     else:
-        b_map = boundaries if args.direction == 'label2photo' and args.cond_mode == 'segment_boundary' else None
+        b_map = boundaries if args.direction == 'label2photo' and args.use_bmaps else None
         if args.direction == 'label2photo':
             x_a_rec, x_b_rec = verify_c_flow(model, x_a_ref=segmentations, x_b_ref=real_imgs, b_map=b_map)
             sanity_check_c_flow(segmentations, real_imgs, x_a_rec, x_b_rec)

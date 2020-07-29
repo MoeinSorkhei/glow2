@@ -45,7 +45,7 @@ def infer_on_validation_set(args, params):
         for i_batch, batch in enumerate(val_loader):
             img_batch = batch['real'].to(device)
             segment_batch = batch['segment'].to(device)
-            boundary_batch = batch['boundary'].to(device) if args.cond_mode == 'segment_boundary' else None
+            boundary_batch = batch['boundary'].to(device) if args.use_bmaps else None
             real_paths = batch['real_path']  # list: used to save samples with the same name as original images
             seg_paths = batch['segment_path']
 
@@ -92,7 +92,7 @@ def sample_with_new_condition(args, params):
         data_handler.create_cond(params, fixed_conds=[orig_real_name], save_path=None)  # (1, C, H, W)
 
     # make b_maps None is not needed
-    if args.cond_mode == 'segment':
+    if not args.use_bmaps:
         orig_bmap_batch = None
 
     # ========= real_img_name: the real image whose segmentation which will be used for conditioning.
@@ -112,7 +112,7 @@ def sample_with_new_condition(args, params):
         new_seg_batch = new_rev_cond['segment']  # (1, C, H, W)
         new_bmap_batch = new_rev_cond['boundary']
 
-        if args.cond_mode == 'segment':
+        if not args.use_bmaps:
             new_bmap_batch = None
 
         # ========= save new segmentation and the corresponding real imgs

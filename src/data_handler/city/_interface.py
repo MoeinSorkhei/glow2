@@ -51,7 +51,7 @@ def prepare_city_reverse_cond(args, params, run_mode='train'):
                                                                              direction=direction)
         # ======= only support for c_flow mode now
         if direction == 'label2photo':
-            b_maps = boundaries if args.cond_mode == 'segment_boundary' else None
+            b_maps = boundaries if args.use_bmaps else None
             reverse_cond = {'segment': segmentations, 'boundary': b_maps}
 
         elif direction == 'photo2label':  # 'photo2label'

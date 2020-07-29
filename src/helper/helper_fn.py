@@ -211,7 +211,7 @@ def compute_paths(args, params, additional_info=None):
 
     if args.dataset == 'cityscapes':
         if args.direction == 'label2photo':
-            cond_with_ceil = 'segment_boundary/do_ceil=True' if args.cond_mode == 'segment_boundary' else 'segment'
+            cond_with_ceil = 'segment_boundary/do_ceil=True' if args.use_bmaps else 'segment'
         else:
             cond_with_ceil = 'real'
     else:  # for all other datasets

@@ -20,6 +20,7 @@ def read_params_and_args():
     parser.add_argument('--dataset', type=str, help='the name of the dataset')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
+    parser.add_argument('--use_bmaps', action='store_true')  # using boundary maps
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
     parser.add_argument('--checkpoint_freq', type=int)
@@ -49,7 +50,7 @@ def read_params_and_args():
 
     # args for Cityscapes
     parser.add_argument('--model', type=str, default='glow', help='which model to be used: glow, c_flow, ...')
-    parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
+    # parser.add_argument('--cond_mode', type=str, help='the type of conditioning in Cityscapes')
     parser.add_argument('--direction', type=str, default='label2photo')
 
     parser.add_argument('--train_on_segment', action='store_true')  # train/synthesis with vanilla Glow on segmentations

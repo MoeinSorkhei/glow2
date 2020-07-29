@@ -146,10 +146,10 @@ def prep_for_sampling(args, params, img_name, additional_info):
         raise NotImplementedError
 
     # ========== create reverse cond
-    if args.cond_mode == 'segment':
+    if not args.use_bmaps:
         rev_cond = {'segment': seg_rev_cond, 'boundary': None}
 
-    elif args.cond_mode == 'segment_boundary':
+    elif args.use_bmaps:
         rev_cond = {'segment': seg_rev_cond, 'boundary': bmap_rev_cond}
 
     elif args.direction == 'photo2label':

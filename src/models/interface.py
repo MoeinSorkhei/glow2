@@ -4,8 +4,6 @@ from .glow import *
 from .two_glows import TwoGlows
 from .utility import *
 from .interface_c_glow import *
-import data_handler
-from globals import maps_fixed_conds
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
@@ -150,28 +148,7 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
     return reverse_cond
 
 
-def init_model(args, params, run_mode='train'):
-    # ======== preparing reverse condition and initializing models
-
-    # ======== prepare reverse condition
-    if args.dataset == 'mnist':
-        raise NotImplementedError
-        # model = init_glow(params)
-        # reverse_cond = prepare_city_reverse_cond(args, params, run_mode)  # NOTE: needs to be refactored
-        # reverse_cond = None  # NOTE: needs to be refactored
-
-    elif args.dataset == 'cityscapes':
-        reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
-        mode = None  # no mode if 'photo2label'
-        if args.direction == 'label2photo':
-            mode = 'segment_boundary' if args.use_bmaps else 'segment'
-
-    elif args.dataset == 'maps':
-        reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)
-        mode = None
-    else:
-        raise NotImplementedError('Dataset not implemented')
-
+def init_model(args, params):
     # ======== init glow
     if args.model == 'glow':  # glow with no condition
         reverse_cond = None
@@ -184,6 +161,7 @@ def init_model(args, params, run_mode='train'):
         act_conditionals = [True, True, False, False] if args.act_conditional else None
         coupling_use_cond_nets = [True, True, True, True] if args.coupling_cond_net else None
 
+        mode = None  # SHOULD REFACTOR THE WAY TWO_GLOWS IS INITIALIZED
         if args.left_pretrained:  # use pre-trained left Glow
             # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
             left_glow_path = helper.compute_paths(args, params)['left_glow_path']
@@ -207,18 +185,15 @@ def init_model(args, params, run_mode='train'):
     elif 'c_glow' in args.model:
         model = init_c_glow(args, params)
 
-    # elif 'dual_glow' in args.model:
-    #     model = train_dual_glow(args, params)
-
     else:
         raise NotImplementedError
-    return model.to(device), reverse_cond
+    return model.to(device)
 
 
 def init_and_load(args, params, run_mode):
     checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
     optim_step = args.last_optim_step
-    model, reverse_cond = init_model(args, params, run_mode)
+    model = init_model(args, params)
 
     if run_mode == 'infer':
         model, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None, resume_train=False)

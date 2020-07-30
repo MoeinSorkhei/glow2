@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import torch
+from torchvision import utils
 
 from .paths import *
 from data_handler import CityDataset
@@ -39,6 +40,29 @@ def visualize_img(img_path, data_folder, dataset_name, desired_size):
     plt.title(f'Size: {desired_size}')
     plt.imshow(img.permute(1, 2, 0))
     plt.show()
+
+
+def save_one_by_one(imgs_batch, paths_list, save_path):
+    bsize = imgs_batch.shape[0]
+    for i in range(bsize):
+        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
+
+        if save_path is not None:  # explicitly get the image name and save it to the desired location
+            image_name = paths_list[i].split('/')[-1]  # e.g.: lindau_000023_000019_leftImg8bit.png
+            full_path = f'{save_path}/{image_name}'
+
+        else:  # full path is already provided in the path list
+            full_path = paths_list[i]
+
+        utils.save_image(tensor, full_path, nrow=1, padding=0)
+
+
+def save_one_by_one2(imgs_batch, paths_list):
+    bsize = imgs_batch.shape[0]
+    for i in range(bsize):
+        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
+        path = paths_list[i]
+        utils.save_image(tensor, path, nrow=1, padding=0)
 
 
 def open_and_resize_image(path, for_model=None):

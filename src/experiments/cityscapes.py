@@ -80,29 +80,6 @@ def syn_new_segmentations(args, params, model):
         print(f'Trial={trial}: done')
 
 
-def save_one_by_one(imgs_batch, paths_list, save_path):
-    bsize = imgs_batch.shape[0]
-    for i in range(bsize):
-        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
-
-        if save_path is not None:  # explicitly get the image name and save it to the desired location
-            image_name = paths_list[i].split('/')[-1]  # e.g.: lindau_000023_000019_leftImg8bit.png
-            full_path = f'{save_path}/{image_name}'
-
-        else:  # full path is already provided in the path list
-            full_path = paths_list[i]
-
-        utils.save_image(tensor, full_path, nrow=1, padding=0)
-
-
-def save_one_by_one2(imgs_batch, paths_list):
-    bsize = imgs_batch.shape[0]
-    for i in range(bsize):
-        tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
-        path = paths_list[i]
-        utils.save_image(tensor, path, nrow=1, padding=0)
-
-
 def prep_for_sampling(args, params, img_name, additional_info):
     """
     :param args:
@@ -182,7 +159,7 @@ def sample_c_flow(args, params, model):  # with the specified temperature
 
         # ========== take samples from the model
         samples = models.take_samples(args, params, model, rev_cond)  # (n_samples, C, H, W)
-        save_one_by_one2(samples, save_paths)
+        helper.save_one_by_one2(samples, save_paths)
         print(f'In [sample_c_flow]: for images: {img_pure_name}: done {"=" * 50}\n\n')
 
 

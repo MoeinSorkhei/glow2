@@ -1,14 +1,7 @@
-import os
-import tensorflow as tf
 import numpy as np
 
 from . import dual_glow
 import helper
-import evaluation
-
-from tensorflow.python.util import deprecation
-deprecation._PRINT_DEPRECATION_WARNINGS = False
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 def train_dual_glow(args, params, tracker=None):

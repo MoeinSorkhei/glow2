@@ -5,6 +5,7 @@ import experiments
 import helper
 import models
 import evaluation
+import data_handler
 
 import argparse
 import torch
@@ -162,7 +163,8 @@ def run_training(args, params):
 
     else:
         # preparing model
-        model, reverse_cond = models.init_model(args, params)
+        model = models.init_model(args, params)
+        reverse_cond = data_handler.retrieve_rev_cond(args, params, run_mode='train')
 
         # prepare optimizer
         lr = params['lr']

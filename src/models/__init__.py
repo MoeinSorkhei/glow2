@@ -1,6 +1,5 @@
 from .glow import *
 from .two_glows import *
-from .two_glows import *
 from .utility import *
 from .c_glow import *
 from .dual_glow import *

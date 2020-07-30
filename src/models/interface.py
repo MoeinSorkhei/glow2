@@ -3,8 +3,7 @@ from torch import optim
 from .glow import *
 from .two_glows import TwoGlows
 from .utility import *
-
-from .third_party import *
+from .interface_c_glow import *
 import data_handler
 from globals import maps_fixed_conds
 

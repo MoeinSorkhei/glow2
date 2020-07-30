@@ -6,7 +6,6 @@ import os
 from PIL import Image
 
 from helper import read_image_ids
-from city_utility import *
 
 
 class CityDataset(data.Dataset):
@@ -146,3 +145,38 @@ def id_repeats_to_cond(id_repeats, h, w):
     for i in range(len(id_repeats)):
         cond[i, :, :] = id_repeats[i]
     return cond
+
+
+def info_from_json(file_path):
+    pass  # no longer works
+    # with open(file_path, 'r') as f:
+    #         data = json.load(f)
+    #
+    #     objects = data['objects']  # returns list of ('label', 'polygon')
+    #     # print(f'In [json_to_labels]: read the json file with {len(objects)} objects in it.')
+    #
+    #     all_ids = []  # all the object IDs in the image - might have repeats for instances of an object
+    #     id_repeats = [0] * 34
+    #
+    #     for obj in objects:
+    #         obj_name = assureSingleInstanceName(obj['label'])  # e.g. cargroup => car
+    #         obj_label = name2label[obj_name]  # Label contains ID, trainID, category and so on
+    #         obj_id = obj_label.id
+    #         obj_poly = obj['polygon']
+    #
+    #         if obj_id != -1:
+    #             id_repeats[obj_id] += 1
+    #
+    #             # if obj_id == 26 and obj_label.name == 'car':
+    #             #    print('found car')
+    #
+    #         # print(type(obj), type(obj_name))
+    #         # print(obj_name)
+    #         # print(obj_label)
+    #         # print(obj_id)
+    #         # print(obj_poly, '\n\n')
+    #         # input()
+    #
+    #     # print('In [json_to_labels]: id_repeats=', id_repeats)
+    #     # print('Total count:', sum(id_repeats))
+    #     return {'id_repeats': id_repeats}

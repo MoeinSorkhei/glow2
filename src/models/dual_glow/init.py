@@ -46,15 +46,10 @@ def init_hps_for_dual_glow(args, params):
     hps.n_bits_x = 8
 
     # model config
-    if args.model == 'dual_glow_shallow':
-        hps.n_levels = 4
-        hps.depth = [2, 2, 2, 2]  # similar to our models
+    n_blocks, n_flows = params['n_block'], params['n_flow']
+    hps.n_levels = n_blocks
+    hps.depth = [n_flows] * n_blocks
 
-    else:
-        hps.n_levels = 4
-        hps.depth = [16, 16, 16, 16]  # similar to our models
-    # hps.depth = [8, 8, 8, 8]  # similar to our models
-    # hps.depth = [1, 4, 8, 2]  # reduced to match model complexity
     hps.n_l = 1  # mlp basic layers, default: 1 by the paper
     hps.flow_permutation = 2  # 0: reverse (RealNVP), 1: shuffle, 2: invconv (Glow)"
     hps.flow_coupling = 1  # 0: additive, 1: affine

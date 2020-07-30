@@ -261,7 +261,7 @@ def main():
 
     # data preparation
     elif args.create_boundaries:
-        helper.create_boundary_maps(params, device)
+        helper.create_boundary_maps(params)
 
     # training
     elif not args.exp:

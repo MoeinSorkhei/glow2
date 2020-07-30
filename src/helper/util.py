@@ -1,9 +1,9 @@
 import torch
-from matplotlib import pyplot as plt
+import numpy as np
 
+from globals import device
 import data_handler
 import experiments
-from data_handler import CityDataset
 
 
 def get_edges(t):
@@ -24,12 +24,11 @@ def get_edges(t):
     return edge.float()
 
 
-def create_boundary_maps(params, device):
+def create_boundary_maps(params):
     """
     This function should be called once before using the boundary maps in the generative process. Currently, it requires
     to have GPU access (the "get_edges" functions needs it). Otherwise it would be too slow.
     :param params:
-    :param device:
     :return:
     Notes:
         - do_ceil is not needed here because the generated boundary maps are of the original size.
@@ -63,7 +62,7 @@ def create_boundary_maps(params, device):
     print('In [create_boundary_maps]: all done')
 
 
-def recreate_boundary_map(instance_path, boundary_path, device):
+def recreate_boundary_map(instance_path, boundary_path):
     from PIL import Image
     from torchvision import transforms
 
@@ -75,24 +74,49 @@ def recreate_boundary_map(instance_path, boundary_path, device):
     print(f'In [recreate_boundary_map]: save the recreated boundary to: "{boundary_path}"')
 
 
-def visualize_img(img_path, data_folder, dataset_name, desired_size):
-    """
-    :param img_path: Should be relative to the data_folder (will be appended to that)
-    :param data_folder:
-    :param dataset_name:
-    :param desired_size:
-    :return:
-    """
-    dataset = CityDataset(data_folder, dataset_name, desired_size, remove_alpha=True)
-    img_full_path = data_folder + '/' + img_path
+def label_to_tensor(label, height, width, count=0):
+    if count == 0:
+        arr = np.zeros((10, height, width))
+        arr[label] = 1
 
-    img = dataset[dataset.image_ids.index(img_full_path)]  # get the processed image - shape: (3, H, W)
-    print(f'In [visualize_img]: visualizing image "{img_path}" of shape: {img.shape}')
-    print('Pixel values:')
-    print(img)
-    print('Min and max values (in image * 255):', torch.min(img * 255), torch.max(img * 255))
+    else:
+        arr = np.zeros((count, 10, height, width))
+        arr[:, label, :, :] = 1
 
-    # plotting
-    plt.title(f'Size: {desired_size}')
-    plt.imshow(img.permute(1, 2, 0))
-    plt.show()
+    return torch.from_numpy(arr.astype(np.float32))
+
+
+def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
+    name = path_to_save + f'/optim_step={optim_step}.pt'
+    checkpoint = {'loss': loss,
+                  'model_state_dict': model.state_dict(),
+                  'optimizer_state_dict': optimizer.state_dict()}
+
+    torch.save(checkpoint, name)
+    print(f'In [save_checkpoint]: save state dict done at: "{name}"')
+
+
+def load_checkpoint(path_to_load, optim_step, model, optimizer, resume_train=True):
+    name = path_to_load + f'/optim_step={optim_step}.pt'
+    checkpoint = torch.load(name, map_location=device)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    loss = checkpoint['loss']
+
+    print(f'In [load_checkpoint]: load state dict done from: "{name}"')
+
+    # putting the model in the correct mode
+    if resume_train:
+        model.train()
+    else:
+        model.eval()
+        for param in model.parameters():  # freezing the layers when using only for evaluation
+            param.requires_grad = False
+
+    if optimizer is not None:
+        return model.to(device), optimizer, loss
+    return model.to(device), None, loss

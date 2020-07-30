@@ -21,10 +21,8 @@ cd glow2/src/
 
 
 # SHOULD BE UPDATED - REFECERENCE: photo2label_eval_v2.sbatch
-python3 main.py --exp --infer_and_evaluate_c_glow --temp 1.0 --model c_glow_v2 \
+python3 main.py --exp --infer_and_evaluate_c_glow --temp 1.0 \
                 --dataset cityscapes --direction label2photo \
-                --img_size 256 256 \
-                --n_block 4 --n_flow 16 \
-                --lr 1e-4 \
+                --model c_glow_v2 --n_block 4 --n_flow 16 \
                 --last_optim_step 136000 \
                 --bsize 20

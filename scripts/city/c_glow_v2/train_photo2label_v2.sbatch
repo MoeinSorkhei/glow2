@@ -21,8 +21,6 @@ conda activate workshop
 cd glow2/src/
 
 python3 main.py --dataset cityscapes --model c_glow_v2 --direction photo2label \
-                --img_size 256 256 --bsize 1 \
-                --lr 1e-4 \
                 --use_comet \
                 --max_step 136000
                 # --resume_train --last_optim_step 114000  --max_step 136000 \

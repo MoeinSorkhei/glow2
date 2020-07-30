@@ -41,8 +41,8 @@
     "temperature": 0.7,
     "n_samples": 5,
     "channels": 3,
-    "img_size": [64, 128],
-    "batch_size": 5,
+    "img_size": [256, 256],
+    "batch_size": 1,
     "monitor_val": true,
 
     "data_folder": {
@@ -74,50 +74,12 @@
     "temperature": 0.7,
     "n_samples": 5,
     "channels": 3,
-    "img_size": [512, 512],
+    "img_size": [256, 256],
     "batch_size": 1,
     "monitor_val": true,
 
     "data_folder": "/local_storage/datasets/moein/maps",
     "samples_path": "/Midgard/home/sorkhei/glow2/samples",
     "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
-  },
-
-  "transient": {
-    "sample_freq": 500,
-    "checkpoint_freq": 1000,
-    "val_freq": 1000,
-    "iter": 5000000,
-    "n_flow": 32,
-    "n_block": 4,
-    "lu": true,
-    "affine": true,
-    "n_bits": 8,
-    "lr": 1e-4,
-    "temperature": 0.7,
-    "n_samples": 3,
-    "channels": 3,
-    "batch_size": 1,
-    "img_size": [256, 512],
-    "monitor_val": true,
-
-    "left_attr": "daylight",
-    "right_attr": "night",
-
-    "paths": {
-      "base_folder": "/local_storage/datasets/moein/transient",
-      "data_folder": "/local_storage/datasets/moein/transient/imageAlignedLD",
-      "annotations": "/local_storage/datasets/moein/transient/annotations/annotations.tsv"
-    },
-
-    "local_paths": {
-      "base_folder": "data/transient",
-      "data_folder": "data/transient/imageAlignedLD",
-      "annotations": "data/transient/annotations/annotations.tsv"
-    },
-
-    "samples_path": "/Midgard/home/sorkhei/glow2/samples",
-    "checkpoints_path": "/Midgard/home/sorkhei/glow2/checkpoints"
-
   }
 }

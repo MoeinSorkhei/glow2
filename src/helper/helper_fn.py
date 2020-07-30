@@ -110,17 +110,17 @@ def reshape_cond(img_condition, h, w):
 def print_info(args, params, model, which_info='all'):
     if which_info == 'params' or which_info == 'all':
         # printing important running params
-        print(f'{"=" * 50} \n'
-              f'In [print_info]: Important params: \n'
-              f'model: {args.model} \n'
-              # f'lr: {args.lr if args.lr is not None else params["lr"]} \n'
-              f'lr: {params["lr"]} \n'
-              f'batch_size: {params["batch_size"]} \n'
-              f'temperature: {params["temperature"]} \n'
-              f'last_optim_step: {args.last_optim_step} \n'
-              f'left_lr: {args.left_lr} \n'
-              f'left_step: {args.left_step} \n'
-              f'cond: {args.cond_mode} \n\n')
+        # print(f'{"=" * 50} \n'
+        #       f'In [print_info]: Important params: \n'
+        #       f'model: {args.model} \n'
+        #       # f'lr: {args.lr if args.lr is not None else params["lr"]} \n'
+        #       f'lr: {params["lr"]} \n'
+        #       f'batch_size: {params["batch_size"]} \n'
+        #       f'temperature: {params["temperature"]} \n'
+        #       f'last_optim_step: {args.last_optim_step} \n'
+        #       f'left_lr: {args.left_lr} \n'
+        #       f'left_step: {args.left_step} \n'
+        #       f'cond: {args.cond_mode} \n\n')
 
         # printing paths
         paths = compute_paths(args, params)
@@ -157,6 +157,41 @@ def scientific(float_num):
 
 
 def compute_paths(args, params, additional_info=None):
+    assert args.model != 'glow' and additional_info is None  # these cases not implemented yet
+    if args.model == 'c_flow':
+        return compute_paths_old(args, params)
+
+    dataset = args.dataset
+    direction = args.direction
+    model = args.model
+    image_size = f"{params['img_size'][0]}x{params['img_size'][1]}"
+    step = args.last_optim_step
+    temp = params['temperature']
+    # run_mode = 'infer' if args.exp else 'train'
+
+    # samples path for train
+    samples_base_dir = f'{params["samples_path"]}'
+    samples_path = os.path.join(samples_base_dir, dataset, image_size, model, direction, 'train')
+
+    # generic infer path
+    infer_path = os.path.join(samples_base_dir, dataset, image_size, model, direction, 'infer', f'step={step}')
+    # path for evaluation
+    eval_path = os.path.join(infer_path, 'eval', f'temp={temp}')
+    val_path = os.path.join(eval_path, 'val_imgs')  # where inferred val images are stored inside the eval folder
+
+    # checkpoints path
+    checkpoints_base_dir = f'{params["checkpoints_path"]}'
+    checkpoints_path = os.path.join(checkpoints_base_dir, dataset, image_size, model, direction)
+
+    return {
+        'samples_path': samples_path,
+        'eval_path': eval_path,
+        'val_path': val_path,
+        'checkpoints_path': checkpoints_path
+    }
+
+
+def compute_paths_old(args, params, additional_info=None):
     """
     Different paths computed in this function include:
         - eval_path: where the validation images and the results of evaluation is stored.

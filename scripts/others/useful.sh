@@ -27,6 +27,8 @@ srun --gres=gpu:1 --mem=5GB --cpus-per-task=1 --time=16:00:00 --constrain=shire 
 
 # ================ kill all python processes
 ps aux |grep python3 |awk '{print $2}' |xargs kill -9
+pkill -9 python
+
 
 # ================ cancel all jobs
 scancel --user=${USER}

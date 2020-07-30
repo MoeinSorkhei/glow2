@@ -11,6 +11,7 @@ from globals import device, sampling_real_imgs
 
 
 def sample_c_flow_conditional(args, params, model):
+    raise NotImplementedError('Needs code refactoring')
     trials_pth = params['samples_path']['real'][args.cond_mode][args.model] + \
                  f'/trials/optim_step={args.last_optim_step}'
     helper.make_dir_if_not_exists(trials_pth)
@@ -54,6 +55,7 @@ def sample_c_flow_conditional(args, params, model):
 
 
 def syn_new_segmentations(args, params, model):
+    raise NotImplementedError('Needs code refactoring')
     # only one trial for now
     z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
     path = params['samples_path']['segment'][args.cond_mode][args.model] + \

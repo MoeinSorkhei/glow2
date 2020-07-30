@@ -57,10 +57,13 @@ def read_params_and_args():
     parser.add_argument('--sanity_check', action='store_true')
     parser.add_argument('--test_invertibility', action='store_true')
 
-    # preparation
+    # data preparation
     parser.add_argument('--create_boundaries', action='store_true')
-    parser.add_argument('--clean_midgard', action='store_true')
     parser.add_argument('--create_tf_records', action='store_true')
+
+    # folders
+    parser.add_argument('--clean_midgard', action='store_true')
+    parser.add_argument('--refactor_folders', action='store_true')
 
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
@@ -188,10 +191,6 @@ def run_evaluation(args, params):
 
     elif args.exp and args.eval_fcn:
         evaluation.evaluate_city_fcn(args, params)
-        # if 'dual_glow' in args.model:
-        #     models.evaluate_dual_glow_fcn(args, params)
-        # else:
-        #     evaluation.evaluate_city_fcn(args, params)
 
     elif args.exp and args.eval_ssim:
         evaluation.compute_ssim_all(args, params)
@@ -245,6 +244,11 @@ def main():
     # clean midgard
     if args.clean_midgard:
         helper.clean_midgard(args)
+
+    elif args.refactor_folders:
+        paths = helper.compute_paths(args, params)
+        print(paths)
+        input()
 
     # investigating how dual_glow works
     elif args.investigate_dual_glow:

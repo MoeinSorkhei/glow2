@@ -163,7 +163,9 @@ def init_model(args, params, run_mode='train'):
 
     elif args.dataset == 'cityscapes':
         reverse_cond = None if args.exp else data_handler.city.prepare_city_reverse_cond(args, params, run_mode)
-        mode = args.cond_mode if args.direction == 'label2photo' else None  # no mode if 'photo2label'
+        mode = None  # no mode if 'photo2label'
+        if args.direction == 'label2photo':
+            mode = 'segment_boundary' if args.use_bmaps else 'segment'
 
     elif args.dataset == 'maps':
         reverse_cond = data_handler.maps.create_rev_cond(args, params, fixed_conds=maps_fixed_conds, also_save=True)

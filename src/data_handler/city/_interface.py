@@ -34,31 +34,23 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_t
 
 
 def prepare_city_reverse_cond(args, params, run_mode='train'):
-    if args.dataset == 'mnist':
-        reverse_cond = ('mnist', 1, params['n_samples'])
-        return reverse_cond
+    samples_path = helper.compute_paths(args, params)['samples_path']
+    save_path = samples_path if run_mode == 'train' else None  # no need for reverse_cond at inference time
+    direction = args.direction
+    segmentations, id_repeats_batch, real_imgs, boundaries = create_cond(params,
+                                                                         fixed_conds=real_conds_abs_path,
+                                                                         save_path=save_path,
+                                                                         direction=direction)
+    # ======= only support for c_flow mode now
+    if direction == 'label2photo':
+        b_maps = boundaries if args.use_bmaps else None
+        reverse_cond = {'segment': segmentations, 'boundary': b_maps}
 
+    elif direction == 'photo2label':  # 'photo2label'
+        reverse_cond = {'real_cond': real_imgs}
     else:
-        if args.model == 'glow' and args.cond_mode is None:  # IMPROVEMENT: SHOULD BE FIXED
-            return None
-
-        samples_path = helper.compute_paths(args, params)['samples_path']
-        save_path = samples_path if run_mode == 'train' else None  # no need for reverse_cond at inference time
-        direction = args.direction
-        segmentations, id_repeats_batch, real_imgs, boundaries = create_cond(params,
-                                                                             fixed_conds=real_conds_abs_path,
-                                                                             save_path=save_path,
-                                                                             direction=direction)
-        # ======= only support for c_flow mode now
-        if direction == 'label2photo':
-            b_maps = boundaries if args.use_bmaps else None
-            reverse_cond = {'segment': segmentations, 'boundary': b_maps}
-
-        elif direction == 'photo2label':  # 'photo2label'
-            reverse_cond = {'real_cond': real_imgs}
-        else:
-            raise NotImplementedError('Direction not implemented')
-        return reverse_cond
+        raise NotImplementedError('Direction not implemented')
+    return reverse_cond
 
 
 def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo'):

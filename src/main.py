@@ -29,8 +29,8 @@ def read_params_and_args():
     parser.add_argument('--max_step', type=int)
     parser.add_argument('--n_samples', type=int)
 
-    parser.add_argument('--n_flow', type=int)
     parser.add_argument('--n_block', type=int)
+    parser.add_argument('--n_flow', nargs='+', type=int)
     parser.add_argument('--img_size', nargs='+', type=int)  # in height width order: e.g. --img_size 128 256
     parser.add_argument('--bsize', type=int)
     parser.add_argument('--lr', type=float)

@@ -32,7 +32,7 @@
     "checkpoint_freq": 1000,
     "val_freq": 1000,
     "iter": 5000000,
-    "n_flow": 32,
+    "n_flow": [32, 32, 32, 32],
     "n_block": 4,
     "lu": true,
     "affine": true,

@@ -1,14 +1,27 @@
 from ..glow import *
+import helper
 
 
 class TwoGlows(nn.Module):
-    def __init__(self, params, mode, pretrained_left_glow=None):
+    def __init__(self, args, params):
         super().__init__()
-        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'])
-        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], mode=mode)  # shape (C, H, W)
+        left_configs, right_configs = init_configs(args)
+        split_type = right_configs['split_type']
+        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'], split_type)
+        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], split_type)  # shape (C, H, W)
+        # print_all_shapes(input_shapes, cond_shapes, params, split_type)
 
-        self.left_glow = init_glow(params['n_block'], params['n_flow'], input_shapes) if pretrained_left_glow is None else pretrained_left_glow
-        self.right_glow = init_glow(params['n_block'], params['n_flow'], input_shapes=input_shapes, cond_shapes=cond_shapes, all_conditional=True)
+        self.left_glow = init_glow(n_blocks=params['n_block'],
+                                   n_flows=params['n_flow'],
+                                   input_shapes=input_shapes,
+                                   cond_shapes=None,
+                                   configs=left_configs)
+
+        self.right_glow = init_glow(n_blocks=params['n_block'],
+                                    n_flows=params['n_flow'],
+                                    input_shapes=input_shapes,
+                                    cond_shapes=cond_shapes,
+                                    configs=right_configs)
 
     def forward(self, x_a, x_b, b_map=None):  # x_a: segmentation
         #  perform left glow forward
@@ -66,3 +79,37 @@ class TwoGlows(nn.Module):
         x_b_rec = self.right_glow.reverse(z_outs_right, reconstruct=True, conditions=conditions)
         print('right reverse done')
         return x_a_rec, x_b_rec
+
+
+def print_all_shapes(input_shapes, cond_shapes, params, split_type):
+    helper.print_and_wait(f'input_shapes: {input_shapes}')
+    helper.print_and_wait(f'cond_shapes: {cond_shapes}')
+    z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'], split_type)
+    helper.print_and_wait(f'z_shapes: {z_shapes}')
+
+
+def init_configs(args):
+    left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
+    right_configs = {'all_conditional': True, 'split_type': 'regular'}  # default
+
+    if 'improved_1' in args.model:
+        left_configs['split_type'] = 'special'
+        right_configs['split_type'] = 'special'
+        left_configs['split_sections'] = [3, 9]
+        right_configs['split_sections'] = [3, 9]
+
+    return left_configs, right_configs
+
+
+def prep_conds(left_glow_out, direction):
+    left_glow_w_outs = left_glow_out['all_w_outs']
+    left_glow_act_outs = left_glow_out['all_act_outs']
+    left_coupling_outs = left_glow_out['all_flows_outs']
+    conditions = make_cond_dict(left_glow_act_outs, left_glow_w_outs, left_coupling_outs)
+
+    if direction == 'reverse':  # reverse lists
+        conditions['act_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['act_cond']))]  # reverse 2d list
+        conditions['w_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['w_cond']))]
+        conditions['coupling_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['coupling_cond']))]
+    return conditions
+

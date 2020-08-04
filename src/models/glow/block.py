@@ -17,25 +17,50 @@ def gaussian_sample(eps, mean, log_sd):
     return mean + torch.exp(log_sd) * eps
 
 
+def compute_chunk_channels():
+    pass
+
+
 class Block(nn.Module):
     """
     Each of the Glow block.
     """
-    def __init__(self, n_flow, inp_shape, cond_shape, do_split=True, all_conditional=False):
+    def __init__(self, n_flow, inp_shape, cond_shape, do_split, configs):
         super().__init__()
 
-        chunk_channels = inp_shape[0] // 2 if do_split else inp_shape[0]  # channels after chunking the output
         self.do_split = do_split
-        self.all_conditional = all_conditional
+        self.all_conditional = configs['all_conditional']
+        self.split_type = configs['split_type']
+        self.split_sections = configs['split_sections'] if self.split_type == 'special' else None  # [3, 9]
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
             self.flows.append(Flow(inp_shape=inp_shape,
                                    cond_shape=cond_shape,
-                                   all_conditional=all_conditional))
+                                   configs=configs))
 
-        # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
-        self.gaussian = ZeroInitConv2d(in_channel=chunk_channels, out_channel=chunk_channels * 2)
+        # gaussian prior: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
+        in_channels, out_channels = self.compute_gaussian_channels(inp_shape)
+        self.gaussian = ZeroInitConv2d(in_channels, out_channels)
+
+    def compute_gaussian_channels(self, inp_shape):
+        if self.do_split and self.split_type == 'regular':
+            gaussian_in_channels = inp_shape[0] // 2
+            gaussian_out_channels = inp_shape[0]
+
+        elif self.do_split and self.split_type == 'special':
+            gaussian_in_channels = self.split_sections[0]
+            gaussian_out_channels = self.split_sections[1] * 2
+
+        else:
+            gaussian_in_channels = inp_shape[0]
+            gaussian_out_channels = inp_shape[0] * 2
+        return gaussian_in_channels, gaussian_out_channels
+
+    def split_tensor(self, tensor):
+        if self.split_type == 'special':
+            return torch.split(tensor, split_size_or_sections=self.split_sections, dim=1)  # [3, 9]
+        return torch.chunk(tensor, chunks=2, dim=1)
 
     def forward(self, inp, conditions=None):
         # squeeze operation
@@ -71,7 +96,8 @@ class Block(nn.Module):
 
         # splitting operation
         if self.do_split:
-            out, z_new = out.chunk(chunks=2, dim=1)  # split along the channel dimension
+            out, z_new = self.split_tensor(out)
+            # out, z_new = out.chunk(chunks=2, dim=1)  # split along the channel dimension
             mean, log_sd = self.gaussian(out).chunk(chunks=2, dim=1)
             log_p = gaussian_log_p(z_new, mean, log_sd)
             log_p = log_p.view(b_size, -1).sum(1)

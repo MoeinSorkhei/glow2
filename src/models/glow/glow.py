@@ -5,9 +5,9 @@ from .utils import *
 
 
 class Glow(nn.Module):
-    def __init__(self, n_blocks, n_flows, input_shapes, cond_shapes=None, all_conditional=False):
+    def __init__(self, n_blocks, n_flows, input_shapes, cond_shapes, configs):
         super().__init__()
-        self.all_conditional = all_conditional
+        self.all_conditional = configs['all_conditional']
         self.n_blocks = n_blocks
         self.blocks = nn.ModuleList()
 
@@ -23,11 +23,11 @@ class Glow(nn.Module):
             do_split = False if i == (n_blocks - 1) else True
 
             # create Block
-            block = Block(n_flow=n_flows,
+            block = Block(n_flow=n_flows[i],
                           inp_shape=inp_shape,
                           cond_shape=cond_shape,
                           do_split=do_split,
-                          all_conditional=all_conditional)
+                          configs=configs)
             self.blocks.append(block)
 
     def forward(self, inp, conditions=None):
@@ -92,11 +92,11 @@ class Glow(nn.Module):
         return inp
 
 
-def init_glow(n_blocks, n_flows, input_shapes, cond_shapes=None, all_conditional=False):
+def init_glow(n_blocks, n_flows, input_shapes, cond_shapes, configs):
     return Glow(
         n_blocks=n_blocks,
         n_flows=n_flows,
         input_shapes=input_shapes,
         cond_shapes=cond_shapes,
-        all_conditional=all_conditional
+        configs=configs
     )

@@ -90,23 +90,24 @@ class Flow(nn.Module):
     """
     The Flow module does not change the dimensionality of its input.
     """
-    def __init__(self, inp_shape, cond_shape, all_conditional=False):
+    def __init__(self, inp_shape, cond_shape, configs):
         super().__init__()
+        self.all_conditional = configs['all_conditional']
 
-        if all_conditional:
-            self.layers_conditional = True
+        if self.all_conditional:
+            # self.layers_conditional = True
             self.act_norm = ActNormConditional(inp_shape)
             self.inv_conv = InvConv1x1Conditional(inp_shape)
             self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=True)
 
         else:
-            self.layers_conditional = False
+            # self.layers_conditional = False
             self.act_norm = ActNorm(in_channel=inp_shape[0])
             self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0])  # always conv LU
             self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=False)
 
     def forward(self, inp, conditions):
-        if self.layers_conditional:
+        if self.all_conditional:
             actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond'])  # conditioned on left actnorm
             w_out, conv_logdet = self.inv_conv(actnorm_out, conditions['w_cond'])
 
@@ -128,7 +129,7 @@ class Flow(nn.Module):
         # coupling reverse
         coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
 
-        if self.layers_conditional:
+        if self.all_conditional:
             w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond'])
             inp = self.act_norm.reverse(w_inp, conditions['act_cond'])
 

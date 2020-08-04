@@ -20,19 +20,6 @@ def extract_conds(conditions, level, all_conditional):
     return act_cond, w_cond, coupling_cond
 
 
-def prep_conds(left_glow_out, direction):
-    left_glow_w_outs = left_glow_out['all_w_outs']
-    left_glow_act_outs = left_glow_out['all_act_outs']
-    left_coupling_outs = left_glow_out['all_flows_outs']
-    conditions = make_cond_dict(left_glow_act_outs, left_glow_w_outs, left_coupling_outs)
-
-    if direction == 'reverse':  # reverse lists
-        conditions['act_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['act_cond']))]  # reverse 2d list
-        conditions['w_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['w_cond']))]
-        conditions['coupling_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['coupling_cond']))]
-    return conditions
-
-
 def unsqueeze_tensor(inp):
     b_size, n_channel, height, width = inp.shape
     unsqueezed = inp.view(b_size, n_channel // 4, 2, 2, height, width)
@@ -60,38 +47,43 @@ def sample_z(n_samples, temperature, channels, img_size, n_block):
     return z_samples
 
 
-def calc_z_shapes(n_channel, image_size, n_block):
+def calc_z_shapes(n_channel, image_size, n_block, split_type):
     # calculates shapes of z's after SPLIT operation (after Block operations) - e.g. channels: 6, 12, 24, 96
     z_shapes = []
     for i in range(n_block - 1):
         image_size = (image_size[0] // 2, image_size[1] // 2)
-        n_channel *= 2
+        # if split_type == 'special':
+        #     n_channel = 9
+        # else:
+        #     n_channel *= 2
+        n_channel = n_channel * 2 if split_type == 'regular' else 9
 
         shape = (n_channel, *image_size)
         z_shapes.append(shape)
 
     # for the very last block where we have no split operation
     image_size = (image_size[0] // 2, image_size[1] // 2)
-    shape = (n_channel * 4, *image_size)
+    shape = (n_channel * 4, *image_size) if split_type == 'regular' else (12, *image_size)
     z_shapes.append(shape)
     return z_shapes
 
 
-def calc_inp_shapes(n_channels, image_size, n_blocks):
+def calc_inp_shapes(n_channels, image_size, n_blocks, split_type):
     # calculates z shapes (inputs) after SQUEEZE operation (before Block operations) - e.g. channels: 12, 24, 48, 96
-    z_shapes = calc_z_shapes(n_channels, image_size, n_blocks)
+    z_shapes = calc_z_shapes(n_channels, image_size, n_blocks, split_type)
     input_shapes = []
     for i in range(len(z_shapes)):
         if i < len(z_shapes) - 1:
-            input_shapes.append((z_shapes[i][0] * 2, z_shapes[i][1], z_shapes[i][2]))
+            channels = z_shapes[i][0] * 2 if split_type == 'regular' else 12
+            input_shapes.append((channels, z_shapes[i][1], z_shapes[i][2]))
         else:
             input_shapes.append((z_shapes[i][0], z_shapes[i][1], z_shapes[i][2]))
     return input_shapes
 
 
-def calc_cond_shapes(n_channels, image_size, n_blocks, mode):
+def calc_cond_shapes(n_channels, image_size, n_blocks, split_type):
     # computes additional channels dimensions based on additional conditions
-    input_shapes = calc_inp_shapes(n_channels, image_size, n_blocks)
+    input_shapes = calc_inp_shapes(n_channels, image_size, n_blocks, split_type)
     cond_shapes = []
     for i in range(len(input_shapes)):
         shape = (input_shapes[i][0], input_shapes[i][1], input_shapes[i][2])  # from left glow

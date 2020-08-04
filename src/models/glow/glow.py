@@ -19,11 +19,6 @@ class Glow(nn.Module):
             inp_shape = input_shapes[i]
             cond_shape = cond_shapes[i]
 
-            if all_conditional:
-                stride = 3 if i == 0 else 3 if i == 1 else 2 if i == 2 else 1
-            else:
-                stride = None
-
             # last Block does not have split
             do_split = False if i == (n_blocks - 1) else True
 
@@ -32,8 +27,7 @@ class Glow(nn.Module):
                           inp_shape=inp_shape,
                           cond_shape=cond_shape,
                           do_split=do_split,
-                          all_conditional=all_conditional,
-                          conv_stride=stride)
+                          all_conditional=all_conditional)
             self.blocks.append(block)
 
     def forward(self, inp, conditions=None):
@@ -98,10 +92,10 @@ class Glow(nn.Module):
         return inp
 
 
-def init_glow(params, input_shapes, cond_shapes=None, all_conditional=False):
+def init_glow(n_blocks, n_flows, input_shapes, cond_shapes=None, all_conditional=False):
     return Glow(
-        n_blocks=params['n_block'],
-        n_flows=params['n_flow'],
+        n_blocks=n_blocks,
+        n_flows=n_flows,
         input_shapes=input_shapes,
         cond_shapes=cond_shapes,
         all_conditional=all_conditional

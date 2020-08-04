@@ -91,7 +91,7 @@ def compute_conv_out_shape(inp_shape, n_convs, kernel_size, stride):
 
 
 class ConvNet(nn.Module):
-    def __init__(self, inp_shape, conv_stride):
+    def __init__(self, inp_shape):
         """
         The Convolutional network used in conditioning networks of W and actnorm.
         The first convolution in the module is a 1x1 convolution with stride 1 for down-sampling. The rest are 3x3
@@ -107,6 +107,7 @@ class ConvNet(nn.Module):
 
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
         n_convs = 2  # convolutions other than 1x1
+        conv_stride = 1
         conv_net_out_h, conv_net_out_w = compute_conv_out_shape(inp_shape, n_convs=n_convs,
                                                                 kernel_size=3, stride=conv_stride)
         down_sampling_channels = 8
@@ -168,13 +169,13 @@ class LinearNet(nn.Module):
 
 
 class WCondNet(nn.Module):
-    def __init__(self, inp_shape, conv_stride):
+    def __init__(self, inp_shape):
         """
         :param inp_shape: (C, H, W) - the shape of one item in a batch.
         :param conv_stride:
         """
         super().__init__()
-        self.conv_net = ConvNet(inp_shape, conv_stride)
+        self.conv_net = ConvNet(inp_shape)
 
         conv_net_out_shape = self.conv_net.output_shape()
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
@@ -198,9 +199,9 @@ class WCondNet(nn.Module):
 
 
 class ActCondNet(nn.Module):
-    def __init__(self, inp_shape, conv_stride):
+    def __init__(self, inp_shape):
         super().__init__()
-        self.conv_net = ConvNet(inp_shape, conv_stride)
+        self.conv_net = ConvNet(inp_shape)
 
         conv_net_out_shape = self.conv_net.output_shape()
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size

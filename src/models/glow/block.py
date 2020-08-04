@@ -21,7 +21,7 @@ class Block(nn.Module):
     """
     Each of the Glow block.
     """
-    def __init__(self, n_flow, inp_shape, cond_shape, do_split=True, all_conditional=False, conv_stride=None):
+    def __init__(self, n_flow, inp_shape, cond_shape, do_split=True, all_conditional=False):
         super().__init__()
 
         chunk_channels = inp_shape[0] // 2 if do_split else inp_shape[0]  # channels after chunking the output
@@ -32,8 +32,7 @@ class Block(nn.Module):
         for i in range(n_flow):
             self.flows.append(Flow(inp_shape=inp_shape,
                                    cond_shape=cond_shape,
-                                   all_conditional=all_conditional,
-                                   conv_stride=conv_stride))
+                                   all_conditional=all_conditional))
 
         # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
         self.gaussian = ZeroInitConv2d(in_channel=chunk_channels, out_channel=chunk_channels * 2)

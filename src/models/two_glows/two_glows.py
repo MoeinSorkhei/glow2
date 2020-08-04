@@ -7,8 +7,8 @@ class TwoGlows(nn.Module):
         input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'])
         cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], mode=mode)  # shape (C, H, W)
 
-        self.left_glow = init_glow(params, input_shapes) if pretrained_left_glow is None else pretrained_left_glow
-        self.right_glow = init_glow(params, input_shapes=input_shapes, cond_shapes=cond_shapes, all_conditional=True)
+        self.left_glow = init_glow(params['n_block'], params['n_flow'], input_shapes) if pretrained_left_glow is None else pretrained_left_glow
+        self.right_glow = init_glow(params['n_block'], params['n_flow'], input_shapes=input_shapes, cond_shapes=cond_shapes, all_conditional=True)
 
     def forward(self, x_a, x_b, b_map=None):  # x_a: segmentation
         #  perform left glow forward

@@ -11,9 +11,9 @@ logabs = lambda x: torch.log(torch.abs(x))
 
 
 class InvConv1x1Conditional(nn.Module):
-    def __init__(self, inp_shape, conv_stride):
+    def __init__(self, inp_shape):
         super().__init__()
-        self.cond_net = WCondNet(inp_shape, conv_stride)  # initialized with QR decomposition
+        self.cond_net = WCondNet(inp_shape)  # initialized with QR decomposition
 
         print_params = False
         if print_params:

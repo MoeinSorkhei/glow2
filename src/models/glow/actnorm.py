@@ -7,9 +7,9 @@ logabs = lambda x: torch.log(torch.abs(x))
 
 
 class ActNormConditional(nn.Module):
-    def __init__(self, inp_shape, conv_stride):
+    def __init__(self, inp_shape):
         super().__init__()
-        self.cond_net = ActCondNet(inp_shape, conv_stride)
+        self.cond_net = ActCondNet(inp_shape)
 
         print_params = False
         if print_params:

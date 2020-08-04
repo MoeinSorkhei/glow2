@@ -90,13 +90,13 @@ class Flow(nn.Module):
     """
     The Flow module does not change the dimensionality of its input.
     """
-    def __init__(self, inp_shape, cond_shape, all_conditional=False, conv_stride=None):
+    def __init__(self, inp_shape, cond_shape, all_conditional=False):
         super().__init__()
 
         if all_conditional:
             self.layers_conditional = True
-            self.act_norm = ActNormConditional(inp_shape, conv_stride)  # inp_shape, conv_stride the same as W cond net
-            self.inv_conv = InvConv1x1Conditional(inp_shape, conv_stride)
+            self.act_norm = ActNormConditional(inp_shape)
+            self.inv_conv = InvConv1x1Conditional(inp_shape)
             self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=True)
 
         else:

@@ -2,8 +2,9 @@ from torch import optim
 
 from .glow import *
 from .two_glows import TwoGlows
-from .utility import *
 from .interface_c_glow import *
+from globals import real_conds_abs_path
+import data_handler
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):

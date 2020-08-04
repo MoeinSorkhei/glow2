@@ -1,4 +1,6 @@
 import numpy as np
+import os
+import tensorflow as tf
 
 from . import dual_glow
 import helper
@@ -14,7 +16,15 @@ def infer_dual_glow(args, params):
     # init model
     hps = dual_glow.init_hps_for_dual_glow(args, params)
     dual_glow_model, sess, _, _, conditions = dual_glow.init_dual_glow_model(args, params, hps, tracker=None)
-    dual_glow.run_model('infer', args, params, hps, sess, dual_glow_model, conditions, tracker=None)
+
+    if args.all_sampling_rounds:
+        for sampling_round in [1, 2, 3]:
+            print(f'In [infer_dual_glow]: doing for sampling round: {sampling_round}')
+            args.sampling_round = sampling_round
+            dual_glow.run_model('infer', args, params, hps, sess, dual_glow_model, conditions, tracker=None)
+            print(f'In [infer_dual_glow]: done for sampling round: {sampling_round}\n\n')
+    else:
+        dual_glow.run_model('infer', args, params, hps, sess, dual_glow_model, conditions, tracker=None)
 
 
 def create_tf_records(args, params):

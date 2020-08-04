@@ -40,8 +40,7 @@ def sample_c_flow_conditional(args, params, model):
                 z_samples = sample_z(z_shapes, n_samples, temp, device)
                 with torch.no_grad():
                     sampled_images = model.reverse(x_a=seg_splits[i],
-                                                   z_b_samples=z_samples,
-                                                   mode='sample_x_b').cpu().data
+                                                   z_b_samples=z_samples).cpu().data
 
                     # all_imgs.append(sampled_images)
                     all_imgs = torch.cat([all_imgs, sampled_images], dim=0)
@@ -69,10 +68,10 @@ def syn_new_segmentations(args, params, model):
 
         for temp in [1.0, 0.7, 0.5, 0.3, 0.1, 0.0]:
             z_a_samples = sample_z(z_shapes, n_samples, temp, device)
-            syn_segmentations = model.reverse(z_a_samples=z_a_samples, mode='sample_x_a')
+            syn_segmentations = model.reverse(z_a_samples=z_a_samples)
 
             z_b_samples = sample_z(z_shapes, n_samples, temp, device)
-            syn_reals = model.reverse(x_a=syn_segmentations, z_b_samples=z_b_samples, mode='sample_x_b')
+            syn_reals = model.reverse(x_a=syn_segmentations, z_b_samples=z_b_samples)
             all_imgs = torch.cat([syn_segmentations, syn_reals], dim=0)
             utils.save_image(all_imgs, f'{trial_path}/temp={temp}.png', nrow=n_samples)
 

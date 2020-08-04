@@ -79,12 +79,13 @@ def noise_added(batch, n_bins):  # add uniform noise
     return batch + torch.rand_like(batch) / n_bins
 
 
-def take_samples(args, params, model, reverse_cond):
-    z_samples = sample_z(params['n_samples'],
-                         params['temperature'],
-                         params['channels'],
-                         params['img_size'],
-                         params['n_block'])
+def take_samples(args, params, model, reverse_cond, n_samples=None):
+    num_samples = n_samples if n_samples is not None else params['n_samples']
+    z_samples = sample_z(n_samples=num_samples,
+                         temperature=params['temperature'],
+                         channels=params['channels'],
+                         img_size=params['img_size'],
+                         n_block=params['n_block'])
 
     with torch.no_grad():
         if args.model == 'glow':
@@ -94,18 +95,15 @@ def take_samples(args, params, model, reverse_cond):
             if args.direction == 'label2photo':
                 sampled_images = model.reverse(x_a=reverse_cond['segment'],
                                                b_map=reverse_cond['boundary'],
-                                               z_b_samples=z_samples,
-                                               mode='sample_x_b').cpu().data
+                                               z_b_samples=z_samples).cpu().data
 
             elif args.direction == 'photo2label':  # 'photo2label'
                 sampled_images = model.reverse(x_a=reverse_cond['real_cond'],
-                                               z_b_samples=z_samples,
-                                               mode='sample_x_b').cpu().data
+                                               z_b_samples=z_samples).cpu().data
 
             elif args.dataset == 'maps':
                 sampled_images = model.reverse(x_a=reverse_cond,  # reverse cond is already extracted based on direction
-                                               z_b_samples=z_samples,
-                                               mode='sample_x_b').cpu().data
+                                               z_b_samples=z_samples).cpu().data
             else:
                 raise NotImplementedError
 
@@ -148,38 +146,55 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
     return reverse_cond
 
 
+def verify_invertibility(args, params):
+    assert args.model == 'c_flow'
+    imgs = [real_conds_abs_path[0]]  # one image for now
+    segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
+    b_map = boundaries if args.direction == 'label2photo' and args.use_bmaps else None
+
+    model = init_model(args, params)
+    x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs)
+    sanity_check(segmentations, real_imgs, x_a_rec, x_b_rec)
+
+
 def init_model(args, params):
     # ======== init glow
     if args.model == 'glow':  # glow with no condition
         reverse_cond = None
         model = init_glow(params)
 
+    elif args.model == 'c_flow':
+        mode = 'segment'
+        # model = TwoGlows(params, args.dataset, args.direction, mode=mode)
+        model = TwoGlows(params, mode=mode)
+
     # ======== init c_flow
-    elif args.model == 'c_flow':  # change here for new datasets
-        # only two Blocks with conditional w - IMPROVEMENT: THIS SHOULD BE MOVED TO GLOBALS.PY
-        w_conditionals = [True, True, False, False] if args.w_conditional else None
-        act_conditionals = [True, True, False, False] if args.act_conditional else None
-        coupling_use_cond_nets = [True, True, True, True] if args.coupling_cond_net else None
-
-        mode = None  # SHOULD REFACTOR THE WAY TWO_GLOWS IS INITIALIZED
-        if args.left_pretrained:  # use pre-trained left Glow
-            # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
-            left_glow_path = helper.compute_paths(args, params)['left_glow_path']
-            pre_trained_left_glow = init_glow(params)  # init the model
-            pretrained_left_glow, _, _ = helper.load_checkpoint(path_to_load=left_glow_path, optim_step=args.left_step,
-                                                                model=pre_trained_left_glow, optimizer=None,
-                                                                resume_train=False)  # left-glow always freezed
-
-            model = TwoGlows(params, args.dataset, args.direction, mode,
-                             pretrained_left_glow=pretrained_left_glow,
-                             w_conditionals=w_conditionals,
-                             act_conditionals=act_conditionals,
-                             use_coupling_cond_nets=coupling_use_cond_nets)
-        else:  # also train left Glow
-            model = TwoGlows(params, args.dataset, args.direction, mode,
-                             w_conditionals=w_conditionals,
-                             act_conditionals=act_conditionals,
-                             use_coupling_cond_nets=coupling_use_cond_nets)
+    # elif args.model == 'c_flow':  # change here for new datasets
+    #     # only two Blocks with conditional w - IMPROVEMENT: THIS SHOULD BE MOVED TO GLOBALS.PY
+    #     w_conditionals = [True, True, False, False] if args.w_conditional else None
+    #     act_conditionals = [True, True, False, False] if args.act_conditional else None
+    #     coupling_use_cond_nets = [True, True, True, True] if args.coupling_cond_net else None
+    #     mode = None
+    #     if args.direction == 'label2photo':
+    #         mode = 'segment_boundary' if args.use_bmaps else 'segment'  # SHOULD REFACTOR THE WAY TWO_GLOWS IS INITIALIZED
+    #     if args.left_pretrained:  # use pre-trained left Glow
+    #         # pth = f"/Midgard/home/sorkhei/glow2/checkpoints/city_model=glow_image=segment"
+    #         left_glow_path = helper.compute_paths(args, params)['left_glow_path']
+    #         pre_trained_left_glow = init_glow(params)  # init the model
+    #         pretrained_left_glow, _, _ = helper.load_checkpoint(path_to_load=left_glow_path, optim_step=args.left_step,
+    #                                                             model=pre_trained_left_glow, optimizer=None,
+    #                                                             resume_train=False)  # left-glow always freezed
+    #
+    #         model = TwoGlows(params, args.dataset, args.direction, mode,
+    #                          pretrained_left_glow=pretrained_left_glow,
+    #                          w_conditionals=w_conditionals,
+    #                          act_conditionals=act_conditionals,
+    #                          use_coupling_cond_nets=coupling_use_cond_nets)
+    #     else:  # also train left Glow
+    #         model = TwoGlows(params, args.dataset, args.direction, mode,
+    #                          w_conditionals=w_conditionals,
+    #                          act_conditionals=act_conditionals,
+    #                          use_coupling_cond_nets=coupling_use_cond_nets)
 
     # elif args.model == 'c_glow':
     elif 'c_glow' in args.model:

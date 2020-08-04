@@ -111,6 +111,10 @@ def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):
     print('In [resize_imgs]: All done')
 
 
+def image_as_float(image):
+    return image / 255
+
+
 def resize_for_fcn(args, params):
     if args.gt:  # photo2label only
         load_path = '/local_storage/datasets/moein/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'

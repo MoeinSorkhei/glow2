@@ -51,15 +51,23 @@ def infer_on_validation_set(args, params):
 
             # create reverse conditions and samples based on args.direction
             rev_cond = models.batch2revcond(args, img_batch, segment_batch, boundary_batch)
-            samples = models.take_samples(args, params, model, rev_cond)
+            samples = models.take_samples(args, params, model, rev_cond, n_samples=batch_size)
 
             # save inferred images separately
             paths_list = real_paths if args.direction == 'label2photo' else seg_paths
-            save_one_by_one(samples, paths_list, val_path)
+            helper.save_one_by_one(samples, paths_list, val_path)
 
             if i_batch > 0 and i_batch % 20 == 0:
                 print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')
         print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path} \n')
+
+
+def infer_all_rounds(args, params):
+    for sampling_round in [1, 2, 3]:
+        print(f'In [infer_all_rounds]: doing for round: {sampling_round}')
+        args.sampling_round = sampling_round
+        infer_on_validation_set(args, params)
+        print(f'In [infer_all_rounds]: done for round: {sampling_round}\n\n')
 
 
 def sample_trained_c_flow(args, params):

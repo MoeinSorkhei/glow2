@@ -18,7 +18,7 @@ class cityscapes:
         self.mean = np.array((72.78044, 83.21195, 73.45286), dtype=np.float32)
 
         # path to modules like labels.py provided by Cityscapes dataset
-        # sys.path.insert(0, 'city_utility/')  # IMPORTANT ASSUMPTION: the program is run from the main.py module
+        sys.path.insert(0, 'evaluation/third_party/')  # IMPORTANT ASSUMPTION: the program is run from the main.py module
         labels = __import__('labels')
 
         # dictionary mapping from raw IDs to train IDs

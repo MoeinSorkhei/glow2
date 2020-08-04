@@ -88,17 +88,18 @@ def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo
     real_imgs = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
     boundaries = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
     id_repeats_batch = torch.zeros((n_samples, 34, img_size[0], img_size[1]))  # 34 different IDs
+    # id_repeats_batch = None
 
     for i in range(len(segs)):
         segmentations[i] = segs[i]
         real_imgs[i] = reals[i]
         boundaries[i] = b_maps[i]
 
-    for i in range(id_repeats_batch.shape[0]):
-        json_path = seg_paths[i][:-len('color.png')] + 'polygons.json'
-        id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
-                                        h=img_size[0], w=img_size[1])  # tensor (34, h, w)
-        id_repeats_batch[i] = id_repeats
+    # for i in range(id_repeats_batch.shape[0]):
+    #     json_path = seg_paths[i][:-len('color.png')] + 'polygons.json'
+    #     id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
+    #                                     h=img_size[0], w=img_size[1])  # tensor (34, h, w)
+    #     id_repeats_batch[i] = id_repeats
 
     if save_path:
         helper.make_dir_if_not_exists(save_path)

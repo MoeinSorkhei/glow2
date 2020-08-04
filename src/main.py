@@ -73,6 +73,7 @@ def read_params_and_args():
     parser.add_argument('--infer_and_evaluate_dual_glow', action='store_true')
     parser.add_argument('--infer_dual_glow', action='store_true')
     parser.add_argument('--sampling_round', type=int)
+    parser.add_argument('--all_sampling_rounds', action='store_true')
 
     parser.add_argument('--eval_complete', action='store_true')
     parser.add_argument('--eval_fcn', action='store_true')
@@ -189,13 +190,19 @@ def run_training(args, params):
 
 def run_evaluation(args, params):
     if args.exp and args.eval_complete:
-        evaluation.eval_city_with_all_temps(args, params)
+        evaluation.eval_fcn_all_temps(args, params)
 
     elif args.exp and args.eval_fcn:
-        evaluation.evaluate_city_fcn(args, params)
+        if args.all_sampling_rounds:
+            evaluation.eval_all_rounds(args, params, eval_mode='fcn')
+        else:
+            evaluation.evaluate_fcn(args, params)
 
     elif args.exp and args.eval_ssim:
-        evaluation.compute_ssim_all(args, params)
+        if args.all_sampling_rounds:
+            evaluation.eval_all_rounds(args, params, eval_mode='ssim')
+        else:
+            evaluation.eval_ssim(args, params)
 
     else:
         raise NotImplementedError
@@ -206,7 +213,10 @@ def run_experiments(args, params):
         if 'dual_glow' in args.model:
             models.infer_dual_glow(args, params)
         else:
-            experiments.infer_on_validation_set(args, params)
+            if args.all_sampling_rounds:
+                experiments.infer_all_rounds(args, params)
+            else:
+                experiments.infer_on_validation_set(args, params)
 
     elif args.exp and args.resize_for_fcn:
         helper.resize_for_fcn(args, params)
@@ -263,7 +273,7 @@ def main():
 
     # data preparation
     elif args.create_boundaries:
-        helper.create_boundary_maps(params)
+        data_handler.create_boundary_maps(params)
 
     # training
     elif not args.exp:

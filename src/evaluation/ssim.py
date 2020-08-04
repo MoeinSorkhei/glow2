@@ -7,7 +7,7 @@ import data_handler, helper
 from globals import city_transforms
 
 
-def compute_ssim(args, params):
+def compute_ssim_old(args, params):
     """
     images should be np arrays of shape (H, W, C). This function should be called only after the inference has been
     done on validation set. This function computes SSIM for the temperature specified in params['temperature'].
@@ -47,9 +47,9 @@ def compute_ssim(args, params):
 
         if i_batch % 100 == 0:
             print(f'In [compute_ssim]: evaluated {i_batch} images')
-            # print('mean so far:', round(np.mean(ssim_vals), 2))
 
-    ssim_score = round(np.mean(ssim_vals), 2)
+    # ssim_score = round(np.mean(ssim_vals), 2)
+    ssim_score = np.mean(ssim_vals)
     print(f'In [compute_ssim]: ssim score on validation set: {ssim_score}')
 
     # ============= append result to ssim.txt
@@ -58,6 +58,29 @@ def compute_ssim(args, params):
         string = f'temp = {params["temperature"]}: {ssim_score} \n'
         ssim_file.write(string)
         print(f'In [compute_ssim]: ssim score appended to ssim.txt')
+
+
+def compute_ssim(syn_dir, ref_dir):
+    ssim_vals = []
+    file_paths = helper.absolute_paths(syn_dir)  # the absolute paths of all synthesized images
+
+    for i, filepath in enumerate(file_paths):
+        syn_image = np.array(Image.open(filepath).resize((2048, 1024)))  # resize to original size, (H, W, C) order
+        ref_file = helper.get_file_with_name(ref_dir, helper.pure_name(filepath))
+        ref_image = np.array(Image.open(ref_file))[:, :, :3]  # 1024x2048 with int values, removed alpha
+
+        # ssim needs images as float
+        syn_image = helper.image_as_float(syn_image)
+        ref_image = helper.image_as_float(ref_image)
+
+        ssim_val = ssim(ref_image, syn_image, multichannel=True, data_range=1.)
+        ssim_vals.append(ssim_val)
+
+        if i % 50 == 0:
+            print(f'Done for images {i}/{len(file_paths)}')
+
+    ssim_score = np.mean(ssim_vals)
+    return ssim_score
 
 
 def compute_ssim_all(args, params):

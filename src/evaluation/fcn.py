@@ -231,8 +231,8 @@ def eval_real_imgs_with_temp(base_data_folder, synthesized_dir, save_dir, sampli
         label = CS.load_label(split, city, idx)  # label shape: (1, 1024, 2048)
         im_file = synthesized_dir + '/' + idx + '_leftImg8bit.png'
 
-        im = np.array(Image.open(im_file))  # im shape: (1024, 2048, 3)
-        im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # assumption: scipy=1.0.0 installed
+        im = np.array(Image.open(im_file))  # assumption: scipy=1.0.0 installed
+        im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))  # resize to (1024, 2048, 3)
 
         out = segrun(net, CS.preprocess(im))  # forward pass of the caffe model
         # fast_hist ignores trainId 0 and 255, not used in evaluation

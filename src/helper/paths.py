@@ -126,7 +126,7 @@ def compute_paths_old(args, params, additional_info=None):
     else:
         if dataset == 'cityscapes' and args.direction == 'label2photo':
             img = 'real'
-            cond = args.cond_mode
+            cond = 'segment_boundary' if args.use_bmaps else 'segment'
 
         elif dataset == 'cityscapes' and args.direction == 'photo2label':
             img = 'segment'
@@ -336,6 +336,22 @@ def read_image_ids(data_folder, dataset_name):
 def files_with_suffix(directory, suffix):
     files = [os.path.abspath(path) for path in glob.glob(f'{directory}/**/*{suffix}', recursive=True)]  # full paths
     return files
+
+
+def get_file_with_name(directory, filename):
+    """
+    Finds the file with a specific name in a hierarchy of directories.
+    :param directory:
+    :param filename:
+    :return:
+    """
+    files = [os.path.abspath(path) for path in glob.glob(f'{directory}/**/{filename}', recursive=True)]  # full paths
+    return files[0]  # only one file should be found with a specific name
+
+
+def absolute_paths(directory):
+    # return [os.path.abspath(filepath) for filepath in os.listdir(directory)]
+    return [os.path.abspath(path) for path in glob.glob(f'{directory}/**/*', recursive=True)]  # full paths
 
 
 def pure_name(path):

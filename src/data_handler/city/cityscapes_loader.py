@@ -95,7 +95,7 @@ class CityDataset(data.Dataset):
         real_img = self.transforms(Image.open(real_path))
         segment_img = self.transforms(Image.open(segment_path))
         boundary = self.boundary_transform(Image.open(boundary_path)) if self.boundaries_exist() else None
-        boundary = torch.from_numpy(np.ceil(boundary.numpy()))  # ceiling values to 1
+        boundary = torch.from_numpy(np.ceil(boundary.numpy())) if boundary is not None else None  # ceiling values to 1
 
         # removing the alpha channel by throwing away the fourth channels
         if self.remove_alpha:
@@ -119,9 +119,10 @@ class CityDataset(data.Dataset):
 
             # getting object IDs with their repetitions in the image
             json_path = segment_path[:-len('color.png')] + 'polygons.json'
-            id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
-                                            h=segment_img.shape[1],
-                                            w=segment_img.shape[2])  # tensor of shape (34, h, w)
+            id_repeats = None
+            # id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
+            #                                 h=segment_img.shape[1],
+            #                                 w=segment_img.shape[2])  # tensor of shape (34, h, w)
             return {'real': real_img,
                     'segment': segment_img,
                     'instance': instance_map,

@@ -2,7 +2,7 @@
 #SBATCH --gres gpu:1
 #SBATCH --mem  15GB
 #SBATCH --cpus-per-task 1
-#SBATCH --constrain "shire|rivendell|khazadum"
+#SBATCH --constrain "shire|rivendell"  
 #SBATCH --mail-type BEGIN,END,FAIL
 #SBATCH --mail-user sorkhei@kth.se
 #SBATCH --time 10:00:00

@@ -50,6 +50,13 @@ cp -a /Midgard/home/sorkhei/glow2/data/cityscapes/gtFine_trainvaltest /local_sto
 cp -a /Midgard/home/sorkhei/glow2/data/cityscapes/leftImg8bit_trainvaltest /local_storage/datasets/moein/cityscapes/
 
 
+# move tf records from node to Midgard
+rsync -Pav /local_storage/datasets/moein/cityscapes/tfrecords /Midgard/Data/moein/cityscapes/
+# vice versa
+rsync -Pav /Midgard/Data/moein/cityscapes/tfrecords /local_storage/datasets/moein/cityscapes/
+
+
+
 # removing files in directory through bash
 for ((i=1000;i<130000;i=i+1000)); do rm optim_step=$i.pt; done
 

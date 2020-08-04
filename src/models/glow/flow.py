@@ -46,11 +46,8 @@ class AffineCoupling(nn.Module):
         - If no conditioning net is used, the inp shape would not be needed and the cond shape will directly be used
           for creating the CNNs (conv_channels parameter in the __init__ function).
     """
-    def __init__(self, in_channel, n_filters=512, do_affine=True, cond_shape=None, use_cond_net=False, inp_shape=None):
+    def __init__(self, in_channel, n_filters=512, cond_shape=None, use_cond_net=False, inp_shape=None):
         super().__init__()
-        # adding extra channels for the condition (e.g., 10 for MNIST)
-        # conv_channels = in_channel // 2 if cond_shape is None else (in_channel // 2) + cond_shape[0]
-
         if cond_shape is None:
             conv_channels = in_channel // 2  # e.g. z shape: (12, 128, 256) --> conv_shape: (6, 128, 256)
 
@@ -58,14 +55,9 @@ class AffineCoupling(nn.Module):
             conv_channels = (in_channel // 2) + cond_shape[0]
 
         else:  # with cond net. e.g. z shape: (12, 128, 256) --> conv_shape: (12, 128, 256),  12 for inp shape
-            '''import helper
-            helper.print_and_wait(f'inp shape: {inp_shape}')'''
-
             conv_channels = (in_channel // 2) + inp_shape[0]
 
-        self.do_affine = do_affine
         self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
-            # padding=1 is equivalent to padding=(1, 1), adding extra zeros to both h and w dimensions
             nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
@@ -86,93 +78,27 @@ class AffineCoupling(nn.Module):
         else:
             self.use_cond_net = False
 
+    def compute_coupling_params(self, tensor, cond):
+        if cond is not None:  # conditional
+            cond_tensor = self.cond_net(cond) if self.use_cond_net else cond
+            inp_a_conditional = torch.cat(tensors=[tensor, cond_tensor], dim=1)  # concat channel-wise
+            log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
+        else:
+            log_s, t = self.net(tensor).chunk(chunks=2, dim=1)
+        s = torch.sigmoid(log_s + 2)
+        return s, t
+
     def forward(self, inp, cond=None):
         inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
-        if self.do_affine:
-            if cond is not None:  # conditional
-                if cond['name'] == 'mnist':  # needs to be re-implemented
-                    # expects the cond to be of shape (B, 10, H, W). Concatenate condition along channel: C -> C+10
-                    # truncate spatial dimension so it spatially fits the actual tensor
-                    cond_tensor = cond[1][:, :, :inp_a.shape[2], :inp_b.shape[3]]
-
-                elif cond['name'] == 'maps':
-                    cond_tensor = self.cond_net(cond['maps_cond']) if self.use_cond_net else cond['maps_cond']
-
-                elif cond['name'] == 'transient':
-                    cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']
-
-                elif cond['name'] == 'real_cond':
-                    cond_tensor = self.cond_net(cond['real_cond']) if self.use_cond_net else cond['real_cond']
-
-                elif cond['name'] == 'segment':  # the whole xA with all the channels
-                    cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
-
-                elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
-                    cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
-
-                else:
-                    raise NotImplementedError('In [Block] forward: Condition not implemented...')
-
-                inp_a_conditional = torch.cat(tensors=[inp_a, cond_tensor], dim=1)  # concat channel-wise
-                log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
-
-            else:
-                log_s, t = self.net(inp_a).chunk(chunks=2, dim=1)
-
-            s = torch.sigmoid(log_s + 2)
-
-            out_b = (inp_b + t) * s
-            log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)
-
-        else:
-            # note: ZeroConv2d(in_channel=n_filters, out_channel=in_channel) should also be changed for additive
-            print('Not implemented... Use --affine')
-            out_b, log_det = None, None
-
+        s, t = self.compute_coupling_params(inp_a, cond)
+        out_b = (inp_b + t) * s
+        log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)
         return torch.cat(tensors=[inp_a, out_b], dim=1), log_det
 
     def reverse(self, output, cond=None):
         out_a, out_b = output.chunk(chunks=2, dim=1)  # here we know that out_a = inp_a (see the forward fn)
-        if self.do_affine:
-            if cond is not None:
-                if cond['name'] == 'mnist':
-                    # concatenate with the same condition as in the forward pass
-                    label, n_samples = cond[1], cond[2]
-                    cond_tensor = label_to_tensor(label, out_a.shape[2], out_a.shape[3], n_samples).to(device)
-
-                elif cond['name'] == 'maps':
-                    cond_tensor = self.cond_net(cond['maps_cond']) if self.use_cond_net else cond['maps_cond']
-
-                elif cond['name'] == 'transient':
-                    cond_tensor = self.cond_net(cond['transient_cond']) if self.use_cond_net else cond['transient_cond']
-
-                elif cond['name'] == 'real_cond':
-                    cond_tensor = self.cond_net(cond['real_cond']) if self.use_cond_net else cond['real_cond']
-
-                elif cond['name'] == 'segment':  # the whole xA with all the channels
-                    cond_tensor = self.cond_net(cond['segment']) if self.use_cond_net else cond['segment']
-
-                elif cond['name'] == 'segment_boundary':  # channel-wise concat segment with boundary
-                    cond_concat = torch.cat([cond['segment'], cond['boundary']], dim=1)
-                    cond_tensor = self.cond_net(cond_concat) if self.use_cond_net else cond_concat
-
-                else:
-                    raise NotImplementedError('In [Block] reverse: Condition not implemented...')
-
-                out_a_conditional = torch.cat(tensors=[out_a, cond_tensor], dim=1)
-                log_s, t = self.net(out_a_conditional).chunk(chunks=2, dim=1)
-
-            else:
-                log_s, t = self.net(out_a).chunk(chunks=2, dim=1)
-
-            s = torch.sigmoid(log_s + 2)
-            inp_b = (out_b / s) - t
-
-        else:
-            print('Not implemented... Use --affine')
-            inp_b = None
-
+        s, t = self.compute_coupling_params(out_a, cond)
+        inp_b = (out_b / s) - t
         return torch.cat(tensors=[out_a, inp_b], dim=1)
 
 
@@ -180,78 +106,51 @@ class Flow(nn.Module):
     """
     The Flow module does not change the dimensionality of its input.
     """
-    def __init__(self, in_channel, do_affine=True, conv_lu=True, coupling_cond_shape=None,
-                 w_conditional=False, act_conditional=False, use_coupling_cond_net=False,
-                 inp_shape=None, conv_stride=None):
+    def __init__(self, in_channel, coupling_cond_shape=None, all_layers_conditional=False, inp_shape=None, conv_stride=None):
         super().__init__()
 
-        # initializing actnorm
-        if act_conditional:
+        if all_layers_conditional:
+            self.layers_conditional = True
             self.act_norm = ActNormConditional(inp_shape, conv_stride)  # inp_shape, conv_stride the same as W cond net
-            self.act_conditional = True
-        else:
-            self.act_norm = ActNorm(in_channel=in_channel)
-            self.act_conditional = False
-
-        # initializing W
-        if w_conditional:
             self.inv_conv = InvConv1x1Conditional(inp_shape, conv_stride)
-            self.w_conditional = True
-        else:
-            self.inv_conv = InvConv1x1LU(in_channel) if conv_lu else InvConv1x1(in_channel)
-            self.w_conditional = False
-
-        # initializing coupling
-        if use_coupling_cond_net:
-            self.use_coupling_cond_net = True
-            self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=coupling_cond_shape,
+            self.coupling = AffineCoupling(in_channel=in_channel, cond_shape=coupling_cond_shape,
                                            use_cond_net=True, inp_shape=inp_shape)
+
         else:
-            self.use_coupling_cond_net = False
-            self.coupling = AffineCoupling(in_channel=in_channel, do_affine=do_affine, cond_shape=coupling_cond_shape,
+            self.layers_conditional = False
+            self.act_norm = ActNorm(in_channel=in_channel)
+            self.inv_conv = InvConv1x1LU(in_channel)  # always conv LU
+            self.coupling = AffineCoupling(in_channel=in_channel, cond_shape=coupling_cond_shape,
                                            use_cond_net=False)
 
-    def forward(self, inp, coupling_cond=None, w_left_out=None, act_left_out=None,
-                return_w_out=False, return_act_out=False):
-        # actnorm forward
-        if self.act_conditional:
-            '''import helper
-            helper.print_and_wait(f'act_left shape: {act_left_out.shape}')'''
+    def forward(self, inp, conditions):
+        if self.layers_conditional:
+            actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond'])  # conditioned on left actnorm
+            w_out, conv_logdet = self.inv_conv(actnorm_out, conditions['w_cond'])
 
-            actnorm_out, act_logdet = self.act_norm(inp, act_left_out)  # conditioned on left actnorm
         else:
             actnorm_out, act_logdet = self.act_norm(inp)
-
-        # W forward
-        if self.w_conditional:
-            w_out, conv_logdet = self.inv_conv(actnorm_out, w_left_out)
-        else:
             w_out, conv_logdet = self.inv_conv(actnorm_out)
 
-        # coupling forward
-        out, affine_logdet = self.coupling(w_out, cond=coupling_cond)
-        log_det = act_logdet + conv_logdet + affine_logdet
+        out, coupling_logdet = self.coupling(w_out, cond=conditions['coupling_cond'])
+        log_det = act_logdet + conv_logdet + coupling_logdet
 
-        output_dict = {'out': out, 'log_det': log_det}
-        if return_w_out:
-            output_dict['w_out'] = w_out
-        if return_act_out:
-            output_dict['act_out'] = actnorm_out
-        return output_dict
+        return {
+            'act_out': actnorm_out,
+            'w_out': w_out,
+            'out': out,
+            'log_det': log_det
+        }
 
-    def reverse(self, output, coupling_cond=None, w_left_out=None, act_left_out=None):
+    def reverse(self, output, conditions):
         # coupling reverse
-        coupling_inp = self.coupling.reverse(output, cond=coupling_cond)
+        coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
 
-        # W reverse
-        if self.w_conditional:
-            w_inp = self.inv_conv.reverse(coupling_inp, w_left_out)
+        if self.layers_conditional:
+            w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond'])
+            inp = self.act_norm.reverse(w_inp, conditions['act_cond'])
+
         else:
             w_inp = self.inv_conv.reverse(coupling_inp)
-
-        # actnorm reverse
-        if self.act_conditional:
-            inp = self.act_norm.reverse(w_inp, act_left_out)
-        else:
             inp = self.act_norm.reverse(w_inp)
         return inp

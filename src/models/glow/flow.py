@@ -16,7 +16,7 @@ class ZeroInitConv2d(nn.Module):
     The last convolution of each NN(), according to the paper is initialized with zeros, such that the each affine layer
     initially performs an identity function.
     """
-    def __init__(self, in_channel, out_channel, padding=1):
+    def __init__(self, in_channel, out_channel):
         super().__init__()
 
         self.conv = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=3)
@@ -33,36 +33,20 @@ class ZeroInitConv2d(nn.Module):
 
 
 class AffineCoupling(nn.Module):
-    """
-    This transforms part of the input tensor in a way that half of the output tensor in a way that half of the output
-    tensor is a non-linear function of the other half. This non-linearity is obtained through the stacking some CNNs.
-
-    Notes:
-        - About the conditioning network: Cond shape is the shape of the condition, which might have larger channels if
-          the condition has boundary maps etc. Inp shape is the actual shape of the corresponding z.
-          Example: cond shape (C + 12, H, W) - inp shape (C, H, W), where the extra 12 is for boundary map.
-          The output of the cond net will be the same shape as the corresponding z.
-
-        - If no conditioning net is used, the inp shape would not be needed and the cond shape will directly be used
-          for creating the CNNs (conv_channels parameter in the __init__ function).
-    """
-    def __init__(self, in_channel, n_filters=512, cond_shape=None, use_cond_net=False, inp_shape=None):
+    def __init__(self, inp_shape, cond_shape, n_filters=512, use_cond_net=False):
         super().__init__()
-        if cond_shape is None:
-            conv_channels = in_channel // 2  # e.g. z shape: (12, 128, 256) --> conv_shape: (6, 128, 256)
+        in_channels = inp_shape[0]  # input from its Glow - shape (C, H, W)
+        cond_channels = cond_shape[0] if cond_shape is not None else 0  # condition from other Glow of anything additional
+        conv_channels = in_channels // 2 + cond_channels  # half of input tensor + condition
 
-        elif not use_cond_net:  # e.g. z shape: (12, 128, 256) --> conv_shape: (12 + 18, 128, 256),  18 for bmaps
-            conv_channels = (in_channel // 2) + cond_shape[0]
-
-        else:  # with cond net. e.g. z shape: (12, 128, 256) --> conv_shape: (12, 128, 256),  12 for inp shape
-            conv_channels = (in_channel // 2) + inp_shape[0]
+        # print(f'Init Affine with in_channels: {in_channels} - cond_channels: {cond_channels} - conv_channels: {conv_channels}')
 
         self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
             nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
             nn.ReLU(inplace=True),
-            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channel)  # channels dimension same as input
+            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channels)  # channels dimension same as input
         )
 
         # Initializing the params
@@ -106,22 +90,20 @@ class Flow(nn.Module):
     """
     The Flow module does not change the dimensionality of its input.
     """
-    def __init__(self, in_channel, coupling_cond_shape=None, all_layers_conditional=False, inp_shape=None, conv_stride=None):
+    def __init__(self, inp_shape, cond_shape, all_conditional=False, conv_stride=None):
         super().__init__()
 
-        if all_layers_conditional:
+        if all_conditional:
             self.layers_conditional = True
             self.act_norm = ActNormConditional(inp_shape, conv_stride)  # inp_shape, conv_stride the same as W cond net
             self.inv_conv = InvConv1x1Conditional(inp_shape, conv_stride)
-            self.coupling = AffineCoupling(in_channel=in_channel, cond_shape=coupling_cond_shape,
-                                           use_cond_net=True, inp_shape=inp_shape)
+            self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=True)
 
         else:
             self.layers_conditional = False
-            self.act_norm = ActNorm(in_channel=in_channel)
-            self.inv_conv = InvConv1x1LU(in_channel)  # always conv LU
-            self.coupling = AffineCoupling(in_channel=in_channel, cond_shape=coupling_cond_shape,
-                                           use_cond_net=False)
+            self.act_norm = ActNorm(in_channel=inp_shape[0])
+            self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0])  # always conv LU
+            self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=False)
 
     def forward(self, inp, conditions):
         if self.layers_conditional:

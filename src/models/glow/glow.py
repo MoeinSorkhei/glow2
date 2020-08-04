@@ -5,22 +5,21 @@ from .utils import *
 
 
 class Glow(nn.Module):
-    def __init__(self, in_channel, n_flows, n_blocks, coupling_cond_shapes=None, all_layers_conditional=False, input_shapes=None):
+    def __init__(self, n_blocks, n_flows, input_shapes, cond_shapes=None, all_conditional=False):
         super().__init__()
-        self.all_layers_conditional = all_layers_conditional
+        self.all_conditional = all_conditional
         self.n_blocks = n_blocks
         self.blocks = nn.ModuleList()
-        n_channel = in_channel
 
         # making None -> [None, None, ..., None]
-        if coupling_cond_shapes is None:
-            coupling_cond_shapes = [None] * n_blocks
+        if cond_shapes is None:
+            cond_shapes = [None] * n_blocks
 
         for i in range(n_blocks):
-            inp_shape = None if input_shapes is None else input_shapes[i]
-            coupling_cond_shape = coupling_cond_shapes[i]
+            inp_shape = input_shapes[i]
+            cond_shape = cond_shapes[i]
 
-            if all_layers_conditional:
+            if all_conditional:
                 stride = 3 if i == 0 else 3 if i == 1 else 2 if i == 2 else 1
             else:
                 stride = None
@@ -29,18 +28,13 @@ class Glow(nn.Module):
             do_split = False if i == (n_blocks - 1) else True
 
             # create Block
-            block = Block(in_channel=n_channel,
-                          n_flow=n_flows,
-                          do_split=do_split,
-                          coupling_cond_shape=coupling_cond_shape,
+            block = Block(n_flow=n_flows,
                           inp_shape=inp_shape,
-                          conv_stride=stride,
-                          all_layers_conditional=all_layers_conditional)
+                          cond_shape=cond_shape,
+                          do_split=do_split,
+                          all_conditional=all_conditional,
+                          conv_stride=stride)
             self.blocks.append(block)
-
-            # increase the channels for all the Blocks before the last Block
-            if i != (n_blocks - 1):
-                n_channel = n_channel * 2
 
     def forward(self, inp, conditions=None):
         log_p_sum = 0
@@ -53,8 +47,9 @@ class Glow(nn.Module):
         all_act_outs = []  # 2d list
 
         for i, block in enumerate(self.blocks):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_layers_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
+
             block_out = block(out, conds)
 
             out, det, log_p = block_out['out'], block_out['total_log_det'], block_out['log_p']
@@ -91,9 +86,10 @@ class Glow(nn.Module):
 
         # Block reverse operations one by one
         for i, block in enumerate(self.blocks[::-1]):  # it starts from the last Block
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_layers_conditional)
-            reverse_input = z_list[-1] if i == 0 else inp
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
+
+            reverse_input = z_list[-1] if i == 0 else inp
             block_reverse = block.reverse(output=reverse_input,  # Block reverse operation
                                           eps=z_list[-(i + 1)],
                                           reconstruct=rec_list[-(i + 1)],
@@ -102,21 +98,11 @@ class Glow(nn.Module):
         return inp
 
 
-def init_glow(params, cond_shapes=None, all_layers_conditional=False):
-    if all_layers_conditional:
-        input_shapes = compute_inp_shapes(params['channels'], params['img_size'], params['n_block'])
-        return Glow(
-            in_channel=params['channels'],
-            n_flows=params['n_flow'],
-            n_blocks=params['n_block'],
-            coupling_cond_shapes=cond_shapes,
-            input_shapes=input_shapes,
-            all_layers_conditional=all_layers_conditional
-        )
-
+def init_glow(params, input_shapes, cond_shapes=None, all_conditional=False):
     return Glow(
-        in_channel=params['channels'],
-        n_flows=params['n_flow'],
         n_blocks=params['n_block'],
-        coupling_cond_shapes=cond_shapes
+        n_flows=params['n_flow'],
+        input_shapes=input_shapes,
+        cond_shapes=cond_shapes,
+        all_conditional=all_conditional
     )

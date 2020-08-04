@@ -10,8 +10,8 @@ def make_cond_dict(act_cond, w_cond, coupling_cond):
     return {'act_cond': act_cond, 'w_cond': w_cond, 'coupling_cond': coupling_cond}
 
 
-def extract_conds(conditions, level, layers_conditional):
-    if layers_conditional:
+def extract_conds(conditions, level, all_conditional):
+    if all_conditional:
         act_cond = conditions['act_cond'][level]
         w_cond = conditions['w_cond'][level]
         coupling_cond = conditions['coupling_cond'][level]
@@ -60,47 +60,26 @@ def sample_z(n_samples, temperature, channels, img_size, n_block):
     return z_samples
 
 
-def calc_z_shapes(n_channel, input_size, n_block):
+def calc_z_shapes(n_channel, image_size, n_block):
+    # calculates shapes of z's after SPLIT operation (after Block operations) - e.g. channels: 6, 12, 24, 96
     z_shapes = []
     for i in range(n_block - 1):
-        input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
+        image_size = (image_size[0] // 2, image_size[1] // 2)
         n_channel *= 2
 
-        shape = (n_channel, input_size, input_size) if type(input_size) is int else (n_channel, *input_size)
+        shape = (n_channel, *image_size)
         z_shapes.append(shape)
 
     # for the very last block where we have no split operation
-    input_size = input_size // 2 if type(input_size) is int else (input_size[0] // 2, input_size[1] // 2)
-    shape = (n_channel * 4, input_size, input_size) if type(input_size) is int else (n_channel * 4, *input_size)
+    image_size = (image_size[0] // 2, image_size[1] // 2)
+    shape = (n_channel * 4, *image_size)
     z_shapes.append(shape)
     return z_shapes
 
 
-def calc_cond_shapes(params, mode):
-    in_channels, img_size, n_block = params['channels'], params['img_size'], params['n_block']
-    z_shapes = calc_z_shapes(in_channels, img_size, n_block)
-
-    if mode == 'z_outs':  # the condition is has the same shape as the z's themselves
-        return z_shapes
-
-    for i in range(len(z_shapes)):
-        z_shapes[i] = list(z_shapes[i])  # converting the tuple to list
-        if i < len(z_shapes) - 1:
-            z_shapes[i][0] = z_shapes[i][0] * 2  # extra channel dim for zA coming from the left glow
-            if mode is not None and mode == 'segment_boundary':
-                z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-        elif mode is not None and mode == 'segment_boundary':  # last layer - adding dim only for boundaries
-            # no need to have z_shapes[i][0] * 2 since this layer does not have split
-            z_shapes[i][0] += 12  # extra channel dimension for the boundary
-
-        z_shapes[i] = tuple(z_shapes[i])  # convert back to tuple
-
-    return z_shapes
-
-
-def compute_inp_shapes(n_channels, input_size, n_blocks):
-    z_shapes = calc_z_shapes(n_channels, input_size, n_blocks)
+def calc_inp_shapes(n_channels, image_size, n_blocks):
+    # calculates z shapes (inputs) after SQUEEZE operation (before Block operations) - e.g. channels: 12, 24, 48, 96
+    z_shapes = calc_z_shapes(n_channels, image_size, n_blocks)
     input_shapes = []
     for i in range(len(z_shapes)):
         if i < len(z_shapes) - 1:
@@ -108,6 +87,18 @@ def compute_inp_shapes(n_channels, input_size, n_blocks):
         else:
             input_shapes.append((z_shapes[i][0], z_shapes[i][1], z_shapes[i][2]))
     return input_shapes
+
+
+def calc_cond_shapes(n_channels, image_size, n_blocks, mode):
+    # computes additional channels dimensions based on additional conditions
+    input_shapes = calc_inp_shapes(n_channels, image_size, n_blocks)
+    cond_shapes = []
+    for i in range(len(input_shapes)):
+        shape = (input_shapes[i][0], input_shapes[i][1], input_shapes[i][2])  # from left glow
+        # if mode == 'b_maps':
+        #     shape[0] += 12
+        cond_shapes.append(shape)
+    return cond_shapes
 
 
 def sanity_check(x_a_ref, x_b_ref, x_a_rec, x_b_rec):

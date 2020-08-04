@@ -21,27 +21,22 @@ class Block(nn.Module):
     """
     Each of the Glow block.
     """
-    def __init__(self, in_channel, n_flow, do_split=True, coupling_cond_shape=None, all_layers_conditional=False,
-                 inp_shape=None, conv_stride=None):
+    def __init__(self, n_flow, inp_shape, cond_shape, do_split=True, all_conditional=False, conv_stride=None):
         super().__init__()
 
-        squeeze_dim = in_channel * 4
+        chunk_channels = inp_shape[0] // 2 if do_split else inp_shape[0]  # channels after chunking the output
         self.do_split = do_split
-        self.all_layers_conditional = all_layers_conditional
+        self.all_conditional = all_conditional
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
-            self.flows.append(Flow(in_channel=squeeze_dim,
-                                   coupling_cond_shape=coupling_cond_shape,
-                                   all_layers_conditional=all_layers_conditional,
-                                   inp_shape=inp_shape,
+            self.flows.append(Flow(inp_shape=inp_shape,
+                                   cond_shape=cond_shape,
+                                   all_conditional=all_conditional,
                                    conv_stride=conv_stride))
 
         # gaussian: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
-        if self.do_split:
-            self.gaussian = ZeroInitConv2d(in_channel=in_channel * 2, out_channel=in_channel * 4)
-        else:
-            self.gaussian = ZeroInitConv2d(in_channel=in_channel * 4, out_channel=in_channel * 8)
+        self.gaussian = ZeroInitConv2d(in_channel=chunk_channels, out_channel=chunk_channels * 2)
 
     def forward(self, inp, conditions=None):
         # squeeze operation
@@ -56,8 +51,9 @@ class Block(nn.Module):
         # Flow operations
         total_log_det = 0
         for i, flow in enumerate(self.flows):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_layers_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
+
             flow_output = flow(out, conds)  # Flow forward
 
             out, log_det = flow_output['out'], flow_output['log_det']
@@ -120,8 +116,9 @@ class Block(nn.Module):
                 inp = z
 
         for i, flow in enumerate(self.flows[::-1]):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_layers_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
+
             flow_reverse = flow.reverse(inp, conds)  # Flow reverse
             inp = flow_reverse
 

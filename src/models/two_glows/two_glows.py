@@ -1,20 +1,19 @@
-from copy import deepcopy
-
 from ..glow import *
-from ..utility import *
 
 
 class TwoGlows(nn.Module):
     def __init__(self, params, mode, pretrained_left_glow=None):
         super().__init__()
-        self.cond_shapes = calc_cond_shapes(params, mode=mode)  # shape (C, H, W)
-        self.left_glow = init_glow(params) if pretrained_left_glow is None else pretrained_left_glow
-        self.right_glow = init_glow(params, self.cond_shapes, all_layers_conditional=True)
-        print(f'In [TwoGlows] __init__: Two Glows initialized')
+        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'])
+        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], mode=mode)  # shape (C, H, W)
+
+        self.left_glow = init_glow(params, input_shapes) if pretrained_left_glow is None else pretrained_left_glow
+        self.right_glow = init_glow(params, input_shapes=input_shapes, cond_shapes=cond_shapes, all_conditional=True)
 
     def forward(self, x_a, x_b, b_map=None):  # x_a: segmentation
         #  perform left glow forward
         left_glow_out = self.left_glow(x_a)
+
         # extract left outputs
         log_p_sum_left, log_det_left = left_glow_out['log_p_sum'], left_glow_out['log_det']
         z_outs_left, flows_outs_left = left_glow_out['z_outs'], left_glow_out['all_flows_outs']

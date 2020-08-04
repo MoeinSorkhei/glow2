@@ -16,7 +16,7 @@ def track_metrics(args, params, comet_tracker, metrics, optim_step):
     if args.model == 'glow':
         comet_tracker.track_metric('log_p', round(metrics['log_p'].item(), 3), optim_step)
 
-    if args.model == 'c_flow':
+    if args.model == 'c_flow' or 'improved' in args.model:
         comet_tracker.track_metric('loss_right', round(metrics['loss_right'].item(), 3), optim_step)
         # comet_tracker.track_metric('log_p_right', round(metrics['log_p_right'].item(), 3), optim_step)
 
@@ -41,10 +41,10 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
     # ============ initializing data loaders
     if args.dataset == 'cityscapes':  # IMPROVE HERE, in a separate function
         train_loader, \
-            val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                       image_size=(params['img_size']),
-                                                       remove_alpha=True,  # removing the alpha channel
-                                                       loader_params=loader_params)
+        val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
+                                                   image_size=(params['img_size']),
+                                                   remove_alpha=True,  # removing the alpha channel
+                                                   loader_params=loader_params)
 
     elif args.dataset == 'maps':
         train_loader, val_loader = data_handler.maps.init_maps_loaders(args, params)
@@ -64,18 +64,13 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
           f'val_loader: {len(val_loader):,} \n'
           f'and batch_size of: {batch_size}')
 
-    # ============ adjusting optim step
+    # adjusting optim step
     optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
-
-    # ============ show model params
-    helper.print_info(args, params, model, which_info='model')
+    paths = helper.compute_paths(args, params)
 
     if resume:
         print(f'In [train]: resuming training from optim_step={optim_step} - max_step: {max_optim_steps}')
-
-    # ============ computing paths for samples, checkpoints, etc. based on the args and params
-    paths = helper.compute_paths(args, params)
 
     # ============ optimization
     while optim_step < max_optim_steps:
@@ -93,18 +88,11 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 loss, log_p, log_det = models.do_forward(args, params, model, img_batch, segment_batch)
                 metrics = {'loss': loss, 'log_p': log_p}
 
-            elif args.model == 'c_flow':
+            elif args.model == 'c_flow' or 'improved' in args.model:
                 loss, loss_left, loss_right = \
                     forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
 
-                metrics = {'loss': loss,
-                           'loss_right': loss_right}
-
-                if args.left_pretrained:
-                    pass
-
-                else:  # normal c_flow OR pre-trained left glow unfreezed
-                    metrics['loss_left'] = loss_left
+                metrics = {'loss': loss, 'loss_right': loss_right, 'loss_left': loss_left}
 
             # elif args.model == 'c_glow':
             elif 'c_glow' in args.model:

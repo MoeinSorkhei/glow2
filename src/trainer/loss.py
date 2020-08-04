@@ -10,9 +10,7 @@ from globals import device
 def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch=None):
     n_bins = 2. ** params['n_bits']
 
-    # log_p_left, log_det_left, log_p_right, log_det_right = \
-    # forward_out = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
-    if args.model == 'c_flow':
+    if args.model == 'c_flow' or 'improved' in args.model:
         log_p_left, log_det_left, log_p_right, log_det_right = \
              models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
 
@@ -22,7 +20,6 @@ def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_bat
 
         return loss, loss_left, loss_right
 
-    # elif args.model == 'c_glow':
     elif 'c_glow' in args.model:
         z, nll = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
         loss = torch.mean(nll)
@@ -73,7 +70,7 @@ def calc_val_loss(args, params, model, val_loader):
                 # TO BE REFACTORED FOR GLOW
                 loss, log_p, log_det = models.do_forward(args, params, model, img_batch, segment_batch, cond)
 
-            elif args.model == 'c_flow':
+            elif args.model == 'c_flow' or 'improved' in args.model:
                 loss, loss_left, loss_right = \
                     forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
 

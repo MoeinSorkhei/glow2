@@ -13,9 +13,9 @@ python3 main.py --exp --test_invertibility --dataset cityscapes --model glow \
 
 # c_flow with segment
 echo "============================== Invertibility  Check for C-Flow with segment =============================="
-python3 main.py --exp --test_invertibility --dataset cityscapes --model c_flow --direction label2photo \
+python3 main.py --exp --test_invertibility --dataset cityscapes --model improved_1 --direction label2photo \
                 --img_size 256 256 \
-                --n_block 4 --n_flow 10 10 10 10
+                --n_block 4 --n_flow 16 12 10 10
 
 
 

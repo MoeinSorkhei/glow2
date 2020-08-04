@@ -38,8 +38,8 @@ def squeeze_tensor(inp):
     return out
 
 
-def sample_z(n_samples, temperature, channels, img_size, n_block):
-    z_shapes = calc_z_shapes(channels, img_size, n_block)
+def sample_z(n_samples, temperature, channels, img_size, n_block, split_type):
+    z_shapes = calc_z_shapes(channels, img_size, n_block, split_type)
     z_samples = []
     for z in z_shapes:  # temperature squeezes the Gaussian which is sampled from
         z_new = torch.randn(n_samples, *z) * temperature
@@ -52,11 +52,7 @@ def calc_z_shapes(n_channel, image_size, n_block, split_type):
     z_shapes = []
     for i in range(n_block - 1):
         image_size = (image_size[0] // 2, image_size[1] // 2)
-        # if split_type == 'special':
-        #     n_channel = 9
-        # else:
-        #     n_channel *= 2
-        n_channel = n_channel * 2 if split_type == 'regular' else 9
+        n_channel = n_channel * 2 if split_type == 'regular' else 9  # now only supports split_sections [3, 9]
 
         shape = (n_channel, *image_size)
         z_shapes.append(shape)
@@ -74,7 +70,7 @@ def calc_inp_shapes(n_channels, image_size, n_blocks, split_type):
     input_shapes = []
     for i in range(len(z_shapes)):
         if i < len(z_shapes) - 1:
-            channels = z_shapes[i][0] * 2 if split_type == 'regular' else 12
+            channels = z_shapes[i][0] * 2 if split_type == 'regular' else 12  # now only supports split_sections [3, 9]
             input_shapes.append((channels, z_shapes[i][1], z_shapes[i][2]))
         else:
             input_shapes.append((z_shapes[i][0], z_shapes[i][1], z_shapes[i][2]))

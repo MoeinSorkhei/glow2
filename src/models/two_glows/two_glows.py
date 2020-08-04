@@ -6,9 +6,10 @@ class TwoGlows(nn.Module):
     def __init__(self, args, params):
         super().__init__()
         left_configs, right_configs = init_configs(args)
-        split_type = right_configs['split_type']
-        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'], split_type)
-        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], split_type)  # shape (C, H, W)
+        self.split_type = right_configs['split_type']  # will also be used in take sample
+
+        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'], self.split_type)
+        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], self.split_type)  # shape (C, H, W)
         # print_all_shapes(input_shapes, cond_shapes, params, split_type)
 
         self.left_glow = init_glow(n_blocks=params['n_block'],
@@ -49,7 +50,7 @@ class TwoGlows(nn.Module):
 
         return left_glow_outs, right_glow_outs
 
-    def reverse(self, x_a=None, z_b_samples=None):
+    def reverse(self, x_a=None, z_b_samples=None, b_map=None):
         left_glow_out = self.left_glow(x_a)
         conditions = prep_conds(left_glow_out, direction='reverse')
         x_b_syn = self.right_glow.reverse(z_b_samples, conditions=conditions)  # sample x_b conditioned on x_a
@@ -92,12 +93,13 @@ def init_configs(args):
     left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
     right_configs = {'all_conditional': True, 'split_type': 'regular'}  # default
 
-    if 'improved_1' in args.model:
+    if 'improved' in args.model:
         left_configs['split_type'] = 'special'
         right_configs['split_type'] = 'special'
         left_configs['split_sections'] = [3, 9]
         right_configs['split_sections'] = [3, 9]
 
+    print(f'In [init_configs]: configs init done: \nleft_configs: {left_configs} \nright_configs: {right_configs}\n')
     return left_configs, right_configs
 
 

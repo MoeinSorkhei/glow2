@@ -5,6 +5,7 @@ from .two_glows import TwoGlows
 from .interface_c_glow import *
 from globals import real_conds_abs_path
 import data_handler
+import helper
 
 
 def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
@@ -33,7 +34,7 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
         # return loss, log_p, log_det
         return log_p, logdet
 
-    elif args.model == 'c_flow':
+    elif args.model == 'c_flow' or 'improved' in args.model:
         if args.dataset == 'cityscapes' and args.direction == 'label2photo':
             left_glow_outs, right_glow_outs = model(x_a=noise_added(segment_batch, n_bins),
                                                     x_b=noise_added(img_batch, n_bins),
@@ -81,18 +82,16 @@ def noise_added(batch, n_bins):  # add uniform noise
 
 
 def take_samples(args, params, model, reverse_cond, n_samples=None):
-    num_samples = n_samples if n_samples is not None else params['n_samples']
-    z_samples = sample_z(n_samples=num_samples,
-                         temperature=params['temperature'],
-                         channels=params['channels'],
-                         img_size=params['img_size'],
-                         n_block=params['n_block'])
-
     with torch.no_grad():
-        if args.model == 'glow':
-            sampled_images = model.reverse(z_samples, coupling_conds=reverse_cond).cpu().data
+        if args.model == 'c_flow' or 'improved' in args.model:  # here reverse_cond is x_a
+            num_samples = n_samples if n_samples is not None else params['n_samples']
+            z_samples = sample_z(n_samples=num_samples,
+                                 temperature=params['temperature'],
+                                 channels=params['channels'],
+                                 img_size=params['img_size'],
+                                 n_block=params['n_block'],
+                                 split_type=model.split_type)
 
-        elif args.model == 'c_flow':  # here reverse_cond is x_a
             if args.direction == 'label2photo':
                 sampled_images = model.reverse(x_a=reverse_cond['segment'],
                                                b_map=reverse_cond['boundary'],
@@ -172,6 +171,9 @@ def init_model(args, params):
 
     else:
         raise NotImplementedError
+
+    print('In [init_model]: init model done')
+    helper.print_info(args, params, model, which_info='model')
     return model.to(device)
 
 

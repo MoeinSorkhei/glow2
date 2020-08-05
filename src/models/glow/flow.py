@@ -36,15 +36,10 @@ class AffineCoupling(nn.Module):
     def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
         super().__init__()
 
-        # self.configs = configs
-        # cond_channels = cond_shape[0] if cond_shape is not None else 0  # condition from other Glow of anything additional
-        # conv_channels = in_channels // 2 + cond_channels  # half of input tensor + condition
-
         # currently cond net outputs have the same channels as input_channels
         in_channels = inp_shape[0]  # input from its own Glow - shape (C, H, W)
         extra_channels = in_channels if cond_shape is not None else 0  # no condition if con_shape is None
         conv_channels = in_channels // 2 + extra_channels  # channels: half of input tensor + extra channels
-        # print(f'Init Affine with in_channels: {in_channels} - cond_channels: {cond_channels} - conv_channels: {conv_channels}')
 
         self.net = nn.Sequential(
             nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),

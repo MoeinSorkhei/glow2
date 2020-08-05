@@ -191,11 +191,6 @@ class ActCondNet(nn.Module):
 
         # data_batch only used for data-dependent initialization, otherwise ignored
         out = self.linear_net(conv_out, data_batch)
-
-        # import helper
-        # helper.print_and_wait(f'out shape: {out.shape}')
-
-        # channels = cond_input.shape[1]
         out_channels = out.shape[1]  # e.g. (1, 12)
         out = out.view(out.shape[0], 2, out_channels // 2)  # 12 --> 6 x 2 - output shape: (B, 2, C)
         return out
@@ -221,8 +216,6 @@ class WCondNet(nn.Module):
         conv_out = conv_out.view(conv_out.shape[0], -1)
         out = self.linear_net(conv_out)
 
-        # channels = cond_input.shape[1]
-        # out_channels = out.shape[1]
         channels_sqrt = int(out.shape[1] ** (1/2))
         out = out.view(out.shape[0], channels_sqrt, channels_sqrt)  # 36 --> 6 x 6
         return out  # shape (B, C, C)

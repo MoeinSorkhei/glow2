@@ -55,9 +55,6 @@ def create_tags(args, params):
     if args.act_conditional:  # act_conditional
         tags.append('act_cond')
 
-    if args.use_bmaps:  # boundary
-        tags.append('bmaps')
-
     if args.coupling_cond_net:
         tags.append('coupling_net')
 

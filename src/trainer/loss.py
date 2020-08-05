@@ -7,7 +7,7 @@ from .util import *
 from globals import device
 
 
-def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch=None):
+def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch):
     n_bins = 2. ** params['n_bits']
 
     if args.model == 'c_flow' or 'improved' in args.model:
@@ -17,13 +17,12 @@ def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_bat
         loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
         loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
         loss = loss_left + loss_right
-
-        return loss, loss_left, loss_right
+        return {'loss': loss, 'loss_left': loss_left, 'loss_right': loss_right}
 
     elif 'c_glow' in args.model:
-        z, nll = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
+        z, nll = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None)
         loss = torch.mean(nll)
-        return z, loss
+        return {'loss': loss, 'z': z}
 
     else:
         raise NotImplementedError
@@ -60,25 +59,10 @@ def calc_val_loss(args, params, model, val_loader):
 
     with torch.no_grad():
         val_list = []
-
         for i_batch, batch in enumerate(val_loader):
             # boundary_batch is None for datasets other than cityscapes
             img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
-
-            if args.model == 'glow':
-                cond = None
-                # TO BE REFACTORED FOR GLOW
-                loss, log_p, log_det = models.do_forward(args, params, model, img_batch, segment_batch, cond)
-
-            elif args.model == 'c_flow' or 'improved' in args.model:
-                loss, loss_left, loss_right = \
-                    forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
-
-            # elif args.model == 'c_glow':
-            elif 'c_glow' in args.model:
-                z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
-
-            else:
-                raise NotImplementedError
+            forward_output = forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
+            loss = forward_output['loss']
             val_list.append(loss.item())
         return np.mean(val_list), np.std(val_list)

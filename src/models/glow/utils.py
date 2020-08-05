@@ -77,15 +77,15 @@ def calc_inp_shapes(n_channels, image_size, n_blocks, split_type):
     return input_shapes
 
 
-def calc_cond_shapes(n_channels, image_size, n_blocks, split_type):
-    # computes additional channels dimensions based on additional conditions
+def calc_cond_shapes(n_channels, image_size, n_blocks, split_type, condition):
+    # computes additional channels dimensions based on additional conditions: left input + condition
     input_shapes = calc_inp_shapes(n_channels, image_size, n_blocks, split_type)
     cond_shapes = []
-    for i in range(len(input_shapes)):
-        shape = (input_shapes[i][0], input_shapes[i][1], input_shapes[i][2])  # from left glow
-        # if mode == 'b_maps':
-        #     shape[0] += 12
-        cond_shapes.append(shape)
+    for block_idx in range(len(input_shapes)):
+        shape = [input_shapes[block_idx][0], input_shapes[block_idx][1], input_shapes[block_idx][2]]  # from left glow
+        if 'b_maps' in condition:
+            shape[0] += 12 if block_idx == 0 else 48 if block_idx == 1 else 192 if block_idx == 2 else 768
+        cond_shapes.append(tuple(shape))
     return cond_shapes
 
 

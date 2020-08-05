@@ -11,24 +11,24 @@ logabs = lambda x: torch.log(torch.abs(x))
 
 
 class InvConv1x1Conditional(nn.Module):
-    def __init__(self, inp_shape):
+    def __init__(self, cond_shape, inp_shape):
         super().__init__()
-        self.cond_net = WCondNet(inp_shape)  # initialized with QR decomposition
+        self.cond_net = WCondNet(cond_shape, inp_shape)  # initialized with QR decomposition
 
         print_params = False
         if print_params:
             total_params = sum(p.numel() for p in self.cond_net.parameters())
             print('ActNormConditional CondNet params:', total_params)
 
-    def forward(self, inp, w_left_out):
+    def forward(self, inp, condition):
         """
         F.conv2d doc: https://pytorch.org/docs/stable/nn.functional.html#torch.nn.functional.conv2d
         :param inp:
-        :param w_left_out:
+        :param condition:
         :return:
         """
         _, _, height, width = inp.shape
-        cond_net_out = self.cond_net(w_left_out)  # shape (B, C, C)
+        cond_net_out = self.cond_net(condition)  # shape (B, C, C)
         batch_size = inp.shape[0]
         log_w = 0
         output = []
@@ -48,8 +48,8 @@ class InvConv1x1Conditional(nn.Module):
         log_det = height * width * log_w
         return output, log_det
 
-    def reverse(self, output, w_left_out):
-        cond_net_out = self.cond_net(w_left_out)  # shape (B, C, C)
+    def reverse(self, output, condition):
+        cond_net_out = self.cond_net(condition)  # shape (B, C, C)
         batch_size = output.shape[0]
         inp = []
 

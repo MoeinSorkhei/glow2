@@ -11,7 +11,7 @@ def extract_batches(batch, args):
     if args.dataset == 'cityscapes':
         img_batch = batch['real'].to(device)
         segment_batch = batch['segment'].to(device)
-        boundary_batch = batch['boundary'].to(device) if args.use_bmaps else None
+        boundary_batch = batch['boundary'].to(device)
 
     elif args.dataset == 'maps':
         img_batch = batch['photo'].to(device)

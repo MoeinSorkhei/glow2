@@ -1,16 +1,28 @@
+import torch
+
 from ..glow import *
 import helper
 
 
 class TwoGlows(nn.Module):
-    def __init__(self, args, params):
+    def __init__(self, params, left_configs, right_configs):
         super().__init__()
-        left_configs, right_configs = init_configs(args)
-        self.split_type = right_configs['split_type']  # will also be used in take sample
+        self.left_configs, self.right_configs = left_configs, right_configs
 
-        input_shapes = calc_inp_shapes(params['channels'], params['img_size'], params['n_block'], self.split_type)
-        cond_shapes = calc_cond_shapes(params['channels'], params['img_size'], params['n_block'], self.split_type)  # shape (C, H, W)
-        # print_all_shapes(input_shapes, cond_shapes, params, split_type)
+        split_type = right_configs['split_type']  # will also be used in take sample
+        condition = right_configs['condition']
+        input_shapes = calc_inp_shapes(params['channels'],
+                                       params['img_size'],
+                                       params['n_block'],
+                                       split_type)
+
+        cond_shapes = calc_cond_shapes(params['channels'],
+                                       params['img_size'],
+                                       params['n_block'],
+                                       split_type,
+                                       condition)  # shape (C, H, W)
+
+        print_all_shapes(input_shapes, cond_shapes, params, split_type)
 
         self.left_glow = init_glow(n_blocks=params['n_block'],
                                    n_flows=params['n_flow'],
@@ -24,17 +36,43 @@ class TwoGlows(nn.Module):
                                     cond_shapes=cond_shapes,
                                     configs=right_configs)
 
+    def prep_conds(self, left_glow_out, b_map, direction):
+        act_cond = left_glow_out['all_act_outs']
+        w_cond = left_glow_out['all_w_outs']  # left_glow_out in the forward direction
+        coupling_cond = left_glow_out['all_flows_outs']
+
+        # important: prep_conds will change the values of left_glow_out, so left_glow_out is not valid after this function
+        if 'b_maps' in self.right_configs['condition']:
+            for block_idx in range(len(act_cond)):
+                for flow_idx in range(len(act_cond[block_idx])):
+                    cond_h, cond_w = act_cond[block_idx][flow_idx].shape[2:]
+                    b_map_reshaped = b_map.view(1, -1, cond_h, cond_w)  # reshape to match spatial dimension
+                    # concat channel wise
+                    act_cond[block_idx][flow_idx] = torch.cat(tensors=[act_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
+                    w_cond[block_idx][flow_idx] = torch.cat(tensors=[w_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
+                    coupling_cond[block_idx][flow_idx] = torch.cat(tensors=[coupling_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
+
+        # make conds a dictionary
+        conditions = make_cond_dict(act_cond, w_cond, coupling_cond)
+
+        # reverse lists for reverse operation
+        if direction == 'reverse':
+            conditions['act_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['act_cond']))]  # reverse 2d list
+            conditions['w_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['w_cond']))]
+            conditions['coupling_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['coupling_cond']))]
+        return conditions
+
     def forward(self, x_a, x_b, b_map=None):  # x_a: segmentation
         #  perform left glow forward
         left_glow_out = self.left_glow(x_a)
 
+        # perform right glow forward
+        conditions = self.prep_conds(left_glow_out, b_map, direction='forward')
+        right_glow_out = self.right_glow(x_b, conditions)
+
         # extract left outputs
         log_p_sum_left, log_det_left = left_glow_out['log_p_sum'], left_glow_out['log_det']
         z_outs_left, flows_outs_left = left_glow_out['z_outs'], left_glow_out['all_flows_outs']
-
-        # perform right glow forward
-        conditions = prep_conds(left_glow_out, direction='forward')
-        right_glow_out = self.right_glow(x_b, conditions)
 
         # extract right outputs
         log_p_sum_right, log_det_right = right_glow_out['log_p_sum'], right_glow_out['log_det']
@@ -51,23 +89,23 @@ class TwoGlows(nn.Module):
         return left_glow_outs, right_glow_outs
 
     def reverse(self, x_a=None, z_b_samples=None, b_map=None):
-        left_glow_out = self.left_glow(x_a)
-        conditions = prep_conds(left_glow_out, direction='reverse')
+        left_glow_out = self.left_glow(x_a)  # left glow forward always needed before preparing conditions
+        conditions = self.prep_conds(left_glow_out, b_map, direction='reverse')
         x_b_syn = self.right_glow.reverse(z_b_samples, conditions=conditions)  # sample x_b conditioned on x_a
         return x_b_syn
 
     def new_condition(self, x_a, z_b_samples):
         left_glow_out = self.left_glow(x_a)
-        conditions = prep_conds(left_glow_out, direction='reverse')
+        conditions = self.prep_conds(left_glow_out, b_map=None, direction='reverse')  # should be tested
         x_b_rec = self.right_glow.reverse(z_b_samples, reconstruct=True, conditions=conditions)
         return x_b_rec
 
-    def reconstruct_all(self, x_a, x_b):
+    def reconstruct_all(self, x_a, x_b, b_map=None):
         left_glow_out = self.left_glow(x_a)
-        z_outs_left = left_glow_out['z_outs']
         print('left forward done')
 
-        conditions = prep_conds(left_glow_out, direction='forward')  # preparing for right glow forward
+        z_outs_left = left_glow_out['z_outs']
+        conditions = self.prep_conds(left_glow_out, b_map, direction='forward')  # preparing for right glow forward
         right_glow_out = self.right_glow(x_b, conditions)
         z_outs_right = right_glow_out['z_outs']
         print('right forward done')
@@ -75,43 +113,20 @@ class TwoGlows(nn.Module):
         # reverse operations
         x_a_rec = self.left_glow.reverse(z_outs_left, reconstruct=True)
         print('left reverse done')
-
-        conditions = prep_conds(left_glow_out, direction='reverse')  # prepare for right glow reverse
+        
+        # need to do forward again since left_glow_out has been changed after preparing condition
+        left_glow_out = self.left_glow(x_a)
+        conditions = self.prep_conds(left_glow_out, b_map, direction='reverse')  # prepare for right glow reverse
         x_b_rec = self.right_glow.reverse(z_outs_right, reconstruct=True, conditions=conditions)
         print('right reverse done')
         return x_a_rec, x_b_rec
 
 
-def print_all_shapes(input_shapes, cond_shapes, params, split_type):
-    helper.print_and_wait(f'input_shapes: {input_shapes}')
-    helper.print_and_wait(f'cond_shapes: {cond_shapes}')
+def print_all_shapes(input_shapes, cond_shapes, params, split_type):  # for debugging
     z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'], split_type)
-    helper.print_and_wait(f'z_shapes: {z_shapes}')
-
-
-def init_configs(args):
-    left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
-    right_configs = {'all_conditional': True, 'split_type': 'regular'}  # default
-
-    if 'improved' in args.model:
-        left_configs['split_type'] = 'special'
-        right_configs['split_type'] = 'special'
-        left_configs['split_sections'] = [3, 9]
-        right_configs['split_sections'] = [3, 9]
-
-    print(f'In [init_configs]: configs init done: \nleft_configs: {left_configs} \nright_configs: {right_configs}\n')
-    return left_configs, right_configs
-
-
-def prep_conds(left_glow_out, direction):
-    left_glow_w_outs = left_glow_out['all_w_outs']
-    left_glow_act_outs = left_glow_out['all_act_outs']
-    left_coupling_outs = left_glow_out['all_flows_outs']
-    conditions = make_cond_dict(left_glow_act_outs, left_glow_w_outs, left_coupling_outs)
-
-    if direction == 'reverse':  # reverse lists
-        conditions['act_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['act_cond']))]  # reverse 2d list
-        conditions['w_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['w_cond']))]
-        conditions['coupling_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['coupling_cond']))]
-    return conditions
-
+    # helper.print_and_wait(f'z_shapes: {z_shapes}')
+    # helper.print_and_wait(f'input_shapes: {input_shapes}')
+    # helper.print_and_wait(f'cond_shapes: {cond_shapes}')
+    print(f'z_shapes: {z_shapes}')
+    print(f'input_shapes: {input_shapes}')
+    print(f'cond_shapes: {cond_shapes}')

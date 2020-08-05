@@ -6,63 +6,9 @@ import helper
 from .loss import *
 
 
-def track_metrics(args, params, comet_tracker, metrics, optim_step):
-    comet_tracker.track_metric('loss', round(metrics['loss'].item(), 3), optim_step)
-    # also track the val_loss at the desired frequency
-    if params['monitor_val'] and optim_step % params['val_freq'] == 0:
-        comet_tracker.track_metric('val_loss', round(metrics['val_loss'], 3), optim_step)
-
-    # track other specific things for specific models
-    if args.model == 'glow':
-        comet_tracker.track_metric('log_p', round(metrics['log_p'].item(), 3), optim_step)
-
-    if args.model == 'c_flow' or 'improved' in args.model:
-        comet_tracker.track_metric('loss_right', round(metrics['loss_right'].item(), 3), optim_step)
-        # comet_tracker.track_metric('log_p_right', round(metrics['log_p_right'].item(), 3), optim_step)
-
-
 def train(args, params, model, optimizer, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
-    """
-    This function depends on the dataset and direction.
-    :param args:
-    :param params:
-    :param model:
-    :param optimizer:
-    :param comet_tracker:
-    :param resume:
-    :param last_optim_step:
-    :param reverse_cond:
-    :return:
-    """
-    # ============ setting params
-    batch_size = params['batch_size']
-    loader_params = {'batch_size': batch_size, 'shuffle': True, 'num_workers': 0}
-
-    # ============ initializing data loaders
-    if args.dataset == 'cityscapes':  # IMPROVE HERE, in a separate function
-        train_loader, \
-        val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                   image_size=(params['img_size']),
-                                                   remove_alpha=True,  # removing the alpha channel
-                                                   loader_params=loader_params)
-
-    elif args.dataset == 'maps':
-        train_loader, val_loader = data_handler.maps.init_maps_loaders(args, params)
-
-    elif args.dataset == 'transient':
-        train_loader, val_loader, _ = transient.init_transient_loaders(args, params)
-
-    elif args.dataset == 'mnist':  # MNIST
-        train_loader = data_handler.init_mnist_loader(mnist_folder=params['data_folder'],
-                                                      img_size=params['img_size'],
-                                                      loader_params=loader_params)
-    else:
-        raise NotImplementedError
-
-    print(f'In [train]: training with data loaders of size: \n'
-          f'train_loader: {len(train_loader):,} \n'
-          f'val_loader: {len(val_loader):,} \n'
-          f'and batch_size of: {batch_size}')
+    # getting data loaders
+    train_loader, val_loader = data_handler.init_data_loaders(args, params)
 
     # adjusting optim step
     optim_step = last_optim_step + 1 if resume else 0
@@ -72,53 +18,41 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
     if resume:
         print(f'In [train]: resuming training from optim_step={optim_step} - max_step: {max_optim_steps}')
 
-    # ============ optimization
+    # optimization loop
     while optim_step < max_optim_steps:
         for i_batch, batch in enumerate(train_loader):
             if optim_step > max_optim_steps:
                 print(f'In [train]: reaching max_step: {max_optim_steps}. Terminating...')
                 return  # ============ terminate training if max steps reached
 
+            # forward pass
             img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
+            forward_output = forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
+            loss = forward_output['loss']
+            metrics = {'loss': loss}
 
-            # ============ forward pass, calculating loss
-            if args.model == 'glow':
-                img_batch = batch['real'].to(device)
-                segment_batch = batch['segment'].to(device)
-                loss, log_p, log_det = models.do_forward(args, params, model, img_batch, segment_batch)
-                metrics = {'loss': loss, 'log_p': log_p}
+            # also add left and right loss if available
+            if 'loss_left' in forward_output.keys():
+                metrics = {'loss_right': forward_output['loss_right'], 'loss_left': forward_output['loss_left']}
 
-            elif args.model == 'c_flow' or 'improved' in args.model:
-                loss, loss_left, loss_right = \
-                    forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
-
-                metrics = {'loss': loss, 'loss_right': loss_right, 'loss_left': loss_left}
-
-            # elif args.model == 'c_glow':
-            elif 'c_glow' in args.model:
-                z, loss = forward_and_loss(args, params, model, img_batch, segment_batch)
-                metrics = {'loss': loss}
-
-            else:
-                raise NotImplementedError
-
-            # ============ backward pass and optimizer step
+            # backward pass and optimizer step
             model.zero_grad()
             loss.backward()
             optimizer.step()
             print(f'In [train]: Step: {optim_step} => loss: {loss.item():.3f}')
 
-            # ============ validation loss
+            # validation loss
             if params['monitor_val'] and optim_step % params['val_freq'] == 0:
                 val_loss_mean, _ = calc_val_loss(args, params, model, val_loader)
                 metrics['val_loss'] = val_loss_mean
                 print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)}')
 
-            # ============ tracking metrics
+            # tracking metrics
             if args.use_comet:
-                track_metrics(args, params, comet_tracker, metrics, optim_step)
+                for key, value in metrics.items():  # track all metric values
+                    comet_tracker.track_metric(key, round(value.item(), 3), optim_step)
 
-            # ============ saving samples
+            # saving samples
             if optim_step % params['sample_freq'] == 0:
                 samples_path = paths['samples_path']
                 helper.make_dir_if_not_exists(samples_path)
@@ -126,7 +60,7 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 utils.save_image(sampled_images, f'{samples_path}/{str(optim_step).zfill(6)}.png', nrow=10)
                 print(f'\nIn [train]: Sample saved at iteration {optim_step} to: \n"{samples_path}"\n')
 
-            # ============ saving checkpoint
+            # saving checkpoint
             if optim_step > 0 and optim_step % params['checkpoint_freq'] == 0:
                 checkpoints_path = paths['checkpoints_path']
                 helper.make_dir_if_not_exists(checkpoints_path)

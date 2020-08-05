@@ -7,17 +7,17 @@ logabs = lambda x: torch.log(torch.abs(x))
 
 
 class ActNormConditional(nn.Module):
-    def __init__(self, inp_shape):
+    def __init__(self, cond_shape, inp_shape):
         super().__init__()
-        self.cond_net = ActCondNet(inp_shape)
+        self.cond_net = ActCondNet(cond_shape, inp_shape)
 
         print_params = False
         if print_params:
             total_params = sum(p.numel() for p in self.cond_net.parameters())
             print('ActNormConditional CondNet params:', total_params)
 
-    def forward(self, inp, act_left_out):
-        cond_out = self.cond_net(act_left_out, inp)  # output shape (B, 2, C)
+    def forward(self, inp, condition):
+        cond_out = self.cond_net(condition, inp)  # output shape (B, 2, C)
         s = cond_out[:, 0, :].unsqueeze(2).unsqueeze(3)  # s, t shape (B, C, 1, 1)
         t = cond_out[:, 1, :].unsqueeze(2).unsqueeze(3)
 
@@ -27,8 +27,8 @@ class ActNormConditional(nn.Module):
         log_det = height * width * torch.sum(scale_logabs)  # scalar value
         return s * (inp + t), log_det
 
-    def reverse(self, out, act_left_out):
-        cond_out = self.cond_net(act_left_out)  # output shape (B, 2, C)
+    def reverse(self, out, condition):
+        cond_out = self.cond_net(condition)  # output shape (B, 2, C)
         s = cond_out[:, 0, :].unsqueeze(2).unsqueeze(3)  # s, t shape (B, C, 1, 1)
         t = cond_out[:, 1, :].unsqueeze(2).unsqueeze(3)
         return (out / s) - t

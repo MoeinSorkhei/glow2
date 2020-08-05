@@ -8,7 +8,7 @@ import data_handler
 import helper
 
 
-def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None):
+def do_forward(args, params, model, img_batch, segment_batch, boundary_batch):
     """
     Does the forward operation of the model based on the model and the data batches.
     :param args:
@@ -21,20 +21,7 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
     """
     n_bins = 2. ** params['n_bits']
 
-    if args.model == 'glow':
-        if args.train_on_segment:  # vanilla Glow on segmentation
-            log_p, logdet, _ = model(inp=segment_batch + torch.rand_like(segment_batch) / n_bins)
-
-        else:  # vanilla Glow on real images
-            log_p, logdet, _ = model(inp=img_batch + torch.rand_like(img_batch) / n_bins)
-
-        log_p = log_p.mean()
-        logdet = logdet.mean()  # logdet and log_p: tensors of shape torch.Size([5])
-        # loss, log_p, log_det = calc_loss(log_p, logdet, params['img_size'], n_bins)
-        # return loss, log_p, log_det
-        return log_p, logdet
-
-    elif args.model == 'c_flow' or 'improved' in args.model:
+    if args.model == 'c_flow' or 'improved' in args.model:
         if args.dataset == 'cityscapes' and args.direction == 'label2photo':
             left_glow_outs, right_glow_outs = model(x_a=noise_added(segment_batch, n_bins),
                                                     x_b=noise_added(img_batch, n_bins),
@@ -54,13 +41,11 @@ def do_forward(args, params, model, img_batch, segment_batch, boundary_batch=Non
 
         else:
             raise NotImplementedError
-
-        # =========== the rest is the same for any configuration
+        # the rest is the same for any configuration
         log_p_left, log_det_left = left_glow_outs['log_p'].mean(), left_glow_outs['log_det'].mean()
         log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
         return log_p_left, log_det_left, log_p_right, log_det_right
 
-    # elif args.model == 'c_glow':
     elif 'c_glow' in args.model:
         if args.dataset == 'cityscapes' and args.direction == 'label2photo':
             z, loss = model(x=noise_added(segment_batch, n_bins),
@@ -135,8 +120,7 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
     """
     # ======= only support for c_flow mode now
     if args.direction == 'label2photo':
-        b_maps = boundary_batch if args.use_bmaps else None
-        reverse_cond = {'segment': segment_batch, 'boundary': b_maps}
+        reverse_cond = {'segment': segment_batch, 'boundary': boundary_batch}
 
     elif args.direction == 'photo2label':  # 'photo2label'
         reverse_cond = {'real_cond': img_batch}
@@ -149,22 +133,34 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
 def verify_invertibility(args, params):
     imgs = [real_conds_abs_path[0]]  # one image for now
     segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
-    b_map = boundaries if args.direction == 'label2photo' and args.use_bmaps else None
 
     model = init_model(args, params)
-    x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs)
+    x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs, b_map=boundaries)
     sanity_check(segmentations, real_imgs, x_a_rec, x_b_rec)
+
+
+def init_model_configs(args):
+    assert 'improved' in args.model  # otherwise not implemented yet
+    left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
+    right_configs = {'all_conditional': True, 'split_type': 'regular', 'condition': 'left'}  # default
+
+    if 'improved' in args.model:
+        left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
+        left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
+
+        if args.use_bmaps:
+            right_configs['condition'] = 'left + b_maps'
+
+    print(f'In [init_configs]: configs init done: \nleft_configs: {left_configs} \nright_configs: {right_configs}\n')
+    return left_configs, right_configs
 
 
 def init_model(args, params):
     assert len(params['n_flow']) == params['n_block']
 
-    if args.model == 'glow':  # glow with no condition
-        reverse_cond = None
-        model = init_glow(params)
-
-    elif args.model == 'c_flow' or 'improved' in args.model:
-        model = TwoGlows(args, params)
+    if args.model == 'c_flow' or 'improved' in args.model:
+        left_configs, right_configs = init_model_configs(args)
+        model = TwoGlows(params, left_configs, right_configs)
 
     elif 'c_glow' in args.model:
         model = init_c_glow(args, params)

@@ -43,7 +43,7 @@ class Block(nn.Module):
         in_channels, out_channels = self.compute_gaussian_channels(inp_shape)
         self.gaussian = ZeroInitConv2d(in_channels, out_channels)
 
-    def compute_gaussian_channels(self, inp_shape):
+    def compute_gaussian_channels(self, inp_shape):  # regardless of cond_shape, since this is based on Block outputs
         if self.do_split and self.split_type == 'regular':
             gaussian_in_channels = inp_shape[0] // 2
             gaussian_out_channels = inp_shape[0]

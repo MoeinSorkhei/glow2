@@ -33,15 +33,20 @@ class ZeroInitConv2d(nn.Module):
 
 
 class AffineCoupling(nn.Module):
-    def __init__(self, inp_shape, cond_shape, n_filters=512, use_cond_net=False):
+    def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
         super().__init__()
-        in_channels = inp_shape[0]  # input from its Glow - shape (C, H, W)
-        cond_channels = cond_shape[0] if cond_shape is not None else 0  # condition from other Glow of anything additional
-        conv_channels = in_channels // 2 + cond_channels  # half of input tensor + condition
 
+        # self.configs = configs
+        # cond_channels = cond_shape[0] if cond_shape is not None else 0  # condition from other Glow of anything additional
+        # conv_channels = in_channels // 2 + cond_channels  # half of input tensor + condition
+
+        # currently cond net outputs have the same channels as input_channels
+        in_channels = inp_shape[0]  # input from its own Glow - shape (C, H, W)
+        extra_channels = in_channels if cond_shape is not None else 0  # no condition if con_shape is None
+        conv_channels = in_channels // 2 + extra_channels  # channels: half of input tensor + extra channels
         # print(f'Init Affine with in_channels: {in_channels} - cond_channels: {cond_channels} - conv_channels: {conv_channels}')
 
-        self.net = nn.Sequential(  # NN() in affine coupling: neither channels shape nor spatial shape change after this
+        self.net = nn.Sequential(
             nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
@@ -58,7 +63,7 @@ class AffineCoupling(nn.Module):
 
         if use_cond_net:  # uses inp shape only if cond net is used
             self.use_cond_net = True
-            self.cond_net = CouplingCondNet(inp_shape, cond_shape)  # without considering batch size dimension
+            self.cond_net = CouplingCondNet(cond_shape, inp_shape)  # without considering batch size dimension
         else:
             self.use_cond_net = False
 
@@ -94,17 +99,16 @@ class Flow(nn.Module):
         super().__init__()
         self.all_conditional = configs['all_conditional']
 
+        # now the output of cond nets has the same dimensions as inp_shape
         if self.all_conditional:
-            # self.layers_conditional = True
-            self.act_norm = ActNormConditional(inp_shape)
-            self.inv_conv = InvConv1x1Conditional(inp_shape)
-            self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=True)
+            self.act_norm = ActNormConditional(cond_shape, inp_shape)
+            self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape)
+            self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True)
 
         else:
-            # self.layers_conditional = False
             self.act_norm = ActNorm(in_channel=inp_shape[0])
             self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0])  # always conv LU
-            self.coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, use_cond_net=False)
+            self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
 
     def forward(self, inp, conditions):
         if self.all_conditional:

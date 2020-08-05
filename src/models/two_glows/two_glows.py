@@ -47,7 +47,6 @@ class TwoGlows(nn.Module):
             for block_idx in range(len(act_cond)):
                 for flow_idx in range(len(act_cond[block_idx])):
                     cond_h, cond_w = act_cond[block_idx][flow_idx].shape[2:]
-                    # b_map_cond = b_map.view(1, -1, cond_h, cond_w)  # reshape to match spatial dimension
                     do_ceil = 'ceil' in cond_config
                     b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h), do_ceil).unsqueeze(dim=0)  # resize
 

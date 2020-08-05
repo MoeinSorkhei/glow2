@@ -142,7 +142,7 @@ def verify_invertibility(args, params):
 def init_model_configs(args):
     assert 'improved' in args.model  # otherwise not implemented yet
     left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
-    right_configs = {'all_conditional': True, 'split_type': 'regular', 'condition': 'left'}  # default
+    right_configs = {'all_conditional': True, 'split_type': 'regular', 'condition': 'left'}  # default condition from left glow
 
     if 'improved' in args.model:
         left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
@@ -150,6 +150,9 @@ def init_model_configs(args):
 
         if args.use_bmaps:
             right_configs['condition'] = 'left + b_maps'
+
+        if args.use_bmaps and args.do_ceil:
+            right_configs['condition'] = 'left + b_maps_ceil'
 
     print(f'In [init_configs]: configs init done: \nleft_configs: {left_configs} \nright_configs: {right_configs}\n')
     return left_configs, right_configs

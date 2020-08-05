@@ -22,6 +22,8 @@ def read_params_and_args():
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--use_bmaps', action='store_true')  # using boundary maps
+    parser.add_argument('--do_ceil', action='store_true')  # flooring b_maps
+
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
     parser.add_argument('--checkpoint_freq', type=int)

@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 
 from .paths import *
 from data_handler import CityDataset
+from globals import device
 
 
 def show_images(img_list):
@@ -75,10 +76,12 @@ def open_and_resize_image(path, for_model=None):
     return image_array
 
 
-def resize_tensor(tensor, new_size):  # for torch tensor (3, H, W)
+def resize_tensor(tensor, new_size, do_ceil=False):  # for torch tensor (3, H, W)
     image_array = np.transpose(rescale_image(tensor.cpu().numpy()), axes=(1, 2, 0))
     image = Image.fromarray(image_array).resize(new_size)  # new_size of form (W, H)
-    return transforms.ToTensor()(image)  # float values in shape (C, H, W)
+    if do_ceil:
+        return torch.ceil(transforms.ToTensor()(image)).to(device)
+    return transforms.ToTensor()(image).to(device)  # float values in shape (C, H, W)
 
 
 def rescale_image(image):  # for numpy array

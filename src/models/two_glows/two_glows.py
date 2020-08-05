@@ -42,12 +42,14 @@ class TwoGlows(nn.Module):
         coupling_cond = left_glow_out['all_flows_outs']
 
         # important: prep_conds will change the values of left_glow_out, so left_glow_out is not valid after this function
-        if 'b_maps' in self.right_configs['condition']:
+        cond_config = self.right_configs['condition']
+        if 'b_maps' in cond_config:
             for block_idx in range(len(act_cond)):
                 for flow_idx in range(len(act_cond[block_idx])):
                     cond_h, cond_w = act_cond[block_idx][flow_idx].shape[2:]
                     # b_map_cond = b_map.view(1, -1, cond_h, cond_w)  # reshape to match spatial dimension
-                    b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h)).unsqueeze(dim=0)  # resize
+                    do_ceil = 'ceil' in cond_config
+                    b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h), do_ceil).unsqueeze(dim=0)  # resize
 
                     # concat channel wise
                     act_cond[block_idx][flow_idx] = torch.cat(tensors=[act_cond[block_idx][flow_idx], b_map_cond], dim=1)

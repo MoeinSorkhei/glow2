@@ -27,8 +27,8 @@ def init_data_loaders(args, params):
     else:
         raise NotImplementedError
 
-    print(f'\n\nIn [init_data_loaders]: training with data loaders of size: \n'
+    print(f'\nIn [init_data_loaders]: training with data loaders of size: \n'
           f'train_loader: {len(train_loader):,} \n'
           f'val_loader: {len(val_loader):,} \n'
-          f'and batch_size of: {batch_size}\n\n')
+          f'and batch_size of: {batch_size}\n')
     return train_loader, val_loader

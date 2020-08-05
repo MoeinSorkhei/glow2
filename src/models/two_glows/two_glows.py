@@ -22,7 +22,7 @@ class TwoGlows(nn.Module):
                                        split_type,
                                        condition)  # shape (C, H, W)
 
-        print_all_shapes(input_shapes, cond_shapes, params, split_type)
+        # print_all_shapes(input_shapes, cond_shapes, params, split_type)
 
         self.left_glow = init_glow(n_blocks=params['n_block'],
                                    n_flows=params['n_flow'],

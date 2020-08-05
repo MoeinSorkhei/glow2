@@ -163,7 +163,6 @@ def run_training(args, params):
 
     if 'dual_glow' in args.model:
         models.train_dual_glow(args, params, tracker)
-
     else:
         # preparing model
         model = models.init_model(args, params)
@@ -184,7 +183,6 @@ def run_training(args, params):
 
             trainer.train(args, params, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
                           reverse_cond=reverse_cond)
-
         # train from scratch
         else:
             trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)

@@ -47,17 +47,8 @@ def init_comet(args, params=None):
 
 
 def create_tags(args, params):
-    tags = [f'{params["img_size"][0]}x{params["img_size"][1]}', args.model]  # image size
-
-    if args.w_conditional:  # w_conditional
-        tags.append('w_cond')
-
-    if args.act_conditional:  # act_conditional
-        tags.append('act_cond')
-
-    if args.coupling_cond_net:
-        tags.append('coupling_net')
-
-    tags.append(args.dataset)
-    tags.append(args.direction)
+    tags = [args.model]
+    # tags = [f'{params["img_size"][0]}x{params["img_size"][1]}', args.model]  # image size
+    # tags.append(args.dataset)
+    # tags.append(args.direction)
     return tags

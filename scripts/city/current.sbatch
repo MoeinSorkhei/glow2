@@ -2,7 +2,7 @@
 #SBATCH --gres gpu:1
 #SBATCH --mem  15GB
 #SBATCH --cpus-per-task 1
-#SBATCH --constrain "shire|rivendell"  # khazadum does not have tf data
+#SBATCH --constrain "shire|rivendell|smaug|balrog"  # khazadum does not have tf data
 #SBATCH --mail-type BEGIN,END,FAIL
 #SBATCH --mail-user sorkhei@kth.se
 #SBATCH --time 10:00:00
@@ -19,8 +19,8 @@ conda activate workshop  # for all other cases
 
 cd glow2/src/
 
-python3 main.py --exp --eval_ssim --all_sampling_rounds --temp 1.0 \
-                --dataset cityscapes --direction photo2label \
-                --model c_flow --w_conditional --act_conditional --coupling_cond_net \
-                --n_block 4 --n_flow 16 \
-                --last_optim_step 136000
+
+python3 main.py --model improved_2_bmaps_ceil --dataset cityscapes --direction label2photo --use_bmaps --do_ceil \
+                --n_block 4 --n_flow 32 16 8 8 \
+                --max_step 136000 \
+                --use_comet

@@ -9,17 +9,17 @@ class TwoGlows(nn.Module):
         super().__init__()
         self.left_configs, self.right_configs = left_configs, right_configs
 
-        split_type = right_configs['split_type']  # will also be used in take sample
+        self.split_type = right_configs['split_type']  # this attribute will also be used in take sample
         condition = right_configs['condition']
         input_shapes = calc_inp_shapes(params['channels'],
                                        params['img_size'],
                                        params['n_block'],
-                                       split_type)
+                                       self.split_type)
 
         cond_shapes = calc_cond_shapes(params['channels'],
                                        params['img_size'],
                                        params['n_block'],
-                                       split_type,
+                                       self.split_type,
                                        condition)  # shape (C, H, W)
 
         # print_all_shapes(input_shapes, cond_shapes, params, split_type)
@@ -48,7 +48,10 @@ class TwoGlows(nn.Module):
                 for flow_idx in range(len(act_cond[block_idx])):
                     cond_h, cond_w = act_cond[block_idx][flow_idx].shape[2:]
                     do_ceil = 'ceil' in cond_config
-                    b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h), do_ceil).unsqueeze(dim=0)  # resize
+
+                    # helper.print_and_wait(f'b_map size: {b_map.shape}')
+                    # b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h), do_ceil).unsqueeze(dim=0)  # resize
+                    b_map_cond = helper.resize_tensors(b_map, (cond_w, cond_h), do_ceil)  # resize
 
                     # concat channel wise
                     act_cond[block_idx][flow_idx] = torch.cat(tensors=[act_cond[block_idx][flow_idx], b_map_cond], dim=1)

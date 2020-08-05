@@ -76,7 +76,15 @@ def open_and_resize_image(path, for_model=None):
     return image_array
 
 
-def resize_tensor(tensor, new_size, do_ceil=False):  # for torch tensor (3, H, W)
+def resize_tensors(tensor, *args):  # for 4d tensor of shape (B, C, H, W)
+    resized_list = []
+    for batch_item in tensor:
+        resized_tensor = resize_tensor(batch_item, *args)
+        resized_list.append(resized_tensor)
+    return torch.stack(resized_list, dim=0).to(device)
+
+
+def resize_tensor(tensor, new_size, do_ceil=False):  # for 3d tensor of shape (C, H, W)
     image_array = np.transpose(rescale_image(tensor.cpu().numpy()), axes=(1, 2, 0))
     image = Image.fromarray(image_array).resize(new_size)  # new_size of form (W, H)
     if do_ceil:

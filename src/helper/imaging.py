@@ -3,6 +3,7 @@ from PIL import Image
 import numpy as np
 import torch
 from torchvision import utils
+import torchvision.transforms as transforms
 
 from .paths import *
 from data_handler import CityDataset
@@ -74,7 +75,13 @@ def open_and_resize_image(path, for_model=None):
     return image_array
 
 
-def rescale_image(image):
+def resize_tensor(tensor, new_size):  # for torch tensor (3, H, W)
+    image_array = np.transpose(rescale_image(tensor.cpu().numpy()), axes=(1, 2, 0))
+    image = Image.fromarray(image_array).resize(new_size)  # new_size of form (W, H)
+    return transforms.ToTensor()(image)  # float values in shape (C, H, W)
+
+
+def rescale_image(image):  # for numpy array
     # just the same as torch save_image function
     return np.clip((image * 255) + 0.5, a_min=0, a_max=255).astype(np.uint8)
 

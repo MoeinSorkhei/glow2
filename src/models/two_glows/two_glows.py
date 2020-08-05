@@ -46,11 +46,13 @@ class TwoGlows(nn.Module):
             for block_idx in range(len(act_cond)):
                 for flow_idx in range(len(act_cond[block_idx])):
                     cond_h, cond_w = act_cond[block_idx][flow_idx].shape[2:]
-                    b_map_reshaped = b_map.view(1, -1, cond_h, cond_w)  # reshape to match spatial dimension
+                    # b_map_cond = b_map.view(1, -1, cond_h, cond_w)  # reshape to match spatial dimension
+                    b_map_cond = helper.resize_tensor(b_map.squeeze(dim=0), (cond_w, cond_h)).unsqueeze(dim=0)  # resize
+
                     # concat channel wise
-                    act_cond[block_idx][flow_idx] = torch.cat(tensors=[act_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
-                    w_cond[block_idx][flow_idx] = torch.cat(tensors=[w_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
-                    coupling_cond[block_idx][flow_idx] = torch.cat(tensors=[coupling_cond[block_idx][flow_idx], b_map_reshaped], dim=1)
+                    act_cond[block_idx][flow_idx] = torch.cat(tensors=[act_cond[block_idx][flow_idx], b_map_cond], dim=1)
+                    w_cond[block_idx][flow_idx] = torch.cat(tensors=[w_cond[block_idx][flow_idx], b_map_cond], dim=1)
+                    coupling_cond[block_idx][flow_idx] = torch.cat(tensors=[coupling_cond[block_idx][flow_idx], b_map_cond], dim=1)
 
         # make conds a dictionary
         conditions = make_cond_dict(act_cond, w_cond, coupling_cond)

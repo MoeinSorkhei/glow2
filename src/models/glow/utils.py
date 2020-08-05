@@ -84,7 +84,8 @@ def calc_cond_shapes(n_channels, image_size, n_blocks, split_type, condition):
     for block_idx in range(len(input_shapes)):
         shape = [input_shapes[block_idx][0], input_shapes[block_idx][1], input_shapes[block_idx][2]]  # from left glow
         if 'b_maps' in condition:
-            shape[0] += 12 if block_idx == 0 else 48 if block_idx == 1 else 192 if block_idx == 2 else 768
+            # shape[0] += 12 if block_idx == 0 else 48 if block_idx == 1 else 192 if block_idx == 2 else 768  # b_map reshaped
+            shape[0] += 3   # down-sampled image with 3 channels
         cond_shapes.append(tuple(shape))
     return cond_shapes
 

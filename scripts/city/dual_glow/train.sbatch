@@ -23,6 +23,6 @@ cd glow2/src/
 
 python3 main.py --dataset cityscapes --model dual_glow --direction label2photo \
                 --img_size 256 256 --bsize 1 \
-                --n_block 4 --n_flow 16 \
+                --n_block 4 --n_flow 16 16 16 16 \
                 --lr 1e-4 \
                 --use_comet

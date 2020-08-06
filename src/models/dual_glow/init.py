@@ -8,13 +8,12 @@ from . import model_definition, data_handler
 import helper
 
 
-def count_trainable_params():
+def count_trainable_params(verbose=False):
     total_parameters = 0
     for variable in tf.trainable_variables():
         shape = variable.get_shape()
-
-        # print(f'variable name: {variable.name} - shape: {shape} - shape prod: {np.prod(shape)}')
-
+        if verbose:
+            print(f'variable name: {variable.name} - shape: {shape} - shape prod: {np.prod(shape)}')
         # shape is an array of tf.Dimension
         variable_parameters = 1
         for dim in shape:
@@ -46,9 +45,7 @@ def init_hps_for_dual_glow(args, params):
     hps.n_bits_x = 8
 
     # model config
-    n_blocks, n_flows = params['n_block'], params['n_flow']
-    hps.n_levels = n_blocks
-    hps.depth = [n_flows] * n_blocks
+    hps.n_levels, hps.depth = params['n_block'], params['n_flow']
 
     hps.n_l = 1  # mlp basic layers, default: 1 by the paper
     hps.flow_permutation = 2  # 0: reverse (RealNVP), 1: shuffle, 2: invconv (Glow)"

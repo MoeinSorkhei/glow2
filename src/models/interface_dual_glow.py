@@ -50,12 +50,8 @@ def create_tf_records(args, params):
 
 def investigate_model(args, hps, write_tf_records=False):
     tfrecords_file = '../tmp/data.tfrecords'
-    hps.n_levels = 1
-    hps.depth = [1]
-
     if write_tf_records:
         tf.enable_eager_execution()  # need to enable in the beginning
-        # if write_tf_records:
         gt_path = '../data/cityscapes/gtFine_trainvaltest/gtFine/train'
         dual_glow.data_io.write_data_for_tf(tfrecords_file, gt_path)
         print('writing tfrecords done')
@@ -66,11 +62,7 @@ def investigate_model(args, hps, write_tf_records=False):
     config = tf.ConfigProto()
     sess = tf.Session(config=config)
 
-    # data = train_iter.get_next()
-    # first_batch = sess.run(data)
     first_batch = np.zeros(shape=(1, 1, 256, 256, 3)), np.zeros(shape=(1, 1, 256, 256, 3))
-    dual_glow_model = dual_glow.model.init_model(sess, hps, train_iter, valid_iter, first_batch)
-    # sess.graph.finalize()
-    print('done')
-    trainable_params = dual_glow.count_trainable_params()
+    dual_glow_model = dual_glow.model_definition.init_model(sess, hps, train_iter, valid_iter, first_batch)
+    trainable_params = dual_glow.count_trainable_params(verbose=True)
     print(f'Total trainable params: {trainable_params:,}')

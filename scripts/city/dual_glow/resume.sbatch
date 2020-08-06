@@ -23,6 +23,6 @@ cd glow2/src/
 
 python3 main.py --dataset cityscapes --model dual_glow --direction label2photo \
                 --img_size 256 256 --bsize 1 \
-                --n_block 4 --n_flow 16 \
+                --n_block 4 --n_flow 16 16 16 16 \
                 --resume_train --last_optim_step 136000 --max_step 150000 --sample_freq 1
 #                 --use_comet --prev_exp_id 0ec3868bbbd24a7b902d970ee25c92fb

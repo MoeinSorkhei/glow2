@@ -5,3 +5,8 @@ python3 main.py --exp --test_invertibility --dataset cityscapes --direction labe
                 --img_size 256 256 \
                 --model improved_1_b_maps --use_bmaps \
                 --n_block 4 --n_flow 2 2 2 2
+
+
+
+# investigate dual_glow (on my machine with Python3.7)
+python3 main.py --investigate_dual_glow --dataset cityscapes --n_block 1 --n_flow 1

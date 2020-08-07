@@ -92,30 +92,45 @@ class Flow(nn.Module):
     """
     def __init__(self, inp_shape, cond_shape, configs):
         super().__init__()
-        self.all_conditional = configs['all_conditional']
-
         # now the output of cond nets has the same dimensions as inp_shape
-        if self.all_conditional:
-            self.act_norm = ActNormConditional(cond_shape, inp_shape)
-            self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape)
-            self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True)
+        self.layers_with_cond_net = configs['layers_with_cond_net']
+        self.actnorm_has_cond_net = 'actnorm' in self.layers_with_cond_net
+        self.w_has_cond_net = 'w' in self.layers_with_cond_net
+        self.coupling_has_cond_net = 'coupling' in self.layers_with_cond_net
 
-        else:
-            self.act_norm = ActNorm(in_channel=inp_shape[0])
-            self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0])  # always conv LU
-            self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
+        self.act_norm = ActNormConditional(cond_shape, inp_shape) \
+            if self.actnorm_has_cond_net else ActNorm(in_channel=inp_shape[0])
+
+        self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape) \
+            if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0])
+
+        self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
+            if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
+
+        # if self.all_conditional:
+        #     self.act_norm = ActNormConditional(cond_shape, inp_shape)
+        #     self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape)
+        #     self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True)
+        #
+        # else:
+        #     self.act_norm = ActNorm(in_channel=inp_shape[0])
+        #     self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0])  # always conv LU
+        #     self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
 
     def forward(self, inp, conditions):
-        if self.all_conditional:
-            actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond'])  # conditioned on left actnorm
-            w_out, conv_logdet = self.inv_conv(actnorm_out, conditions['w_cond'])
+        actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm(inp)
+        w_out, w_logdet = self.inv_conv(actnorm_out, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv(actnorm_out)
 
-        else:
-            actnorm_out, act_logdet = self.act_norm(inp)
-            w_out, conv_logdet = self.inv_conv(actnorm_out)
+        # if self.all_conditional:
+        #     actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond'])  # conditioned on left actnorm
+        #     w_out, conv_logdet = self.inv_conv(actnorm_out, conditions['w_cond'])
+        #
+        # else:
+        #     actnorm_out, act_logdet = self.act_norm(inp)
+        #     w_out, conv_logdet = self.inv_conv(actnorm_out)
 
         out, coupling_logdet = self.coupling(w_out, cond=conditions['coupling_cond'])
-        log_det = act_logdet + conv_logdet + coupling_logdet
+        log_det = act_logdet + w_logdet + coupling_logdet
 
         return {
             'act_out': actnorm_out,
@@ -127,12 +142,13 @@ class Flow(nn.Module):
     def reverse(self, output, conditions):
         # coupling reverse
         coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
-
-        if self.all_conditional:
-            w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond'])
-            inp = self.act_norm.reverse(w_inp, conditions['act_cond'])
-
-        else:
-            w_inp = self.inv_conv.reverse(coupling_inp)
-            inp = self.act_norm.reverse(w_inp)
+        w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv.reverse(coupling_inp)
+        inp = self.act_norm.reverse(w_inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm.reverse(w_inp)
+        # if self.all_conditional:
+        #     w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond'])
+        #     inp = self.act_norm.reverse(w_inp, conditions['act_cond'])
+        #
+        # else:
+        #     w_inp = self.inv_conv.reverse(coupling_inp)
+        #     inp = self.act_norm.reverse(w_inp)
         return inp

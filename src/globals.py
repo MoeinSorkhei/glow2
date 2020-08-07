@@ -3,7 +3,7 @@ from torchvision import transforms
 
 # this device is accessible in all the functions in this file
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+local_run = False
 
 # global image transforms (IMPROVEMENT, CITY DATASET SHOULD ALSO USE THIS RATHER THAN HAVING IT IN ITSELF)
 city_transforms = transforms.Compose([transforms.Resize([256, 256]),
@@ -45,8 +45,18 @@ real_imgs = [
 
 # for fixed conditioning during training
 # desired_segmentations = [base_seg_path + segmentations[i] for i in range(len(segmentations))]
-real_conds_abs_path = [base_real_path + real_imgs[i] for i in range(len(real_imgs))]
+# _local_base_path = '/Users/user/PycharmProjects/glow2/data/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/train/aachen'
+# _local_real_imgs = ['/aachen_000000_000019_leftImg8bit.png',
+#                     '/aachen_000001_000019_leftImg8bit.png',
+#                     '/aachen_000001_000019_leftImg8bit.png',
+#                     '/aachen_000001_000019_leftImg8bit.png',
+#                     '/aachen_000001_000019_leftImg8bit.png']
 
+# real_conds_abs_path = [base_real_path + real_imgs[i] for i in range(len(real_imgs))] \
+#     if not local_run else [_local_base_path + _local_real_imgs[i] for i in range(len(_local_real_imgs))]
+
+
+real_conds_abs_path = [base_real_path + real_imgs[i] for i in range(len(real_imgs))]
 
 # =====================================  for experiments
 random_sampling_reals = [    # whose segmentations will be used for random sampling

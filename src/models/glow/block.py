@@ -29,7 +29,7 @@ class Block(nn.Module):
         super().__init__()
 
         self.do_split = do_split
-        self.all_conditional = configs['all_conditional']
+        self.layers_with_cond_net = configs['layers_with_cond_net']
         self.split_type = configs['split_type']
         self.split_sections = configs['split_sections'] if self.split_type == 'special' else None  # [3, 9]
 
@@ -75,7 +75,7 @@ class Block(nn.Module):
         # Flow operations
         total_log_det = 0
         for i, flow in enumerate(self.flows):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.layers_with_cond_net)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
 
             flow_output = flow(out, conds)  # Flow forward
@@ -141,7 +141,7 @@ class Block(nn.Module):
                 inp = z
 
         for i, flow in enumerate(self.flows[::-1]):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.layers_with_cond_net)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
 
             flow_reverse = flow.reverse(inp, conds)  # Flow reverse

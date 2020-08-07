@@ -21,6 +21,8 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
     # optimization loop
     while optim_step < max_optim_steps:
         for i_batch, batch in enumerate(train_loader):
+            import time
+            begin = time.time()
             if optim_step > max_optim_steps:
                 print(f'In [train]: reaching max_step: {max_optim_steps}. Terminating...')
                 return  # ============ terminate training if max steps reached
@@ -68,3 +70,4 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
                 print("In [train]: Checkpoint saved at iteration", optim_step, '\n')
 
             optim_step += 1
+            print(f'Step took: {round(time.time() - begin, 1)} seconds\n')

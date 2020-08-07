@@ -183,17 +183,19 @@ class InvConv1x1LU(nn.Module):
         weight = np.random.randn(in_channel, in_channel)
         q, _ = la.qr(weight)
         w_p, w_l, w_u = la.lu(q.astype(np.float32))
-        w_s = np.diag(w_u)
-        w_u = np.triu(w_u, 1)
+
+        w_s = np.diag(w_u)  # extract diagonal elements of U into diagonal S matrix
+        w_u = np.triu(w_u, 1)  # set diagonal elements of U to 0
+
         u_mask = np.triu(np.ones_like(w_u), 1)
         l_mask = u_mask.T
 
         w_p = torch.from_numpy(w_p)
         w_l = torch.from_numpy(w_l)
-        w_s = torch.from_numpy(w_s)
         w_u = torch.from_numpy(w_u)
+        w_s = torch.from_numpy(w_s)
 
-        # kept fixed
+        # non-trainable parameters
         self.register_buffer('w_p', w_p)
         self.register_buffer('u_mask', torch.from_numpy(u_mask))
         self.register_buffer('l_mask', torch.from_numpy(l_mask))
@@ -202,8 +204,8 @@ class InvConv1x1LU(nn.Module):
 
         # learnable parameters
         self.w_l = nn.Parameter(w_l)
-        self.w_s = nn.Parameter(logabs(w_s))
         self.w_u = nn.Parameter(w_u)
+        self.w_s = nn.Parameter(logabs(w_s))
 
     def forward(self, inp):
         _, _, height, width = inp.shape

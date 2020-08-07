@@ -6,6 +6,7 @@ import helper
 import models
 import evaluation
 import data_handler
+import globals
 
 import argparse
 import torch
@@ -18,11 +19,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def read_params_and_args():
     parser = argparse.ArgumentParser(description='Glow trainer')
+    parser.add_argument('--local_run', action='store_true')
     parser.add_argument('--dataset', type=str, help='the name of the dataset')
     parser.add_argument('--use_comet', action='store_true')
     parser.add_argument('--resume_train', action='store_true')
     parser.add_argument('--use_bmaps', action='store_true')  # using boundary maps
     parser.add_argument('--do_ceil', action='store_true')  # flooring b_maps
+    parser.add_argument('--layer_with_cond_nets', nargs='+', type=str)
 
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
@@ -114,6 +117,8 @@ def adjust_params(args, params):
     :param params:
     :return:
     """
+    globals.local_run = args.local_run
+
     if args.n_block is not None:
         params['n_block'] = args.n_block
 

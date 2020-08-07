@@ -10,13 +10,16 @@ def make_cond_dict(act_cond, w_cond, coupling_cond):
     return {'act_cond': act_cond, 'w_cond': w_cond, 'coupling_cond': coupling_cond}
 
 
-def extract_conds(conditions, level, all_conditional):
-    if all_conditional:
-        act_cond = conditions['act_cond'][level]
-        w_cond = conditions['w_cond'][level]
-        coupling_cond = conditions['coupling_cond'][level]
-    else:
-        w_cond, act_cond, coupling_cond = None, None, None
+def extract_conds(conditions, level, layers_with_cond_net):
+    act_cond = conditions['act_cond'][level] if 'actnorm' in layers_with_cond_net else None
+    w_cond = conditions['w_cond'][level] if 'w' in layers_with_cond_net else None
+    coupling_cond = conditions['coupling_cond'][level] if 'coupling' in layers_with_cond_net else None
+    # if layers_with_cond_net:
+    #     act_cond = conditions['act_cond'][level]
+    #     w_cond = conditions['w_cond'][level]
+    #     coupling_cond = conditions['coupling_cond'][level]
+    # else:
+    #     w_cond, act_cond, coupling_cond = None, None, None
     return act_cond, w_cond, coupling_cond
 
 

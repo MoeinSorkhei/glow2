@@ -10,6 +10,7 @@ observations.txt
 tmp/
 sample
 samples
+scripts
 checkpoints
 tmp/checkpoints
 src/evaluation/third_party/caffemodel/

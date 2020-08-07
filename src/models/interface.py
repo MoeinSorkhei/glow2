@@ -1,3 +1,4 @@
+import torch
 from torch import optim
 
 from .glow import *
@@ -131,9 +132,9 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
 
 
 def verify_invertibility(args, params):
-    imgs = [real_conds_abs_path[0]]  # one image for now
-    segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
-
+    # imgs = [real_conds_abs_path[0]]  # one image for now
+    # segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
+    segmentations, real_imgs, boundaries = [torch.rand((1, 3, 256, 256))] * 3
     model = init_model(args, params)
     x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs, b_map=boundaries)
     sanity_check(segmentations, real_imgs, x_a_rec, x_b_rec)
@@ -141,8 +142,12 @@ def verify_invertibility(args, params):
 
 def init_model_configs(args):
     assert 'improved' in args.model  # otherwise not implemented yet
-    left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
-    right_configs = {'all_conditional': True, 'split_type': 'regular', 'condition': 'left'}  # default condition from left glow
+
+    left_configs = {'layers_with_cond_net': [],  # no layers conditional
+                    'split_type': 'regular'}  # default
+    right_configs = {'layers_with_cond_net': args.layer_with_cond_nets,
+                     'split_type': 'regular',
+                     'condition': 'left'}  # default condition from left glow
 
     if 'improved' in args.model:
         left_configs['split_type'], right_configs['split_type'] = 'special', 'special'

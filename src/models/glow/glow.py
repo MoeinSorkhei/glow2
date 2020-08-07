@@ -7,7 +7,7 @@ from .utils import *
 class Glow(nn.Module):
     def __init__(self, n_blocks, n_flows, input_shapes, cond_shapes, configs):
         super().__init__()
-        self.all_conditional = configs['all_conditional']
+        self.layers_with_cond_net = configs['layers_with_cond_net']
         self.n_blocks = n_blocks
         self.blocks = nn.ModuleList()
 
@@ -41,7 +41,7 @@ class Glow(nn.Module):
         all_act_outs = []  # 2d list
 
         for i, block in enumerate(self.blocks):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.layers_with_cond_net)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
 
             block_out = block(out, conds)
@@ -80,7 +80,7 @@ class Glow(nn.Module):
 
         # Block reverse operations one by one
         for i, block in enumerate(self.blocks[::-1]):  # it starts from the last Block
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
+            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.layers_with_cond_net)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
 
             reverse_input = z_list[-1] if i == 0 else inp

@@ -228,3 +228,75 @@ class InvConv1x1LU(nn.Module):
     def reverse(self, output):
         weight = self.calc_weight()
         return F.conv2d(output, weight.squeeze().inverse().unsqueeze(2).unsqueeze(3))
+
+
+class InvConv1x1LUWithMode(nn.Module):
+    def __init__(self, in_channel, mode='unconditional', cond_shape=None, inp_shape=None):
+        super().__init__()
+        self.mode = mode
+
+        # initialize with LU decomposition
+        q = la.qr(np.random.randn(in_channel, in_channel))[0].astype(np.float32)
+        w_p, w_l, w_u = la.lu(q)
+
+        w_s = np.diag(w_u)  # extract diagonal elements of U into vector w_s
+        w_u = np.triu(w_u, 1)  # set diagonal elements of U to 0
+
+        u_mask = np.triu(np.ones_like(w_u), 1)
+        l_mask = u_mask.T
+
+        w_p = torch.from_numpy(w_p)
+        w_l = torch.from_numpy(w_l)
+        w_u = torch.from_numpy(w_u)
+        w_s = torch.from_numpy(w_s)
+
+        # non-trainable parameters
+        self.register_buffer('w_p', w_p)
+        self.register_buffer('u_mask', torch.from_numpy(u_mask))
+        self.register_buffer('l_mask', torch.from_numpy(l_mask))
+        self.register_buffer('s_sign', torch.sign(w_s))
+        self.register_buffer('l_eye', torch.eye(l_mask.shape[0]))
+
+        if self.mode == 'conditional':
+            matrices_flattened = torch.cat([torch.flatten(w_l), torch.flatten(w_u), logabs(w_s)])
+            self.cond_net = WCondNet(cond_shape, inp_shape, do_lu=True, initial_bias=matrices_flattened)
+
+        else:
+            # learnable parameters
+            self.w_l = nn.Parameter(w_l)
+            self.w_u = nn.Parameter(w_u)
+            self.w_s = nn.Parameter(logabs(w_s))
+
+    def forward(self, inp, condition=None):
+        _, _, height, width = inp.shape
+        weight, s_vector = self.calc_weight(condition)
+        out = F.conv2d(inp, weight)
+        logdet = height * width * torch.sum(s_vector)
+        return out, logdet
+
+    def calc_weight(self, condition=None):
+        if self.mode == 'conditional':
+            l_matrix, u_matrix, s_vector = self.cond_net(condition)
+        else:
+            l_matrix, u_matrix, s_vector = self.w_l, self.w_u, self.w_s
+
+        weight = (
+                self.w_p
+                @ (l_matrix * self.l_mask + self.l_eye)  # explicitly make it lower-triangular with 1's on diagonal
+                @ ((u_matrix * self.u_mask) + torch.diag(self.s_sign * torch.exp(s_vector)))
+        )
+        return weight.unsqueeze(2).unsqueeze(3), s_vector
+
+    def reverse_single(self, output, condition=None):
+        weight, _ = self.calc_weight(condition)
+        return F.conv2d(output, weight.squeeze().inverse().unsqueeze(2).unsqueeze(3))
+
+    def reverse(self, output, condition=None):
+        batch_size = output.shape[0]
+        if batch_size == 1:
+            return self.reverse_single(output, condition)
+        # reverse one by one for batch size greater than 1. Improving this is not a priority since batch size is usually 1.
+        batch_reversed = []
+        for i_batch, batch_item in enumerate(output):
+            batch_reversed.append(self.reverse(output[i_batch].unsqueeze(0), condition[i_batch].unsqueeze(0)))
+        return torch.cat(batch_reversed)

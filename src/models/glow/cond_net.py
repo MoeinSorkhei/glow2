@@ -92,19 +92,7 @@ def compute_conv_out_shape(inp_shape, n_convs, kernel_size, stride):
 
 class ConvNet(nn.Module):
     def __init__(self, inp_shape):
-        """
-        The Convolutional network used in conditioning networks of W and actnorm.
-        The first convolution in the module is a 1x1 convolution with stride 1 for down-sampling. The rest are 3x3
-        convolutions with the given stride.
-        :param inp_shape:
-        :param conv_stride:
-
-        Notes:
-            - n_convs: convolutions other than 1x1 - the ones that change the spatial shape of the input.
-              Assumption: n_convs have equal kernel size and stride.
-        """
         super().__init__()
-
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
         n_convs = 2  # convolutions other than 1x1
         conv_stride = 1
@@ -131,19 +119,28 @@ class ConvNet(nn.Module):
 
 
 class LinearNet(nn.Module):
-    def __init__(self, conv_net_out_shape, inp_channels, condition):
+    def __init__(self, in_features, out_features, condition):
         super().__init__()
+        self.out_features = out_features
 
-        self.out_features = inp_channels ** 2 if condition == 'w' else inp_channels * 2
-        self.bias_mode = 'qr' if condition == 'w' else 'data_zero' if condition == 'actnorm' else 'random'
+        # determine how to initialize the bias of last linear layer
+        if condition == 'w':
+            self.bias_mode = 'qr'
+        elif condition == 'actnorm':
+            self.bias_mode = 'data_zero'
+        elif condition == 'w - LU':
+            self.bias_mode = 'zero'
+        else:
+            raise NotImplementedError('Condition not implemented')
 
+        # init last layer
         if condition == 'coupling':  # random init of last layer
             last_layer = nn.Linear(in_features=48, out_features=self.out_features)
         else:
             last_layer = ZeroWeightLinear(in_features=48, out_features=self.out_features, bias_mode=self.bias_mode)
 
         self.linear_net = nn.Sequential(
-            nn.Linear(in_features=conv_net_out_shape, out_features=32),
+            nn.Linear(in_features=in_features, out_features=32),
             nn.ReLU(inplace=True),
             nn.Linear(in_features=32, out_features=64),
             nn.ReLU(inplace=True),
@@ -172,10 +169,10 @@ class ActCondNet(nn.Module):
     def __init__(self, cond_shape, inp_shape):
         super().__init__()
         self.conv_net = ConvNet(cond_shape)
-        conv_net_out_shape = self.conv_net.output_shape()
+        conv_out_flat_length = self.conv_net.output_shape()
 
         inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
-        self.linear_net = LinearNet(conv_net_out_shape, inp_channels, condition='actnorm')
+        self.linear_net = LinearNet(conv_out_flat_length, inp_channels * 2, condition='actnorm')
 
         self.print_params = False
         if self.print_params:
@@ -197,12 +194,24 @@ class ActCondNet(nn.Module):
 
 
 class WCondNet(nn.Module):
-    def __init__(self, cond_shape, inp_shape):
+    def __init__(self, cond_shape, inp_shape, do_lu=False, initial_bias=None):
         super().__init__()
+        self.inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
+        self.do_lu = do_lu
+
         self.conv_net = ConvNet(cond_shape)
-        conv_net_out_shape = self.conv_net.output_shape()
-        inp_channels = inp_shape[0]  # inp_shape (C, H, W) -- no batch size
-        self.linear_net = LinearNet(conv_net_out_shape, inp_channels, condition='w')
+        conv_out_flat_length = self.conv_net.output_shape()
+
+        if self.do_lu:
+            linear_out_features = 2 * (self.inp_channels ** 2) + self.inp_channels  # for L, U, and s
+            self.linear_net = LinearNet(in_features=conv_out_flat_length,
+                                        out_features=linear_out_features,
+                                        condition='w - LU')
+            self.linear_net.linear_net[-1].linear.bias.data.copy_(initial_bias)  # init with flattened LU and s elements
+        else:
+            self.linear_net = LinearNet(in_features=conv_out_flat_length,
+                                        out_features=self.inp_channels ** 2,
+                                        condition='w')
 
         self.print_params = False
         if self.print_params:
@@ -214,11 +223,22 @@ class WCondNet(nn.Module):
     def forward(self, cond_input):
         conv_out = self.conv_net(cond_input)
         conv_out = conv_out.view(conv_out.shape[0], -1)
-        out = self.linear_net(conv_out)
+        out = self.linear_net(conv_out)  # shape (batch_size, out_features)
 
-        channels_sqrt = int(out.shape[1] ** (1/2))
-        out = out.view(out.shape[0], channels_sqrt, channels_sqrt)  # 36 --> 6 x 6
-        return out  # shape (B, C, C)
+        if self.do_lu:
+            out = out.squeeze(0)  # batch size 1
+            channels_sqrt = self.inp_channels ** 2
+            w_l_flattened = out[:channels_sqrt]
+            w_u_flattened = out[channels_sqrt:channels_sqrt * 2]
+            w_s = out[channels_sqrt * 2:]
+
+            matrix_shape = (self.inp_channels, self.inp_channels)
+            w_l = torch.reshape(w_l_flattened, matrix_shape)
+            w_u = torch.reshape(w_u_flattened, matrix_shape)
+            return w_l, w_u, w_s
+        else:
+            out = out.view(out.shape[0], self.inp_channels, self.inp_channels)  # 36 --> 6 x 6
+            return out  # shape (B, C, C)
 
 
 class CouplingCondNet(nn.Module):

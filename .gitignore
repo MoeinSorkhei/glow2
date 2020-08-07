@@ -11,6 +11,7 @@ tmp/
 sample
 samples
 checkpoints
+scripts
 tmp/checkpoints
 src/evaluation/third_party/caffemodel/
 gt_eval_results/

@@ -184,7 +184,7 @@ class InvConv1x1LU(nn.Module):
         q, _ = la.qr(weight)
         w_p, w_l, w_u = la.lu(q.astype(np.float32))
 
-        w_s = np.diag(w_u)  # extract diagonal elements of U into diagonal S matrix
+        w_s = np.diag(w_u)  # extract diagonal elements of U into vector w_s
         w_u = np.triu(w_u, 1)  # set diagonal elements of U to 0
 
         u_mask = np.triu(np.ones_like(w_u), 1)
@@ -218,15 +218,9 @@ class InvConv1x1LU(nn.Module):
         return out, logdet
 
     def calc_weight(self):
-        # ablation: doing the following
-        # why torch.exp(self.w_s)?
-        # w_s is a matrix not a vector here?
-        # s_sign changes while s is optimized, but is assumed to be fixed by register buffer. Why?
-        # What is the role of mask and sign and eye matrices here?
-        # What are squeeze unsqueeze doing here?
         weight = (
             self.w_p
-            @ (self.w_l * self.l_mask + self.l_eye)
+            @ (self.w_l * self.l_mask + self.l_eye)  # explicitly make it lower-triangular with 1's on diagonal
             @ ((self.w_u * self.u_mask) + torch.diag(self.s_sign * torch.exp(self.w_s)))
         )
         return weight.unsqueeze(2).unsqueeze(3)

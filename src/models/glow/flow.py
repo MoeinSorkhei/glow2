@@ -99,8 +99,11 @@ class Flow(nn.Module):
         self.act_norm = ActNormConditional(cond_shape, inp_shape) \
             if self.actnorm_has_cond_net else ActNorm(in_channel=inp_shape[0])
 
-        self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0], mode='conditional', cond_shape=cond_shape, inp_shape=inp_shape) \
-            if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0])
+        if configs['do_lu']:
+            self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0], mode='conditional', cond_shape=cond_shape, inp_shape=inp_shape) \
+                if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0], mode='unconditional')
+        else:
+            self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape) if self.w_has_cond_net else InvConv1x1Unconditional(in_channel=inp_shape[0])
 
         self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
             if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)

@@ -134,7 +134,7 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
 def verify_invertibility(args, params):
     # imgs = [real_conds_abs_path[0]]  # one image for now
     # segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
-    segmentations, real_imgs, boundaries = [torch.rand((1, 3, 256, 256))] * 3
+    segmentations, real_imgs, boundaries = [torch.rand((1, 3, 256, 256)).to(device)] * 3
     model = init_model(args, params)
     x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs, b_map=boundaries)
     sanity_check(segmentations, real_imgs, x_a_rec, x_b_rec)
@@ -142,12 +142,19 @@ def verify_invertibility(args, params):
 
 def init_model_configs(args):
     assert 'improved' in args.model  # otherwise not implemented yet
-    left_configs = {'all_conditional': False, 'split_type': 'regular'}  # default
-    right_configs = {'all_conditional': True, 'split_type': 'regular', 'condition': 'left'}  # default condition from left glow
+    left_configs = {'all_conditional': False, 'split_type': 'regular', 'do_lu': False}  # default
+    right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left'}  # default condition from left glow
 
     if 'improved' in args.model:
-        left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
-        left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
+        if 'regular' in args.model:
+            left_configs['split_type'], right_configs['split_type'] = 'regular', 'regular'
+        else:
+            left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
+            left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
+
+        if args.do_lu:
+            left_configs['do_lu'] = True
+            right_configs['do_lu'] = True
 
         if args.use_bmaps:
             right_configs['condition'] = 'left + b_maps'

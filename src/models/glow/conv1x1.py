@@ -10,6 +10,7 @@ from .cond_net import WCondNet
 logabs = lambda x: torch.log(torch.abs(x))
 
 
+# non-LU unconditional
 class InvConv1x1Unconditional(nn.Module):
     def __init__(self, in_channel):
         super().__init__()
@@ -32,6 +33,7 @@ class InvConv1x1Unconditional(nn.Module):
         )
 
 
+# non-LU conditional
 class InvConv1x1Conditional(nn.Module):
     def __init__(self, cond_shape, inp_shape):
         super().__init__()
@@ -86,7 +88,7 @@ class InvConv1x1Conditional(nn.Module):
         return inp
 
 
-# InvConv1x1LU supports both conditional and unconditional
+# LU for both conditional and unconditional
 class InvConv1x1LU(nn.Module):
     def __init__(self, in_channel, mode='unconditional', cond_shape=None, inp_shape=None):
         super().__init__()

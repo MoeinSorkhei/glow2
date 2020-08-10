@@ -1,4 +1,5 @@
 from torch import optim
+import torch
 
 from .glow import *
 from .two_glows import TwoGlows
@@ -131,9 +132,9 @@ def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used 
 
 
 def verify_invertibility(args, params):
-    imgs = [real_conds_abs_path[0]]  # one image for now
-    segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
-
+    # imgs = [real_conds_abs_path[0]]  # one image for now
+    # segmentations, _, real_imgs, boundaries = data_handler.create_cond(params, fixed_conds=imgs, save_path=None)
+    segmentations, real_imgs, boundaries = [torch.rand((1, 3, 256, 256))] * 3
     model = init_model(args, params)
     x_a_rec, x_b_rec = model.reconstruct_all(x_a=segmentations, x_b=real_imgs, b_map=boundaries)
     sanity_check(segmentations, real_imgs, x_a_rec, x_b_rec)

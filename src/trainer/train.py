@@ -6,7 +6,13 @@ import helper
 from .loss import *
 
 
-def train(args, params, model, optimizer, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
+def init_train_configs(args):
+    train_configs = {'reg_factor': args.reg_factor}  # lambda
+    print(f'In [init_train_configs]: \ntrain_configs: {train_configs}\n')
+    return train_configs
+
+
+def train(args, params, train_configs, model, optimizer, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
     # getting data loaders
     train_loader, val_loader = data_handler.init_data_loaders(args, params)
 
@@ -28,12 +34,17 @@ def train(args, params, model, optimizer, comet_tracker=None, resume=False, last
             # forward pass
             img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
             forward_output = forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
-            loss = forward_output['loss']
-            metrics = {'loss': loss}
 
+            # regularize left loss
+            if train_configs['reg_factor'] is not None:
+                loss = train_configs['reg_factor'] * forward_output['loss_left'] + forward_output['loss_right']  # regularized
+            else:
+                loss = forward_output['loss']
+
+            metrics = {'loss': loss}
             # also add left and right loss if available
             if 'loss_left' in forward_output.keys():
-                metrics = {'loss_right': forward_output['loss_right'], 'loss_left': forward_output['loss_left']}
+                metrics.update({'loss_right': forward_output['loss_right'], 'loss_left': forward_output['loss_left']})
 
             # backward pass and optimizer step
             model.zero_grad()

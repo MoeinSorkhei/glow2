@@ -38,6 +38,7 @@ def read_params_and_args():
     parser.add_argument('--bsize', type=int)
     parser.add_argument('--lr', type=float)
     parser.add_argument('--temp', type=float)  # temperature
+    parser.add_argument('--reg_factor', type=float)
 
     # Note: left_lr is str since it is used only for finding the checkpoints path of the left glow
     parser.add_argument('--left_step', type=int)  # left glow optim_step (pretrained) in c_flow
@@ -173,20 +174,19 @@ def run_training(args, params):
         lr = params['lr']
         optimizer = optim.Adam(model.parameters(), lr=lr)
 
+        # train configs
+        train_configs = trainer.init_train_configs(args)
+
         # resume training
         if args.resume_train:
-            if args.dataset == 'mnist':
-                raise NotImplementedError('In [run_training]: consider the checkpoint path for MNIST...')
-
             optim_step = args.last_optim_step
             checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
             model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
-
-            trainer.train(args, params, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
+            trainer.train(args, params, train_configs, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
                           reverse_cond=reverse_cond)
         # train from scratch
         else:
-            trainer.train(args, params, model, optimizer, tracker, reverse_cond=reverse_cond)
+            trainer.train(args, params, train_configs, model, optimizer, tracker, reverse_cond=reverse_cond)
 
 
 def run_evaluation(args, params):

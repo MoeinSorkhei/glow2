@@ -20,6 +20,16 @@ def extract_conds(conditions, level, all_conditional):
     return act_cond, w_cond, coupling_cond
 
 
+def to_dict(module, output):
+    assert module == 'flow'
+    return {
+        'act_out': output[0],
+        'w_out': output[1],
+        'out': output[2],
+        'log_det': output[3]
+    }
+
+
 def unsqueeze_tensor(inp):
     b_size, n_channel, height, width = inp.shape
     unsqueezed = inp.view(b_size, n_channel // 4, 2, 2, height, width)

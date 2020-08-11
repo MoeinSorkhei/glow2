@@ -142,8 +142,8 @@ def verify_invertibility(args, params):
 
 def init_model_configs(args):
     assert 'improved' in args.model  # otherwise not implemented yet
-    left_configs = {'all_conditional': False, 'split_type': 'regular', 'do_lu': False}  # default
-    right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left'}  # default condition from left glow
+    left_configs = {'all_conditional': False, 'split_type': 'regular', 'do_lu': False, 'grad_checkpoint': False}  # default
+    right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left', 'grad_checkpoint': False}  # default condition from left glow
 
     if 'improved' in args.model:
         if 'regular' in args.model:
@@ -155,6 +155,10 @@ def init_model_configs(args):
         if args.do_lu:
             left_configs['do_lu'] = True
             right_configs['do_lu'] = True
+
+        if args.grad_checkpoint:
+            left_configs['grad_checkpoint'] = True
+            right_configs['grad_checkpoint'] = True
 
         if args.use_bmaps:
             right_configs['condition'] = 'left + b_maps'

@@ -108,18 +108,13 @@ class Flow(nn.Module):
         self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
             if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
 
-    def forward(self, inp, conditions):
-        actnorm_out, act_logdet = self.act_norm(inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm(inp)
-        w_out, w_logdet = self.inv_conv(actnorm_out, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv(actnorm_out)
-        out, coupling_logdet = self.coupling(w_out, cond=conditions['coupling_cond'])
+    def forward(self, inp, act_cond, w_cond, coupling_cond, dummy_tensor=None):
+        actnorm_out, act_logdet = self.act_norm(inp, act_cond) if self.actnorm_has_cond_net else self.act_norm(inp)
+        w_out, w_logdet = self.inv_conv(actnorm_out, w_cond) if self.w_has_cond_net else self.inv_conv(actnorm_out)
+        out, coupling_logdet = self.coupling(w_out, coupling_cond)
         log_det = act_logdet + w_logdet + coupling_logdet
 
-        return {
-            'act_out': actnorm_out,
-            'w_out': w_out,
-            'out': out,
-            'log_det': log_det
-        }
+        return actnorm_out, w_out, out, log_det
 
     def reverse(self, output, conditions):
         coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])

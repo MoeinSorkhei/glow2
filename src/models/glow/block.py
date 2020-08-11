@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from math import log, pi
 from torchvision import transforms
+from torch.utils import checkpoint
 import numpy as np
 
 from .flow import Flow, ZeroInitConv2d
@@ -32,6 +33,7 @@ class Block(nn.Module):
         self.all_conditional = configs['all_conditional']
         self.split_type = configs['split_type']
         self.split_sections = configs['split_sections'] if self.split_type == 'special' else None  # [3, 9]
+        self.configs = configs
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
@@ -76,10 +78,14 @@ class Block(nn.Module):
         total_log_det = 0
         for i, flow in enumerate(self.flows):
             act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
-            conds = make_cond_dict(act_cond, w_cond, coupling_cond)
 
-            flow_output = flow(out, conds)  # Flow forward
+            if self.configs['grad_checkpoint']:
+                dummy_tensor = torch.ones(out.shape, dtype=torch.float32, requires_grad=True)  # needed so the output requires grad
+                flow_output = checkpoint.checkpoint(flow, out, act_cond, w_cond, coupling_cond, dummy_tensor)
+            else:
+                flow_output = flow(out, act_cond, w_cond, coupling_cond)  # Flow forward
 
+            flow_output = to_dict('flow', flow_output)
             out, log_det = flow_output['out'], flow_output['log_det']
             total_log_det = total_log_det + log_det
 

@@ -96,11 +96,20 @@ class ActNormNoMemory(nn.Module):
 
 class ActNormFunction(torch.autograd.Function):
     @staticmethod
+    def forward_func(inp, loc, scale):
+        _, _, height, width = inp.shape  # input of shape [bsize, in_channel, h, w]
+        logdet = height * width * torch.sum(logabs(scale))
+        output = scale * (inp + loc)
+        return output, logdet
+
+    @staticmethod
+    def reverse_func(output, loc, scale):
+        return (output / scale) - loc
+
+    @staticmethod
     def forward(ctx, inp, loc, scale):
         with torch.no_grad():  # compute output without forming computational graph
-            _, _, height, width = inp.shape  # input of shape [bsize, in_channel, h, w]
-            logdet = height * width * torch.sum(logabs(scale))
-            output = scale * (inp + loc)
+            output, logdet = ActNormFunction.forward_func(inp, loc, scale)
             # TODO: delete the tensors
 
         ctx.save_for_backward(loc, scale)
@@ -113,14 +122,11 @@ class ActNormFunction(torch.autograd.Function):
         output = ctx.output
 
         with torch.no_grad():  # apply the inverse of the operation
-            reconstructed = (output / scale) - loc
+            reconstructed = ActNormFunction.reverse_func(output, loc, scale)
             reconstructed.requires_grad = True  # so we can compute grad for this
 
         with torch.enable_grad():  # creating computational graph and compute gradients
-            output = scale * (reconstructed + loc)
-            _, _, height, width = reconstructed.shape  # input of shape [bsize, in_channel, h, w]
-            logdet = height * width * torch.sum(logabs(scale))
-            output.retain_grad()
+            output, logdet = ActNormFunction.forward_func(reconstructed, loc, scale)
             # compute grad for loc
             grad_loc = grad(outputs=output, inputs=loc, grad_outputs=grad_output, retain_graph=True)[0]
             # compute grad for scale
@@ -130,5 +136,5 @@ class ActNormFunction(torch.autograd.Function):
             # compute grad for inp
             grad_inp = grad(outputs=output, inputs=reconstructed, grad_outputs=grad_output, retain_graph=True)[0]
 
-        # TODO: delete the tensors - are gradients effecient? (computation)
+        # TODO: delete the tensors - are gradients effecient? (computation) - retain_grad for output and logdet needed?
         return grad_inp, grad_loc, grad_scale

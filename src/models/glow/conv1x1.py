@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.autograd import grad
 import numpy as np
 from scipy import linalg as la
 
@@ -159,3 +160,52 @@ class InvConv1x1LU(nn.Module):
         for i_batch, batch_item in enumerate(output):
             batch_reversed.append(self.reverse(output[i_batch].unsqueeze(0), condition[i_batch].unsqueeze(0)))
         return torch.cat(batch_reversed)
+
+
+class WFunctional(torch.autograd.Function):
+    @staticmethod
+    def forward_func(inp, weight):
+        _, _, height, width = inp.shape
+        # compute output
+        out = F.conv2d(inp, weight)
+        # compute logdet
+        log_w = torch.slogdet(weight.squeeze().double())[1].float()
+        log_det = height * width * log_w
+        return out, log_det
+
+    @staticmethod
+    def reverse_func(output, weight):
+        return F.conv2d(output, weight.squeeze().inverse().unsqueeze(2).unsqueeze(3))
+
+    @staticmethod
+    def forward(ctx, inp, weight):
+        with torch.no_grad():
+            out, log_det = WFunctional.forward_func(inp, weight)
+        ctx.save_for_backward(weight)
+        ctx.output = out
+        # TODO: free mem
+        return out, log_det
+
+    @staticmethod
+    def backward(ctx, grad_out, grad_logdet):
+        weight, = ctx.saved_tensors
+        output = ctx.output
+
+        with torch.no_grad():
+            reconstructed = WFunctional.reverse_func(output, weight)
+            reconstructed.requires_grad = True
+            # TODO: free mem
+
+        with torch.enable_grad():
+            # re-create computational graph
+            output, logdet = WFunctional.forward_func(reconstructed, weight)
+            # TODO output.retain_grad() # what about logdet?
+            # TODO: free mem
+            # output.retain_grad()
+            # compute grad for weight
+            grad_w_out = grad(outputs=output, inputs=weight, grad_outputs=grad_out, retain_graph=True)[0]
+            grad_w_logdet = grad(outputs=logdet, inputs=weight, grad_outputs=grad_logdet, retain_graph=True)[0]
+            grad_weight = grad_w_out + grad_w_logdet
+            # compute grad for input
+            grad_inp = grad(outputs=output, inputs=reconstructed, grad_outputs=grad_out, retain_graph=True)[0]
+        return grad_inp, grad_weight

@@ -145,8 +145,7 @@ class CouplingFunction(torch.autograd.Function):
     @staticmethod
     def forward_func(x1, x2, fx1, gx1):
         y1 = x1
-        s = torch.exp(fx1)
-        # y2 = (s * x2) + gx1
+        s = torch.sigmoid(fx1 + 2)
         y2 = s * (x2 + gx1)
         logdet = torch.sum(torch.log(s).view(x1.shape[0], -1), 1)  # shape[0]: batch size
         return y1, y2, logdet
@@ -154,8 +153,7 @@ class CouplingFunction(torch.autograd.Function):
     @staticmethod
     def reverse_func(y1, y2, fx1, gx1):
         x1 = y1
-        s = torch.exp(fx1)
-        # x2 = (y2 - gx1) / s
+        s = torch.sigmoid(fx1 + 2)
         x2 = y2 / s - gx1
         return x1, x2
 
@@ -205,17 +203,16 @@ class CouplingFunction(torch.autograd.Function):
         with torch.no_grad():
             _, x2 = CouplingFunction.reverse_func(y1, y2, fx1, gx1)  # reconstruct input
             x2.requires_grad = True
-            exp_fx1 = torch.exp(fx1)
+            sig_fx1 = torch.sigmoid(fx1 + 2)
+            d_sig_fx1 = torch.sigmoid(fx1 + 2) * (1 - torch.sigmoid(fx1 + 2))  # derivative of sigmoid
 
         with torch.enable_grad():  # compute grads
             y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
-            # dg = dy2
             dg = x2 * dy2
-            df = (exp_fx1 * x2 * dy2) + grad_logdet
+            df = (d_sig_fx1 * x2 * dy2) + grad(outputs=logdet, inputs=fx1, grad_outputs=grad_logdet, retain_graph=True)[0]
             dx1 = dy1 + grad(outputs=gx1, inputs=x1, grad_outputs=dg, retain_graph=True)[0] \
                       + grad(outputs=fx1, inputs=x1, grad_outputs=df, retain_graph=True)[0]
-            # dx2 = exp_fx1 * dy2
-            dx2 = (exp_fx1 + gx1) * dy2
+            dx2 = (sig_fx1 + gx1) * dy2
             dwg = 0
             dwf = grad(outputs=fx1, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=df, retain_graph=True)
             grad_x = torch.cat([dx1, dx2], dim=1)

@@ -171,7 +171,7 @@ class InvConv1x1NoMemory(nn.Module):
         self.weight = nn.Parameter(w)  # the weight matrix
 
     def forward(self, inp):
-        return WFunctional.apply(inp, self.weight)
+        return WFunction.apply(inp, self.weight)
 
     def reverse(self, output):
         return F.conv2d(
@@ -179,7 +179,7 @@ class InvConv1x1NoMemory(nn.Module):
         )
 
 
-class WFunctional(torch.autograd.Function):
+class WFunction(torch.autograd.Function):
     @staticmethod
     def forward_func(inp, weight):
         _, _, height, width = inp.shape
@@ -195,7 +195,7 @@ class WFunctional(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inp, weight):
         with torch.no_grad():
-            out, log_det = WFunctional.forward_func(inp, weight)
+            out, log_det = WFunction.forward_func(inp, weight)
         ctx.save_for_backward(weight)
         ctx.output = out
         return out, log_det
@@ -206,11 +206,11 @@ class WFunctional(torch.autograd.Function):
         output = ctx.output
 
         with torch.no_grad():  # reconstruct input
-            reconstructed = WFunctional.reverse_func(output, weight)
+            reconstructed = WFunction.reverse_func(output, weight)
             reconstructed.requires_grad = True
 
         with torch.enable_grad():  # re-create computational graph
-            output, logdet = WFunctional.forward_func(reconstructed, weight)
+            output, logdet = WFunction.forward_func(reconstructed, weight)
             grad_w_out = grad(outputs=output, inputs=weight, grad_outputs=grad_out, retain_graph=True)[0]
             grad_w_logdet = grad(outputs=logdet, inputs=weight, grad_outputs=grad_logdet, retain_graph=True)[0]
             grad_weight = grad_w_out + grad_w_logdet

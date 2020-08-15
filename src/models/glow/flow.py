@@ -145,14 +145,16 @@ class CouplingFunction(torch.autograd.Function):
     @staticmethod
     def forward_func(x1, x2, fx1, gx1):
         y1 = x1
-        y2 = (torch.exp(fx1) * x2) + gx1
-        # logdet = torch.sum(torch.log(fx1).view(x1.shape[0], -1), 1)  # shape[0]: batch size
-        return y1, y2
+        s = torch.exp(fx1)
+        y2 = (s * x2) + gx1
+        logdet = torch.sum(torch.log(s).view(x1.shape[0], -1), 1)  # shape[0]: batch size
+        return y1, y2, logdet
 
     @staticmethod
     def reverse_func(y1, y2, fx1, gx1):
         x1 = y1
-        x2 = (y2 - gx1) / torch.exp(fx1)
+        s = torch.exp(fx1)
+        x2 = (y2 - gx1) / s
         return x1, x2
 
     @staticmethod
@@ -176,28 +178,25 @@ class CouplingFunction(torch.autograd.Function):
             x1, x2 = x.chunk(chunks=2, dim=1)
             fx1, _ = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
             gx1 = CouplingFunction.g(x1)  # zero
-            y1, y2 = CouplingFunction.forward_func(x1, x2, fx1, gx1)
+            y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)
             y = torch.cat(tensors=[y1, y2], dim=1)
 
         ctx.conv1_params = conv1_params
         ctx.conv2_params = conv2_params
         ctx.zero_conv_params = zero_conv_params
         ctx.output = y
-        return y
+        return y, logdet
 
     @staticmethod
-    def backward(ctx, grad_y):
+    def backward(ctx, grad_y, grad_logdet):
         y = ctx.output
         conv1_params, conv2_params, zero_conv_params = ctx.conv1_params, ctx.conv2_params, ctx.zero_conv_params
-
-        # with torch.no_grad():
         y1, y2 = y.chunk(chunks=2, dim=1)
         dy1, dy2 = grad_y.chunk(chunks=2, dim=1)
 
         with torch.enable_grad():
             x1 = y1
             x1.requires_grad = True
-            # fx1, gx1 = CouplingFunction.f(x1), CouplingFunction.g(x1)
             fx1, _ = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
             gx1 = CouplingFunction.g(x1)  # zero
 
@@ -206,20 +205,16 @@ class CouplingFunction(torch.autograd.Function):
             x2.requires_grad = True
             exp_fx1 = torch.exp(fx1)
 
-        with torch.enable_grad():
-            y1, y2 = CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
-            # compute grads
+        with torch.enable_grad():  # compute grads
+            y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
             dg = dy2
-            # df = (exp_fx1 * x2 * dy2) + 1
-            df = (exp_fx1 * x2 * dy2)
-
+            df = (exp_fx1 * x2 * dy2) + grad_logdet
             dx1 = dy1 + grad(outputs=gx1, inputs=x1, grad_outputs=dg, retain_graph=True)[0] \
                       + grad(outputs=fx1, inputs=x1, grad_outputs=df, retain_graph=True)[0]
             dx2 = exp_fx1 * dy2
             dwg = 0
             dwf = grad(outputs=fx1, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=df, retain_graph=True)
             grad_x = torch.cat([dx1, dx2], dim=1)
-        # return tuple([None] * 8)
         grad_params = dwf
         return (grad_x,) + grad_params  # append to tuple
 

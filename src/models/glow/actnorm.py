@@ -73,7 +73,6 @@ class ActNormNoMemory(nn.Module):
         self.loc = nn.Parameter(torch.zeros(1, in_channel, 1, 1))  # this operation is done channel-wise
         self.scale = nn.Parameter(torch.ones(1, in_channel, 1, 1))  # loc, scale: vectors applied to all channels
         self.register_buffer('initialized', torch.tensor(0, dtype=torch.uint8))
-        self.activations = []
 
     def initialize(self, inp):
         mean, std = compute_batch_stats(inp)
@@ -86,9 +85,8 @@ class ActNormNoMemory(nn.Module):
         if self.initialized.item() == 0:  # to be initialized the first time
             self.initialize(inp)
             self.initialized.fill_(1)
-
         # forward without storing activations
-        return ActNormFunction.apply(inp, self.loc, self.scale, self.activations)
+        return ActNormFunction.apply(inp, self.loc, self.scale)
 
     def reverse(self, out):
         return (out / self.scale) - self.loc
@@ -110,7 +108,6 @@ class ActNormFunction(torch.autograd.Function):
     def forward(ctx, inp, loc, scale):
         with torch.no_grad():  # compute output without forming computational graph
             output, logdet = ActNormFunction.forward_func(inp, loc, scale)
-            # TODO: delete the tensors
 
         ctx.save_for_backward(loc, scale)
         ctx.output = output
@@ -135,6 +132,4 @@ class ActNormFunction(torch.autograd.Function):
             grad_scale = grad_scale_output + grad_scale_logdet
             # compute grad for inp
             grad_inp = grad(outputs=output, inputs=reconstructed, grad_outputs=grad_output, retain_graph=True)[0]
-
-        # TODO: delete the tensors - are gradients effecient? (computation) - retain_grad for output and logdet needed?
         return grad_inp, grad_loc, grad_scale

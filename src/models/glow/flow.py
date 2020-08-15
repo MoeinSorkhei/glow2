@@ -124,7 +124,6 @@ class AffineCouplingNoMemory(nn.Module):
         input()
 
     def forward(self, inp):
-        # self.print_params()
         return CouplingFunction.apply(inp, *self._parameters.values())
 
 

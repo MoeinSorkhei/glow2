@@ -133,9 +133,9 @@ class CouplingFunction(torch.autograd.Function):
     def perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params):
         # sequential net operations
         out = F.conv2d(x1, weight=conv1_params[0], bias=conv1_params[1], padding=1)
-        out = F.relu(out, inplace=True)
+        out = F.relu(out, inplace=False)
         out = F.conv2d(out, weight=conv2_params[0], bias=conv2_params[1])
-        out = F.relu(out, inplace=True)
+        out = F.relu(out, inplace=False)
         # zero init conv
         out = F.pad(out, pad=[1, 1, 1, 1], value=1)
         out = F.conv2d(out, weight=zero_conv_params[0], bias=zero_conv_params[1])
@@ -147,14 +147,14 @@ class CouplingFunction(torch.autograd.Function):
         y1 = x1
         s = torch.sigmoid(fx1 + 2)
         y2 = s * (x2 + gx1)
-        logdet = torch.sum(torch.log(s).view(x1.shape[0], -1), 1)  # shape[0]: batch size
-        return y1, y2, logdet
+        # logdet = torch.sum(torch.log(s).view(x1.shape[0], -1), 1)  # shape[0]: batch size
+        return y1, y2
 
     @staticmethod
     def reverse_func(y1, y2, fx1, gx1):
         x1 = y1
         s = torch.sigmoid(fx1 + 2)
-        x2 = y2 / s - gx1
+        x2 = (y2 / s) - gx1
         return x1, x2
 
     @staticmethod
@@ -176,19 +176,19 @@ class CouplingFunction(torch.autograd.Function):
 
         with torch.no_grad():
             x1, x2 = x.chunk(chunks=2, dim=1)
-            fx1, _ = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
-            gx1 = CouplingFunction.g(x1)  # zero
-            y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)
+            fx1, gx1 = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
+            y1, y2 = CouplingFunction.forward_func(x1, x2, fx1, gx1)
             y = torch.cat(tensors=[y1, y2], dim=1)
 
         ctx.conv1_params = conv1_params
         ctx.conv2_params = conv2_params
         ctx.zero_conv_params = zero_conv_params
         ctx.output = y
-        return y, logdet
+        # return y, logdet
+        return y
 
     @staticmethod
-    def backward(ctx, grad_y, grad_logdet):
+    def backward(ctx, grad_y):
         y = ctx.output
         conv1_params, conv2_params, zero_conv_params = ctx.conv1_params, ctx.conv2_params, ctx.zero_conv_params
         y1, y2 = y.chunk(chunks=2, dim=1)
@@ -197,8 +197,8 @@ class CouplingFunction(torch.autograd.Function):
         with torch.enable_grad():
             x1 = y1
             x1.requires_grad = True
-            fx1, _ = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
-            gx1 = CouplingFunction.g(x1)  # zero
+            fgx1 = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params)
+            fx1, gx1 = fgx1.chunk(chunks=2, dim=1)
 
         with torch.no_grad():
             _, x2 = CouplingFunction.reverse_func(y1, y2, fx1, gx1)  # reconstruct input
@@ -207,16 +207,17 @@ class CouplingFunction(torch.autograd.Function):
             d_sig_fx1 = torch.sigmoid(fx1 + 2) * (1 - torch.sigmoid(fx1 + 2))  # derivative of sigmoid
 
         with torch.enable_grad():  # compute grads
-            y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
-            dg = x2 * dy2
-            df = (d_sig_fx1 * x2 * dy2) + grad(outputs=logdet, inputs=fx1, grad_outputs=grad_logdet, retain_graph=True)[0]
-            dx1 = dy1 + grad(outputs=gx1, inputs=x1, grad_outputs=dg, retain_graph=True)[0] \
-                      + grad(outputs=fx1, inputs=x1, grad_outputs=df, retain_graph=True)[0]
-            dx2 = (sig_fx1 + gx1) * dy2
-            dwg = 0
-            dwf = grad(outputs=fx1, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=df, retain_graph=True)
+            y1, y2 = CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
+            dg = sig_fx1 * dy2
+            dx2 = sig_fx1 * dy2
+            df = d_sig_fx1 * (x2 + gx1) * dy2
+
+            dfg = torch.cat([df, dg], dim=1)
+            dx1 = dy1 + grad(outputs=fgx1, inputs=x1, grad_outputs=dfg, retain_graph=True)[0]
+            dwfg = grad(outputs=fgx1, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=dfg, retain_graph=True)
+            # final gradients
             grad_x = torch.cat([dx1, dx2], dim=1)
-        grad_params = dwf
+            grad_params = dwfg
         return (grad_x,) + grad_params  # append to tuple
 
 

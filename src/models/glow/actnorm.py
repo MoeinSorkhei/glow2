@@ -69,7 +69,6 @@ class ActNorm(nn.Module):
 class ActNormNoMemory(nn.Module):
     def __init__(self, in_channel):
         super().__init__()
-
         self.loc = nn.Parameter(torch.zeros(1, in_channel, 1, 1))  # this operation is done channel-wise
         self.scale = nn.Parameter(torch.ones(1, in_channel, 1, 1))  # loc, scale: vectors applied to all channels
         self.register_buffer('initialized', torch.tensor(0, dtype=torch.uint8))

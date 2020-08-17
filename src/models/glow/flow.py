@@ -1,12 +1,12 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.autograd import grad
+from torch.autograd import grad, gradcheck
 
 from helper import label_to_tensor
-from .actnorm import ActNorm, ActNormConditional
-from .conv1x1 import InvConv1x1Unconditional, InvConv1x1LU, InvConv1x1Conditional, InvConv1x1LU
-# from ..cond_net import CouplingCondNet
+from collections import OrderedDict
+from .actnorm import *
+from .conv1x1 import *
 from .cond_net import CouplingCondNet
 from globals import device
 
@@ -87,6 +87,43 @@ class AffineCoupling(nn.Module):
         return torch.cat(tensors=[out_a, inp_b], dim=1)
 
 
+class Flow(nn.Module):
+    """
+    The Flow module does not change the dimensionality of its input.
+    """
+    def __init__(self, inp_shape, cond_shape, configs):
+        super().__init__()
+        # now the output of cond nets has the same dimensions as inp_shape
+        self.actnorm_has_cond_net, self.w_has_cond_net, \
+            self.coupling_has_cond_net = [True, True, True] if configs['all_conditional'] else [False, False, False]
+
+        self.act_norm = ActNormConditional(cond_shape, inp_shape) \
+            if self.actnorm_has_cond_net else ActNorm(in_channel=inp_shape[0])
+
+        if configs['do_lu']:
+            self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0], mode='conditional', cond_shape=cond_shape, inp_shape=inp_shape) \
+                if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0], mode='unconditional')
+        else:
+            self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape) if self.w_has_cond_net else InvConv1x1Unconditional(in_channel=inp_shape[0])
+
+        self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
+            if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
+
+    def forward(self, inp, act_cond, w_cond, coupling_cond, dummy_tensor=None):
+        actnorm_out, act_logdet = self.act_norm(inp, act_cond) if self.actnorm_has_cond_net else self.act_norm(inp)
+        w_out, w_logdet = self.inv_conv(actnorm_out, w_cond) if self.w_has_cond_net else self.inv_conv(actnorm_out)
+        out, coupling_logdet = self.coupling(w_out, coupling_cond)
+        log_det = act_logdet + w_logdet + coupling_logdet
+
+        return actnorm_out, w_out, out, log_det
+
+    def reverse(self, output, conditions):
+        coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
+        w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv.reverse(coupling_inp)
+        inp = self.act_norm.reverse(w_inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm.reverse(w_inp)
+        return inp
+
+
 class AffineCouplingNoMemory(nn.Module):
     def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
         super().__init__()
@@ -125,6 +162,49 @@ class AffineCouplingNoMemory(nn.Module):
 
     def forward(self, inp):
         return CouplingFunction.apply(inp, *self._parameters.values())
+
+
+class FlowNoMemory(nn.Module):
+    def __init__(self, inp_shape, cond_shape, n_filters, configs):
+        super().__init__()
+        self.act_norm = ActNormNoMemory(in_channel=inp_shape[0])
+        self.inv_conv = InvConv1x1NoMemory(in_channel=inp_shape[0])
+        self.coupling = AffineCouplingNoMemory(cond_shape=cond_shape, inp_shape=inp_shape, n_filters=n_filters, use_cond_net=False)
+
+    def get_params(self):
+        all_params = OrderedDict(
+            list(self.act_norm._parameters.items()) +
+            list(self.inv_conv._parameters.items()) +
+            list(self.coupling._parameters.items())).values()
+        return all_params
+
+    @staticmethod
+    def explicit_forward(inp, *params):
+        actnorm_out, act_logdet = ActNormFunction.apply(inp, *params[:2])
+        w_out, w_logdet = WFunction.apply(actnorm_out, params[2])
+        coupling_out, coupling_logdet = CouplingFunction.apply(w_out, *params[3:])
+        log_det = act_logdet + w_logdet + coupling_logdet
+        return actnorm_out, w_out, coupling_out, log_det
+
+    def check_grad(self, inp, only_input):
+        # this checks grads with respect to only the input (which can indicate that other grads are also correct)
+        if only_input:
+            result = gradcheck(func=self.forward, inputs=inp, eps=1e-6)
+        # this explicitly checks the grads with respect to both the input and all the params of the module
+        else:
+            params = tuple(self.get_params())
+            result = gradcheck(func=self.explicit_forward, inputs=(inp, *params), eps=1e-6)
+        return result
+
+    def forward(self, inp):
+        actnorm_out, act_logdet = self.act_norm(inp)
+        w_out, w_logdet = self.inv_conv(actnorm_out)
+        coupling_out, coupling_logdet = self.coupling(w_out)
+        log_det = act_logdet + w_logdet + coupling_logdet
+        return actnorm_out, w_out, coupling_out, log_det
+
+    def reverse(self):
+        pass
 
 
 class CouplingFunction(torch.autograd.Function):
@@ -211,40 +291,3 @@ class CouplingFunction(torch.autograd.Function):
             grad_x = torch.cat([dx1, dx2], dim=1)
             grad_params = dwfg
         return (grad_x,) + grad_params  # append to tuple
-
-
-class Flow(nn.Module):
-    """
-    The Flow module does not change the dimensionality of its input.
-    """
-    def __init__(self, inp_shape, cond_shape, configs):
-        super().__init__()
-        # now the output of cond nets has the same dimensions as inp_shape
-        self.actnorm_has_cond_net, self.w_has_cond_net, \
-            self.coupling_has_cond_net = [True, True, True] if configs['all_conditional'] else [False, False, False]
-
-        self.act_norm = ActNormConditional(cond_shape, inp_shape) \
-            if self.actnorm_has_cond_net else ActNorm(in_channel=inp_shape[0])
-
-        if configs['do_lu']:
-            self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0], mode='conditional', cond_shape=cond_shape, inp_shape=inp_shape) \
-                if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0], mode='unconditional')
-        else:
-            self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape) if self.w_has_cond_net else InvConv1x1Unconditional(in_channel=inp_shape[0])
-
-        self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
-            if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
-
-    def forward(self, inp, act_cond, w_cond, coupling_cond, dummy_tensor=None):
-        actnorm_out, act_logdet = self.act_norm(inp, act_cond) if self.actnorm_has_cond_net else self.act_norm(inp)
-        w_out, w_logdet = self.inv_conv(actnorm_out, w_cond) if self.w_has_cond_net else self.inv_conv(actnorm_out)
-        out, coupling_logdet = self.coupling(w_out, coupling_cond)
-        log_det = act_logdet + w_logdet + coupling_logdet
-
-        return actnorm_out, w_out, out, log_det
-
-    def reverse(self, output, conditions):
-        coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
-        w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv.reverse(coupling_inp)
-        inp = self.act_norm.reverse(w_inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm.reverse(w_inp)
-        return inp

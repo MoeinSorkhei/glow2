@@ -25,6 +25,12 @@ class ZeroInitConv2d(nn.Module):
         self.conv.bias.data.zero_()
         self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
 
+    def get_params(self):
+        return OrderedDict(
+            list(self.conv._parameters.items()) +
+            list(self._parameters.items())  # this only gives the scale param since only scale is defined as nn.Parameter
+        )
+
     def forward(self, inp):
         # padding with additional 1 in each side to keep the spatial dimension unchanged after the convolution operation
         out = F.pad(input=inp, pad=[1, 1, 1, 1], value=1)
@@ -175,7 +181,7 @@ class FlowNoMemory(nn.Module):
         all_params = OrderedDict(
             list(self.act_norm._parameters.items()) +
             list(self.inv_conv._parameters.items()) +
-            list(self.coupling._parameters.items())).values()
+            list(self.coupling._parameters.items()))
         return all_params
 
     @staticmethod
@@ -192,7 +198,7 @@ class FlowNoMemory(nn.Module):
             result = gradcheck(func=self.forward, inputs=inp, eps=1e-6)
         # this explicitly checks the grads with respect to both the input and all the params of the module
         else:
-            params = tuple(self.get_params())
+            params = tuple(self.get_params().values())
             result = gradcheck(func=self.explicit_forward, inputs=(inp, *params), eps=1e-6)
         return result
 

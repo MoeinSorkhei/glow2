@@ -23,24 +23,6 @@ def compute_batch_stats(inp):
         return mean, std
 
 
-class ZeroInitConv2d(nn.Module):  # no usage at the moment
-    """
-    This is a modified version of ZeroInitConv2d in glow.py.
-    """
-    def __init__(self, in_channel, out_channel, kernel_size=3, stride=1):
-        super().__init__()
-
-        self.conv = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=kernel_size, stride=stride)
-        self.conv.weight.data.zero_()
-        self.conv.bias.data.zero_()
-        self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
-
-    def forward(self, inp):
-        out = self.conv(inp)
-        out = out * torch.exp(self.scale * 3)
-        return out
-
-
 class ZeroWeightLinear(nn.Module):
     def __init__(self, in_features, out_features, bias_mode='zero'):
         super().__init__()

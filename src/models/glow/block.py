@@ -169,7 +169,7 @@ class BlockNoMemory(nn.Module):
 
         self.do_split = do_split
         # self.all_conditional = configs['all_conditional']
-        # self.split_type = configs['split_type']
+        self.split_type = configs['split_type']
         # self.split_sections = configs['split_sections'] if self.split_type == 'special' else None  # [3, 9]
         # self.configs = configs
 
@@ -231,11 +231,13 @@ class BlockNoMemory(nn.Module):
         # squeeze operation
         out = squeeze_tensor(inp)
         total_log_det = 0
+
         # pass through Flows
         for i, flow in enumerate(self.flows):
             flow_params = params[i * n_flow_params:(i + 1) * n_flow_params]  # current flow params
             _, _, out, log_det = FlowNoMemory.explicit_forward(out, *flow_params)
             total_log_det = total_log_det + log_det
+
         # splitting operation
         out, z_new, log_p = self.possibly_split(out)
         return out, total_log_det, log_p, z_new

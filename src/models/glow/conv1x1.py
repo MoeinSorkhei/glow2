@@ -165,7 +165,7 @@ class InvConv1x1LU(nn.Module):
 class InvConv1x1LUNoMemory(nn.Module):
     def __init__(self, in_channel, mode='unconditional', cond_shape=None, inp_shape=None, input_dtype=torch.float32):
         super().__init__()
-        assert len(inp_shape) == 3 and len(cond_shape) == 3, 'Cond shape and inp shape should have len 3 of form: (C, H, W)'
+        assert cond_shape is None or (len(inp_shape) == 3 and len(cond_shape) == 3), 'Cond shape and inp shape should have len 3 of form: (C, H, W)'
         self.mode = mode
 
         # initialize with LU decomposition
@@ -190,23 +190,23 @@ class InvConv1x1LUNoMemory(nn.Module):
         self.register_buffer('l_mask', torch.from_numpy(l_mask))
         self.register_buffer('s_sign', torch.sign(w_s))
         self.register_buffer('l_eye', torch.eye(l_mask.shape[0]))
+        self.buffers = (self.w_p, self.u_mask, self.l_mask, self.s_sign, self.l_eye)
 
         if self.mode == 'conditional':
             matrices_flattened = torch.cat([torch.flatten(w_l), torch.flatten(w_u), logabs(w_s)])
             self.cond_net = WCondNet(cond_shape, inp_shape, do_lu=True, initial_bias=matrices_flattened)
             self.params = self.cond_net.conv_net.get_params() + self.cond_net.linear_net.get_params()
-            self.buffers = (self.w_p, self.u_mask, self.l_mask, self.s_sign, self.l_eye)
         else:
             # learnable parameters
             self.w_l = nn.Parameter(w_l)
             self.w_u = nn.Parameter(w_u)
             self.w_s = nn.Parameter(logabs(w_s))
+            self.params = (self.w_l, self.w_u, self.w_s)
 
-    def forward(self, inp, condition):
-        assert self.mode == 'conditional'
+    def forward(self, inp, condition=None):
         WConditionalLUFunction.apply(inp, condition, self.buffers, *self.params)
 
-    def check_grad(self, inp, condition):
+    def check_grad(self, inp, condition=None):
         return gradcheck(func=WConditionalLUFunction.apply, inputs=(inp, condition, self.buffers, *self.params), eps=1e-6)
 
 
@@ -223,30 +223,47 @@ class WConditionalLUFunction(torch.autograd.Function):
         return F.conv2d(output, weight.squeeze().inverse().unsqueeze(2).unsqueeze(3))
 
     @staticmethod
+    def calc_weight(l_matrix, u_matrix, s_vector, buffers):
+        w_p, u_mask, l_mask, s_sign, l_eye = buffers
+        weight = (
+                w_p
+                @ (l_matrix * l_mask + l_eye)  # explicitly make it lower-triangular with 1's on diagonal
+                @ ((u_matrix * u_mask) + torch.diag(s_sign * torch.exp(s_vector.squeeze(0))))  # s_vector of shape (1, C)
+        )
+        return weight.unsqueeze(2).unsqueeze(3)
+
+    @staticmethod
     def apply_cond_net(inp_channels, cond_inp, buffers, *params):
         out = apply_cond_net_generic(cond_inp, *params)
 
         # get LU and S out of the cond output
         channels_sqrt = inp_channels ** 2
-        w_l_flattened = out[:, :channels_sqrt]  # keep the batch dimension in order to compute gradients correctly
-        w_u_flattened = out[:, channels_sqrt:channels_sqrt * 2]
+        w_l_flattened = out[:, :channels_sqrt]  # important: keep the batch dimension in order to compute gradients correctly
+        w_u_flattened = out[:, channels_sqrt:channels_sqrt * 2]  # shape (1, channels_sqrt) for batch size 1
         s_vector = out[:, channels_sqrt * 2:]
 
         matrix_shape = (inp_channels, inp_channels)
         l_matrix = torch.reshape(w_l_flattened.squeeze(0), matrix_shape)  # 2d tensor
         u_matrix = torch.reshape(w_u_flattened.squeeze(0), matrix_shape)
-        w_p, u_mask, l_mask, s_sign, l_eye = buffers
-
-        weight = (
-                w_p
-                @ (l_matrix * l_mask + l_eye)  # explicitly make it lower-triangular with 1's on diagonal
-                @ ((u_matrix * u_mask) + torch.diag(s_sign * torch.exp(s_vector.squeeze(0))))
-        )
-        return weight.unsqueeze(2).unsqueeze(3), out, w_l_flattened, w_u_flattened, s_vector
+        weight = WConditionalLUFunction.calc_weight(l_matrix, u_matrix, s_vector, buffers)
+        # w_p, u_mask, l_mask, s_sign, l_eye = buffers
+        #
+        # weight = (
+        #         w_p
+        #         @ (l_matrix * l_mask + l_eye)  # explicitly make it lower-triangular with 1's on diagonal
+        #         @ ((u_matrix * u_mask) + torch.diag(s_sign * torch.exp(s_vector.squeeze(0))))
+        # )
+        # return weight.unsqueeze(2).unsqueeze(3), out, w_l_flattened, w_u_flattened, s_vector
+        return weight, out, w_l_flattened, w_u_flattened, s_vector
 
     @staticmethod
     def forward(ctx, inp, cond_inp, buffers, *params):
-        weight, _, _, _, s_vector = WConditionalLUFunction.apply_cond_net(inp.shape[1], cond_inp, buffers, *params)
+        if cond_inp is not None:  # conditional case - in this case s_vector has shape (1, C)
+            weight, _, _, _, s_vector = WConditionalLUFunction.apply_cond_net(inp.shape[1], cond_inp, buffers, *params)
+        else:
+            l_matrix, u_matrix, s_vector = params  # in this case l_matrix, u_matrix have shape: (C, C) and s_vector has shape (C) and
+            weight = WConditionalLUFunction.calc_weight(l_matrix, u_matrix, s_vector.unsqueeze(0), buffers)
+
         output, logdet = WConditionalLUFunction.forward_func(inp, weight, s_vector)
 
         # save items for backward
@@ -266,8 +283,12 @@ class WConditionalLUFunction(torch.autograd.Function):
         inp_channels = ctx.inp_channels
 
         with torch.enable_grad():
-            weight, cond_net_out, w_l_flattened, w_u_flattened, s_vector = \
-                WConditionalLUFunction.apply_cond_net(inp_channels, cond_inp, buffers, *params)
+            if cond_inp is not None:  # conditional case
+                weight, cond_net_out, w_l_flattened, w_u_flattened, s_vector = \
+                    WConditionalLUFunction.apply_cond_net(inp_channels, cond_inp, buffers, *params)
+            else:  # unconditional case
+                l_matrix, u_matrix, s_vector = params
+                weight = WConditionalLUFunction.calc_weight(l_matrix, u_matrix, s_vector.unsqueeze(0), buffers)
 
         with torch.no_grad():
             reconstructed = WConditionalLUFunction.reverse_func(output, weight)
@@ -277,16 +298,24 @@ class WConditionalLUFunction(torch.autograd.Function):
             output, logdet = WConditionalLUFunction.forward_func(reconstructed, weight, s_vector)
             grad_inp = grad(outputs=output, inputs=reconstructed, grad_outputs=grad_output, retain_graph=True)[0]
 
-            # compute intermediary grad for cond net out
-            grad_wl_flattened = grad(outputs=output, inputs=w_l_flattened, grad_outputs=grad_output, retain_graph=True)[0]
-            grad_wu_flattened = grad(outputs=output, inputs=w_u_flattened, grad_outputs=grad_output, retain_graph=True)[0]
-            grad_s_vector = grad(outputs=output, inputs=s_vector, grad_outputs=grad_output, retain_graph=True)[0] + \
-                            grad(outputs=logdet, inputs=s_vector, grad_outputs=grad_logdet, retain_graph=True)[0]
-            grad_cond_out = torch.cat([grad_wl_flattened, grad_wu_flattened, grad_s_vector], dim=1)
+            if cond_inp is not None:  # conditional case, ie with cond net
+                # compute intermediary grad for cond net out
+                grad_wl_flattened = grad(outputs=output, inputs=w_l_flattened, grad_outputs=grad_output, retain_graph=True)[0]
+                grad_wu_flattened = grad(outputs=output, inputs=w_u_flattened, grad_outputs=grad_output, retain_graph=True)[0]
+                grad_s_vector = grad(outputs=output, inputs=s_vector, grad_outputs=grad_output, retain_graph=True)[0] + \
+                                grad(outputs=logdet, inputs=s_vector, grad_outputs=grad_logdet, retain_graph=True)[0]
+                grad_cond_out = torch.cat([grad_wl_flattened, grad_wu_flattened, grad_s_vector], dim=1)
+                # grad wrt condition and params
+                grad_cond_inp = grad(outputs=cond_net_out, inputs=cond_inp, grad_outputs=grad_cond_out, retain_graph=True)[0]
+                grad_params = grad(outputs=cond_net_out, inputs=params, grad_outputs=grad_cond_out, retain_graph=True)
 
-            # grad wrt condition and params
-            grad_cond_inp = grad(outputs=cond_net_out, inputs=cond_inp, grad_outputs=grad_cond_out, retain_graph=True)[0]
-            grad_params = grad(outputs=cond_net_out, inputs=params, grad_outputs=grad_cond_out, retain_graph=True)
+            else:  # unconditional case
+                grad_cond_inp = None
+                grad_l_matrix = grad(outputs=output, inputs=l_matrix, grad_outputs=grad_output, retain_graph=True)[0]
+                grad_u_matrix = grad(outputs=output, inputs=u_matrix, grad_outputs=grad_output, retain_graph=True)[0]
+                grad_s_vector = grad(outputs=output, inputs=s_vector, grad_outputs=grad_output, retain_graph=True)[0] + \
+                                grad(outputs=logdet, inputs=s_vector, grad_outputs=grad_logdet, retain_graph=True)[0]
+                grad_params = (grad_l_matrix, grad_u_matrix, grad_s_vector)
         return (grad_inp, grad_cond_inp, None) + grad_params  # concat tuples
 
 

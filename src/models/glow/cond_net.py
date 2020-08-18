@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+from torch.nn import functional as F
 
 
 def compute_batch_stats(inp):
@@ -84,7 +85,7 @@ class ConvNet(nn.Module):
         final_conv_channels = 2
         self.conv_net_out_shape = final_conv_channels * conv_net_out_h * conv_net_out_w
 
-        self.conv_net = nn.Sequential(
+        self.net = nn.Sequential(
             nn.Conv2d(in_channels=inp_channels, out_channels=down_sampling_channels, kernel_size=1, stride=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=down_sampling_channels, out_channels=4, kernel_size=3, stride=conv_stride),
@@ -96,8 +97,14 @@ class ConvNet(nn.Module):
     def output_shape(self):
         return self.conv_net_out_shape
 
+    def get_params(self):
+        params = ()
+        for i in range(len(self.net)):
+            params += tuple(self.net[i]._parameters.values())
+        return params
+
     def forward(self, inp):
-        return self.conv_net(inp)
+        return self.net(inp)
 
 
 class LinearNet(nn.Module):
@@ -115,13 +122,8 @@ class LinearNet(nn.Module):
         else:
             raise NotImplementedError('Condition not implemented')
 
-        # init last layer
-        if condition == 'coupling':  # random init of last layer
-            last_layer = nn.Linear(in_features=48, out_features=self.out_features)
-        else:
-            last_layer = ZeroWeightLinear(in_features=48, out_features=self.out_features, bias_mode=self.bias_mode)
-
-        self.linear_net = nn.Sequential(
+        last_layer = ZeroWeightLinear(in_features=48, out_features=self.out_features, bias_mode=self.bias_mode)
+        self.net = nn.Sequential(
             nn.Linear(in_features=in_features, out_features=32),
             nn.ReLU(inplace=True),
             nn.Linear(in_features=32, out_features=64),
@@ -135,16 +137,23 @@ class LinearNet(nn.Module):
         batch_mean, batch_std = compute_batch_stats(data_batch)
         batch_mean, batch_std = torch.flatten(batch_mean), torch.flatten(batch_std)
 
-        self.linear_net[-1].linear.bias.data[:self.out_features // 2].copy_(1 / (batch_std + 1e-6))  # scale of actnorm
-        self.linear_net[-1].linear.bias.data[self.out_features // 2:].copy_(-batch_mean)  # shift of actnorm
-        self.linear_net[-1].initialized.fill_(1)
+        self.net[-1].linear.bias.data[:self.out_features // 2].copy_(1 / (batch_std + 1e-6))  # scale of actnorm
+        self.net[-1].linear.bias.data[self.out_features // 2:].copy_(-batch_mean)  # shift of actnorm
+        self.net[-1].initialized.fill_(1)
+
+    def get_params(self):
+        params = ()
+        for i in range(len(self.net) - 1):  # except for the last layer which should be delth with individually
+            params += tuple(self.net[i]._parameters.values())
+        params += tuple(self.net[-1].linear._parameters.values())  # params of the last layer
+        return params
 
     def forward(self, conv_out, data_batch=None):
         # if 'data_zero' ==> data-dependent initialization of last linear layer
-        if self.bias_mode == 'data_zero' and self.linear_net[-1].initialized.item() == 0:
+        if self.bias_mode == 'data_zero' and self.net[-1].initialized.item() == 0:
             self.init_data_zero_bias(data_batch)
 
-        return self.linear_net(conv_out)
+        return self.net(conv_out)
 
 
 class ActCondNet(nn.Module):
@@ -189,7 +198,7 @@ class WCondNet(nn.Module):
             self.linear_net = LinearNet(in_features=conv_out_flat_length,
                                         out_features=linear_out_features,
                                         condition='w - LU')
-            self.linear_net.linear_net[-1].linear.bias.data.copy_(initial_bias)  # init with flattened LU and s elements
+            self.linear_net.net[-1].linear.bias.data.copy_(initial_bias)  # init with flattened LU and s elements
         else:
             self.linear_net = LinearNet(in_features=conv_out_flat_length,
                                         out_features=self.inp_channels ** 2,
@@ -245,3 +254,30 @@ class CouplingCondNet(nn.Module):
         conv_out = self.conv_net(cond_input)
         return conv_out
 
+
+def apply_cond_net_generic(cond_inp, *params):
+    # extract params
+    conv1_params = params[:2]
+    conv2_params = params[2:4]
+    conv3_params = params[4:6]
+    linear1_params = params[6:8]
+    linear2_params = params[8:10]
+    linear3_params = params[10:12]
+    linear4_params = params[12:]
+    # conv layers
+    cond_out = F.conv2d(cond_inp, weight=conv1_params[0], bias=conv1_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    cond_out = F.conv2d(cond_out, weight=conv2_params[0], bias=conv2_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    cond_out = F.conv2d(cond_out, weight=conv3_params[0], bias=conv3_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    # linear layers
+    cond_out = cond_out.view(cond_out.shape[0], -1)
+    cond_out = F.linear(cond_out, weight=linear1_params[0], bias=linear1_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    cond_out = F.linear(cond_out, weight=linear2_params[0], bias=linear2_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    cond_out = F.linear(cond_out, weight=linear3_params[0], bias=linear3_params[1])
+    cond_out = F.relu(cond_out, inplace=False)
+    cond_out = F.linear(cond_out, weight=linear4_params[0], bias=linear4_params[1])
+    return cond_out

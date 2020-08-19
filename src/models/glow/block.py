@@ -7,7 +7,7 @@ from torch.utils import checkpoint
 import numpy as np
 from collections import OrderedDict
 
-from .flow import Flow, ZeroInitConv2d, FlowNoMemory
+from .flow import Flow, ZeroInitConv2d
 from globals import device
 from .utils import *
 
@@ -175,10 +175,10 @@ class BlockNoMemory(nn.Module):
 
         self.flows = nn.ModuleList()
         for i in range(n_flow):
-            self.flows.append(FlowNoMemory(inp_shape=inp_shape,
-                                           cond_shape=cond_shape,
-                                           n_filters=3,
-                                           configs=configs))
+            self.flows.append(FlowConstMemory(inp_shape=inp_shape,
+                                              cond_shape=cond_shape,
+                                              n_filters=3,
+                                              configs=configs))
 
         # gaussian prior: it is a "learned" prior, a prior whose parameters are optimized to give higher likelihood!
         in_channels, out_channels = self.compute_gaussian_channels(inp_shape)
@@ -235,7 +235,7 @@ class BlockNoMemory(nn.Module):
         # pass through Flows
         for i, flow in enumerate(self.flows):
             flow_params = params[i * n_flow_params:(i + 1) * n_flow_params]  # current flow params
-            _, _, out, log_det = FlowNoMemory.explicit_forward(out, *flow_params)
+            _, _, out, log_det = FlowConstMemory.explicit_forward(out, *flow_params)
             total_log_det = total_log_det + log_det
 
         # splitting operation

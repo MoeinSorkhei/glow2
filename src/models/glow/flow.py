@@ -130,46 +130,6 @@ class Flow(nn.Module):
         return inp
 
 
-class AffineCouplingNoMemory(nn.Module):
-    def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
-        super().__init__()
-        # currently cond net outputs have the same channels as input_channels
-        in_channels = inp_shape[0]  # input from its own Glow - shape (C, H, W)
-        extra_channels = in_channels if cond_shape is not None else 0  # no condition if con_shape is None
-        conv_channels = in_channels // 2 + extra_channels  # channels: half of input tensor + extra channels
-
-        # define net params
-        self.register_parameter('conv1_weight', nn.Parameter(torch.Tensor(n_filters, conv_channels, 3, 3)))  # conv2d has shape (out_channels, in_channels, kH, kW)
-        self.register_parameter('conv1_bias', nn.Parameter(torch.Tensor(n_filters)))  # conv2d bias has shape (out_channels)
-        self.register_parameter('conv2_weight', nn.Parameter(torch.Tensor(n_filters, n_filters, 1, 1)))
-        self.register_parameter('conv2_bias', nn.Parameter(torch.Tensor(n_filters)))
-        self.register_parameter('zero_conv_weight', nn.Parameter(torch.Tensor(in_channels, n_filters, 3, 3)))
-        self.register_parameter('zero_conv_bias', nn.Parameter(torch.Tensor(in_channels)))
-        self.register_parameter('zero_conv_scale', nn.Parameter(torch.Tensor(1, in_channels, 1, 1)))
-
-        self.init_params()
-
-    def init_params(self):
-        self._parameters['conv1_weight'].data.normal_(0, 0.05)
-        self._parameters['conv1_bias'].data.zero_()
-        self._parameters['conv2_weight'].data.normal_(0, 0.05)
-        self._parameters['conv2_bias'].data.zero_()
-        self._parameters['zero_conv_weight'].data.zero_()
-        self._parameters['zero_conv_bias'].data.zero_()
-        self._parameters['zero_conv_scale'].data.zero_()
-
-    def print_params(self):
-        print('Parameters are:')
-        for name, param in self.named_parameters():
-            print('name:', name)
-            print('shape:', param.data.shape, '\n')
-        print('waiting for input')
-        input()
-
-    def forward(self, inp):
-        return CouplingFunction.apply(inp, *self._parameters.values())
-
-
 class FlowNoMemory(nn.Module):
     def __init__(self, inp_shape, cond_shape, n_filters, configs):
         super().__init__()
@@ -213,6 +173,57 @@ class FlowNoMemory(nn.Module):
         pass
 
 
+class AffineCouplingNoMemory(nn.Module):
+    def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
+        super().__init__()
+        assert len(inp_shape) == 3 and (cond_shape is None or len(cond_shape) == 3), 'Inp shape (and cond shape) should have len 3 of form: (C, H, W)'
+
+        # currently cond net outputs have the same channels as input_channels
+        in_channels = inp_shape[0]  # input from its own Glow - shape (C, H, W)
+        extra_channels = in_channels if cond_shape is not None else 0  # no condition if con_shape is None
+        conv_channels = in_channels // 2 + extra_channels  # channels: half of input tensor + extra channels
+
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
+            nn.ReLU(inplace=True),
+            ZeroInitConv2d(in_channel=n_filters, out_channel=in_channels)  # channels dimension same as input
+        )
+
+        # Initializing the params
+        self.net[0].weight.data.normal_(0, 0.05)
+        self.net[0].bias.data.zero_()
+
+        self.net[2].weight.data.normal_(0, 0.05)
+        self.net[2].bias.data.zero_()
+
+        self.parameters = tuple(self.net[0]._parameters.values()) + \
+                          tuple(self.net[2]._parameters.values()) + \
+                          tuple(self.net[4].get_params().values())
+
+        if use_cond_net:
+            self.use_cond_net = True
+            self.cond_net = CouplingCondNet(cond_shape, inp_shape)  # without considering batch size dimension
+            self.parameters += self.cond_net.get_params()
+        else:
+            self.use_cond_net = False
+
+    def print_params(self):
+        print('Parameters are:')
+        for name, param in self.named_parameters():
+            print('name:', name)
+            print('shape:', param.data.shape, '\n')
+        print('waiting for input')
+        input()
+
+    def check_grads(self, inp, condition=None):
+        return gradcheck(func=CouplingFunction.apply, inputs=(inp, condition, *self.parameters), eps=1e-6)
+
+    def forward(self, inp, condition=None):
+        return CouplingFunction.apply(inp, condition, *self.parameters)
+
+
 class CouplingFunction(torch.autograd.Function):
     @staticmethod
     def perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params):
@@ -243,35 +254,63 @@ class CouplingFunction(torch.autograd.Function):
         return x1, x2
 
     @staticmethod
-    def forward(ctx, x, *args):
-        net_params = list(args)
-        conv1_params = net_params[:2]  # weight, bias
-        conv2_params = net_params[2:4]  # weight, bias
-        zero_conv_params = net_params[4:]  # weight, bias, parameter
+    def apply_cond_net(cond_inp, *params):
+        conv1_params, conv2_params = params[:2], params[2:]
+        cond_out = F.conv2d(cond_inp, weight=conv1_params[0], bias=conv1_params[1], padding=1)
+        cond_out = F.relu(cond_out, inplace=False)
+        cond_out = F.conv2d(cond_out, weight=conv2_params[0], bias=conv2_params[1], padding=1)
+        cond_out = F.relu(cond_out, inplace=False)
+        return cond_out
+
+    @staticmethod
+    def forward(ctx, x, cond_inp, *params):
+        conv1_params = params[:2]  # weight, bias
+        conv2_params = params[2:4]  # weight, bias
+        zero_conv_params = params[4:7]  # weight, bias, parameter
+
+        conditional = True if cond_inp is not None else False
+        if conditional:
+            cond_net_params = params[7:]  # length 4: two weights and two biases for 2 convolutions
+            cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
 
         with torch.no_grad():
             x1, x2 = x.chunk(chunks=2, dim=1)
-            fx1, gx1 = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
+            net_input = torch.cat(tensors=[x1, cond_out], dim=1) if conditional else x1
+            fx1, gx1 = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
             y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)
             y = torch.cat(tensors=[y1, y2], dim=1)
 
         ctx.conv1_params = conv1_params
         ctx.conv2_params = conv2_params
         ctx.zero_conv_params = zero_conv_params
+        if conditional:
+            ctx.cond_net_params = cond_net_params
+        ctx.cond_inp = cond_inp
         ctx.output = y
+
         return y, logdet
 
     @staticmethod
     def backward(ctx, grad_y, grad_logdet):
         y = ctx.output
+        cond_inp = ctx.cond_inp
         conv1_params, conv2_params, zero_conv_params = ctx.conv1_params, ctx.conv2_params, ctx.zero_conv_params
+        conditional = True if cond_inp is not None else False
+
+        if conditional:
+            cond_net_params = ctx.cond_net_params
+
         y1, y2 = y.chunk(chunks=2, dim=1)
         dy1, dy2 = grad_y.chunk(chunks=2, dim=1)
 
-        with torch.enable_grad():  # so it creates the graph for the NN() operation
+        with torch.enable_grad():  # so it creates the graph for the NN() operation and possibly con net
             x1 = y1
             x1.requires_grad = True
-            fgx1 = CouplingFunction.perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params)
+            if conditional:
+                cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
+
+            net_input = torch.cat(tensors=[x1, cond_out], dim=1) if conditional else x1
+            fgx1 = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params)
             fx1, gx1 = fgx1.chunk(chunks=2, dim=1)
 
         with torch.no_grad():  # no grad for reconstructing input
@@ -296,4 +335,12 @@ class CouplingFunction(torch.autograd.Function):
             # final gradients
             grad_x = torch.cat([dx1, dx2], dim=1)
             grad_params = dwfg
-        return (grad_x,) + grad_params  # append to tuple
+
+            if conditional:
+                grad_cond_inp = grad(outputs=fgx1, inputs=cond_inp, grad_outputs=dfg, retain_graph=True)[0]
+                grad_cond_net_params = grad(outputs=fgx1, inputs=cond_net_params, grad_outputs=dfg, retain_graph=True)
+                grad_params += grad_cond_net_params
+            else:
+                grad_cond_inp = None
+
+        return (grad_x, grad_cond_inp) + grad_params  # append to tuple

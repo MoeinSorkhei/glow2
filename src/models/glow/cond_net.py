@@ -250,6 +250,9 @@ class CouplingCondNet(nn.Module):
             total_params = sum(p.numel() for p in self.conv_net.parameters())
             print(f'CouplingCondNet params: {total_params}')
 
+    def get_params(self):
+        return tuple(self.conv_net[0]._parameters.values()) + tuple(self.conv_net[2]._parameters.values())
+
     def forward(self, cond_input):
         conv_out = self.conv_net(cond_input)
         return conv_out

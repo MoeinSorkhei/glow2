@@ -1,7 +1,7 @@
 from torch import nn
 from torch.autograd import gradcheck
 
-from .block import Block, BlockNoMemory
+from .block import Block
 from .utils import *
 
 
@@ -44,135 +44,17 @@ class Glow(nn.Module):
         for i, block in enumerate(self.blocks):
             act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
             conds = make_cond_dict(act_cond, w_cond, coupling_cond)
-
             block_out = block(out, conds)
 
-            out, det, log_p = block_out['out'], block_out['total_log_det'], block_out['log_p']
-            z_new = block_out['z_new']
-
-            # appending flows_outs - done by the left_glow
-            flows_out = block_out['flows_outs']
-            all_flows_outs.append(flows_out)
-
-            # appending w_outs - done by the left_glow
-            w_outs = block_out['w_outs']
-            all_w_outs.append(w_outs)
-
-            # appending act_outs - done by the left_glow
-            act_outs = block_out['act_outs']
-            all_act_outs.append(act_outs)
-
+            # extracting output and preparing conditions
+            out, det, log_p, z_new = block_out['out'], block_out['total_log_det'], block_out['log_p'], block_out['z_new']
+            flows_out, w_outs, act_outs = block_out['flows_outs'], block_out['w_outs'], block_out['act_outs']
+            all_flows_outs.append(flows_out)  # appending flows_outs - done by the left_glow
+            all_w_outs.append(w_outs)  # appending w_outs - done by the left_glow
+            all_act_outs.append(act_outs)  # appending act_outs - done by the left_glow
             z_outs.append(z_new)
-            log_det = log_det + det
-            log_p_sum = log_p_sum + log_p
 
-        return {
-            'all_act_outs': all_act_outs,
-            'all_w_outs': all_w_outs,
-            'all_flows_outs': all_flows_outs,
-            'z_outs': z_outs,
-            'log_p_sum': log_p_sum,
-            'log_det': log_det
-        }
-
-    def reverse(self, z_list, reconstruct=False, conditions=None):
-        inp = None
-        rec_list = [reconstruct] * self.n_blocks  # make a list of True or False
-
-        # Block reverse operations one by one
-        for i, block in enumerate(self.blocks[::-1]):  # it starts from the last Block
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
-            conds = make_cond_dict(act_cond, w_cond, coupling_cond)
-
-            reverse_input = z_list[-1] if i == 0 else inp
-            block_reverse = block.reverse(output=reverse_input,  # Block reverse operation
-                                          eps=z_list[-(i + 1)],
-                                          reconstruct=rec_list[-(i + 1)],
-                                          conditions=conds)
-            inp = block_reverse
-        return inp
-
-
-class GlowNoMemory(nn.Module):
-    def __init__(self, n_blocks, n_flows, input_shapes, cond_shapes, configs):
-        super().__init__()
-        # self.all_conditional = configs['all_conditional']
-        self.n_blocks = n_blocks
-        self.blocks = nn.ModuleList()
-
-        # making None -> [None, None, ..., None]
-        if cond_shapes is None:
-            cond_shapes = [None] * n_blocks
-
-        for i in range(n_blocks):
-            inp_shape = input_shapes[i]
-            cond_shape = cond_shapes[i]
-            # last Block does not have split
-            do_split = False if i == (n_blocks - 1) else True
-            # create Block
-            block = BlockNoMemory(n_flow=n_flows[i],
-                                  inp_shape=inp_shape,
-                                  cond_shape=cond_shape,
-                                  do_split=do_split,
-                                  configs=configs)
-            self.blocks.append(block)
-
-    def get_params(self):
-        params = ()
-        for i in range(len(self.blocks)):
-            params += self.blocks[i].get_params()  # return tuple
-        return params
-
-    def explicit_forward(self, inp, *params):
-        n_block_params = len(self.blocks[0].get_params())
-        log_p_sum = 0
-        log_det = 0
-        out = inp
-        # Block operations
-        for i, block in enumerate(self.blocks):
-            block_params = params[i * n_block_params:(i + 1) * n_block_params]  # current Block params
-            out, det, log_p, z_new = block.explicit_forward(out, *block_params)
-            log_det = log_det + det
-            log_p_sum = log_p_sum + log_p
-        return log_p_sum, log_det
-
-    def check_grad(self, inp):
-        params = self.get_params()
-        result = gradcheck(func=self.explicit_forward, inputs=(inp, *params), eps=1e-6)
-        return result
-
-    def forward(self, inp, conditions=None):
-        log_p_sum = 0
-        log_det = 0
-        out = inp
-        z_outs = []
-
-        all_flows_outs = []  # a 2d list, each element of which corresponds to the flows_outs of each Block
-        all_w_outs = []  # 2d list
-        all_act_outs = []  # 2d list
-
-        for i, block in enumerate(self.blocks):
-            act_cond, w_cond, coupling_cond = extract_conds(conditions, i, self.all_conditional)
-            conds = make_cond_dict(act_cond, w_cond, coupling_cond)
-
-            block_out = block(out, conds)
-
-            out, det, log_p = block_out['out'], block_out['total_log_det'], block_out['log_p']
-            z_new = block_out['z_new']
-
-            # appending flows_outs - done by the left_glow
-            flows_out = block_out['flows_outs']
-            all_flows_outs.append(flows_out)
-
-            # appending w_outs - done by the left_glow
-            w_outs = block_out['w_outs']
-            all_w_outs.append(w_outs)
-
-            # appending act_outs - done by the left_glow
-            act_outs = block_out['act_outs']
-            all_act_outs.append(act_outs)
-
-            z_outs.append(z_new)
+            # objective
             log_det = log_det + det
             log_p_sum = log_p_sum + log_p
 

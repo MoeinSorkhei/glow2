@@ -43,7 +43,7 @@ class Flow(nn.Module):
     def __init__(self, inp_shape, cond_shape, configs):
         super().__init__()
         self.all_conditional = configs['all_conditional']
-        n_filters = configs['n_filter']
+        n_filters = configs['n_filter'] if 'n_filter' in configs.keys() else 512
         const_memory = configs['const_memory']
 
         if self.all_conditional:
@@ -64,8 +64,11 @@ class Flow(nn.Module):
         log_det = act_logdet + w_logdet + coupling_logdet
         return actnorm_out, w_out, coupling_out, log_det
 
-    def reverse(self):
-        pass
+    def reverse(self, out, act_cond, w_cond, coupling_cond):
+        inp = self.coupling.reverse(out, coupling_cond)
+        inp = self.inv_conv.reverse(inp, w_cond)
+        inp = self.act_norm.reverse(inp, act_cond)
+        return inp
 
     def check_grad(self, inp, act_cond=None, w_cond=None, coupling_cond=None):
         return gradcheck(func=self.forward, inputs=(inp, act_cond, w_cond, coupling_cond), eps=1e-6)
@@ -262,94 +265,3 @@ class CouplingFunction(torch.autograd.Function):
                 grad_cond_inp = None
 
         return (grad_x, grad_cond_inp) + grad_params  # append to tuple
-
-
-# class AffineCouplingPrev(nn.Module):
-#     def __init__(self, cond_shape, inp_shape, n_filters=512, use_cond_net=False):
-#         super().__init__()
-#
-#         # currently cond net outputs have the same channels as input_channels
-#         in_channels = inp_shape[0]  # input from its own Glow - shape (C, H, W)
-#         extra_channels = in_channels if cond_shape is not None else 0  # no condition if con_shape is None
-#         conv_channels = in_channels // 2 + extra_channels  # channels: half of input tensor + extra channels
-#
-#         self.net = nn.Sequential(
-#             nn.Conv2d(in_channels=conv_channels, out_channels=n_filters, kernel_size=3, padding=1),
-#             nn.ReLU(inplace=True),
-#             nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=1),
-#             nn.ReLU(inplace=True),
-#             ZeroInitConv2d(in_channel=n_filters, out_channel=in_channels)  # channels dimension same as input
-#         )
-#
-#         # Initializing the params
-#         self.net[0].weight.data.normal_(0, 0.05)
-#         self.net[0].bias.data.zero_()
-#
-#         self.net[2].weight.data.normal_(0, 0.05)
-#         self.net[2].bias.data.zero_()
-#
-#         if use_cond_net:  # uses inp shape only if cond net is used
-#             self.use_cond_net = True
-#             self.cond_net = CouplingCondNet(cond_shape, inp_shape)  # without considering batch size dimension
-#         else:
-#             self.use_cond_net = False
-#
-#     def compute_coupling_params(self, tensor, cond):
-#         if cond is not None:  # conditional
-#             cond_tensor = self.cond_net(cond) if self.use_cond_net else cond
-#             inp_a_conditional = torch.cat(tensors=[tensor, cond_tensor], dim=1)  # concat channel-wise
-#             log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
-#         else:
-#             log_s, t = self.net(tensor).chunk(chunks=2, dim=1)
-#         s = torch.sigmoid(log_s + 2)
-#         return s, t
-#
-#     def forward(self, inp, cond=None):
-#         inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
-#         s, t = self.compute_coupling_params(inp_a, cond)
-#         out_b = (inp_b + t) * s
-#         log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)
-#         return torch.cat(tensors=[inp_a, out_b], dim=1), log_det
-#
-#     def reverse(self, output, cond=None):
-#         out_a, out_b = output.chunk(chunks=2, dim=1)  # here we know that out_a = inp_a (see the forward fn)
-#         s, t = self.compute_coupling_params(out_a, cond)
-#         inp_b = (out_b / s) - t
-#         return torch.cat(tensors=[out_a, inp_b], dim=1)
-#
-#
-# class FlowPrev(nn.Module):
-#     """
-#     The Flow module does not change the dimensionality of its input.
-#     """
-#     def __init__(self, inp_shape, cond_shape, configs):
-#         super().__init__()
-#         # now the output of cond nets has the same dimensions as inp_shape
-#         self.actnorm_has_cond_net, self.w_has_cond_net, \
-#             self.coupling_has_cond_net = [True, True, True] if configs['all_conditional'] else [False, False, False]
-#
-#         self.act_norm = ActNormConditional(cond_shape, inp_shape) \
-#             if self.actnorm_has_cond_net else ActNorm(in_channel=inp_shape[0])
-#
-#         if configs['do_lu']:
-#             self.inv_conv = InvConv1x1LU(in_channel=inp_shape[0], mode='conditional', cond_shape=cond_shape, inp_shape=inp_shape) \
-#                 if self.w_has_cond_net else InvConv1x1LU(in_channel=inp_shape[0], mode='unconditional')
-#         else:
-#             self.inv_conv = InvConv1x1Conditional(cond_shape, inp_shape) if self.w_has_cond_net else InvConv1x1Unconditional(in_channel=inp_shape[0])
-#
-#         self.coupling = AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=True) \
-#             if self.coupling_has_cond_net else AffineCoupling(cond_shape=cond_shape, inp_shape=inp_shape, use_cond_net=False)
-#
-#     def forward(self, inp, act_cond, w_cond, coupling_cond, dummy_tensor=None):
-#         actnorm_out, act_logdet = self.act_norm(inp, act_cond) if self.actnorm_has_cond_net else self.act_norm(inp)
-#         w_out, w_logdet = self.inv_conv(actnorm_out, w_cond) if self.w_has_cond_net else self.inv_conv(actnorm_out)
-#         out, coupling_logdet = self.coupling(w_out, coupling_cond)
-#         log_det = act_logdet + w_logdet + coupling_logdet
-#
-#         return actnorm_out, w_out, out, log_det
-#
-#     def reverse(self, output, conditions):
-#         coupling_inp = self.coupling.reverse(output, cond=conditions['coupling_cond'])
-#         w_inp = self.inv_conv.reverse(coupling_inp, conditions['w_cond']) if self.w_has_cond_net else self.inv_conv.reverse(coupling_inp)
-#         inp = self.act_norm.reverse(w_inp, conditions['act_cond']) if self.actnorm_has_cond_net else self.act_norm.reverse(w_inp)
-#         return inp

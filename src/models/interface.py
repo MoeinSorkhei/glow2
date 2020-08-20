@@ -145,11 +145,14 @@ def init_model_configs(args):
     left_configs = {'all_conditional': False, 'split_type': 'regular', 'do_lu': False, 'grad_checkpoint': False}  # default
     right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left', 'grad_checkpoint': False}  # default condition from left glow
 
+    left_configs['const_memory'] = args.const_memory
+    right_configs['const_memory'] = args.const_memory
+
     if 'improved' in args.model:
-        if 'regular' in args.model:
+        if 'regular' in args.model:  # refactor this part
             left_configs['split_type'], right_configs['split_type'] = 'regular', 'regular'
         else:
-            left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
+            left_configs['split_type'], right_configs['split_type'] = 'special', 'special'  # refactor this part
             left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
 
         if args.do_lu:

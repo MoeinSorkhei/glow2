@@ -146,11 +146,11 @@ def init_model_configs(args):
     right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left', 'grad_checkpoint': False}  # default condition from left glow
 
     if 'improved' in args.model:
-        if 'regular' in args.model:
-            left_configs['split_type'], right_configs['split_type'] = 'regular', 'regular'
-        else:
-            left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
-            left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
+        # if 'regular' in args.model:
+        #     left_configs['split_type'], right_configs['split_type'] = 'regular', 'regular'
+        # else:
+        #     left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
+        #     left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
 
         if args.do_lu:
             left_configs['do_lu'] = True
@@ -194,13 +194,13 @@ def init_and_load(args, params, run_mode):
     model = init_model(args, params)
 
     if run_mode == 'infer':
-        model, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None, resume_train=False)
+        model, _, _, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, None, resume_train=False)
         print(f'In [init_and_load]: returned model for inference')
         return model
 
     else:  # train
         optimizer = optim.Adam(model.parameters(), lr=params['lr'])
         print(f'In [init_and_load]: returned model and optimizer for training')
-        model, optimizer, _ = helper.load_checkpoint(checkpoints_path, optim_step, model, optimizer, resume_train=True)
-        return model, optimizer
+        model, optimizer, _, lr = helper.load_checkpoint(checkpoints_path, optim_step, model, optimizer, resume_train=True)
+        return model, optimizer, lr
 

@@ -167,27 +167,25 @@ def run_training(args, params):
     if 'dual_glow' in args.model:
         models.train_dual_glow(args, params, tracker)
     else:
-        # preparing model
         model = models.init_model(args, params)
+        optimizer = optim.Adam(model.parameters())
         reverse_cond = data_handler.retrieve_rev_cond(args, params, run_mode='train')
-
-        # prepare optimizer
-        lr = params['lr']
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-
-        # train configs
         train_configs = trainer.init_train_configs(args)
 
         # resume training
         if args.resume_train:
             optim_step = args.last_optim_step
             checkpoints_path = helper.compute_paths(args, params)['checkpoints_path']
-            model, optimizer, _ = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
-            trainer.train(args, params, train_configs, model, optimizer, tracker, resume=True, last_optim_step=optim_step,
+            model, optimizer, _, lr = load_checkpoint(checkpoints_path, optim_step, model, optimizer)
+
+            if lr is None:  # if not saved in checkpoint
+                lr = params['lr']
+            trainer.train(args, params, train_configs, model, optimizer, lr, tracker, resume=True, last_optim_step=optim_step,
                           reverse_cond=reverse_cond)
         # train from scratch
         else:
-            trainer.train(args, params, train_configs, model, optimizer, tracker, reverse_cond=reverse_cond)
+            lr = params['lr']
+            trainer.train(args, params, train_configs, model, optimizer, lr, tracker, reverse_cond=reverse_cond)
 
 
 def run_evaluation(args, params):

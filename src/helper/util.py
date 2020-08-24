@@ -34,9 +34,10 @@ def label_to_tensor(label, height, width, count=0):
     return torch.from_numpy(arr.astype(np.float32))
 
 
-def save_checkpoint(path_to_save, optim_step, model, optimizer, loss):
+def save_checkpoint(path_to_save, optim_step, model, optimizer, loss, lr):
     name = path_to_save + f'/optim_step={optim_step}.pt'
     checkpoint = {'loss': loss,
+                  'lr': lr,
                   'model_state_dict': model.state_dict(),
                   'optimizer_state_dict': optimizer.state_dict()}
 
@@ -54,6 +55,7 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, resume_train=Tru
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     loss = checkpoint['loss']
+    lr = checkpoint['lr'] if 'lr' in checkpoint.keys() else None  # backward compatibility for checkpoints that do not store lr
 
     print(f'In [load_checkpoint]: load state dict done from: "{name}"')
 
@@ -66,5 +68,5 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, resume_train=Tru
             param.requires_grad = False
 
     if optimizer is not None:
-        return model.to(device), optimizer, loss
-    return model.to(device), None, loss
+        return model.to(device), optimizer, loss, lr
+    return model.to(device), None, loss, lr

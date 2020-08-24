@@ -12,7 +12,18 @@ def init_train_configs(args):
     return train_configs
 
 
-def train(args, params, train_configs, model, optimizer, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
+def adjust_lr(current_lr, initial_lr, step, epoch_steps):
+    curr_epoch = step // epoch_steps  # epoch_steps is the number of steps to complete an epoch
+    if curr_epoch > 100:  # decay linearly to 0 from epoch 100 to epoch 200
+        extra_epochs = curr_epoch - 100
+        decay = initial_lr * (extra_epochs / 100)
+        current_lr = initial_lr - decay
+
+    print(f'In [adjust_lr]: step: {step}, curr_epoch: {curr_epoch}, lr: {current_lr}')
+    return current_lr
+
+
+def train(args, params, train_configs, model, optimizer, current_lr, comet_tracker=None, resume=False, last_optim_step=0, reverse_cond=None):
     # getting data loaders
     train_loader, val_loader = data_handler.init_data_loaders(args, params)
 
@@ -26,9 +37,15 @@ def train(args, params, train_configs, model, optimizer, comet_tracker=None, res
 
     # optimization loop
     while optim_step < max_optim_steps:
+        # after each epoch, adjust learning rate accordingly
+        current_lr = adjust_lr(current_lr, initial_lr=params['lr'], step=optim_step, epoch_steps=len(train_loader) // params['batch_size'])
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = current_lr
+        print(f'In [train]: optimizer learning rate adjusted to: {current_lr}\n')
+
         for i_batch, batch in enumerate(train_loader):
-            if optim_step > max_optim_steps:
-                print(f'In [train]: reaching max_step: {max_optim_steps}. Terminating...')
+            if optim_step > max_optim_steps or current_lr == 0:
+                print(f'In [train]: reaching max_step or lr is zero. Terminating...')
                 return  # ============ terminate training if max steps reached
 
             # forward pass
@@ -75,7 +92,7 @@ def train(args, params, train_configs, model, optimizer, comet_tracker=None, res
             if optim_step > 0 and optim_step % params['checkpoint_freq'] == 0:
                 checkpoints_path = paths['checkpoints_path']
                 helper.make_dir_if_not_exists(checkpoints_path)
-                helper.save_checkpoint(checkpoints_path, optim_step, model, optimizer, loss)
+                helper.save_checkpoint(checkpoints_path, optim_step, model, optimizer, loss, current_lr)
                 print("In [train]: Checkpoint saved at iteration", optim_step, '\n')
 
             optim_step += 1

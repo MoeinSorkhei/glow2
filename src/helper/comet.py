@@ -22,6 +22,9 @@ class CometTracker:
         self.experiment.add_tags(tags)
         print(f'In [add_tags]: Added these tags to the new experiment: {tags}')
 
+    def set_name(self, name):
+        self.experiment.set_name(name)
+
 
 def init_comet(args, params=None):
     """
@@ -38,6 +41,7 @@ def init_comet(args, params=None):
     # create the comet tracker
     tracker = CometTracker(comet_params, run_params=params, prev_exp_id=args.prev_exp_id)
 
+    tracker.set_name(args.model)
     # create tags for the new experiment
     if not args.prev_exp_id:
         tags = create_tags(args, params)
@@ -47,7 +51,8 @@ def init_comet(args, params=None):
 
 
 def create_tags(args, params):
-    tags = [args.model]
+    # tags = [args.model]
+    tags = []
     # tags = [f'{params["img_size"][0]}x{params["img_size"][1]}', args.model]  # image size
     # tags.append(args.dataset)
     # tags.append(args.direction)

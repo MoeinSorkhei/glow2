@@ -129,6 +129,18 @@ def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):
     print('In [resize_imgs]: All done')
 
 
+def remove_alpha_channel(image_or_image_batch):
+    if image_or_image_batch.shape == 4:  # with batch size
+        return image_or_image_batch[:, 0:3, :, :]
+    return image_or_image_batch[0:3, :, :]  # single image
+
+
+def get_transform(image_size=None):
+    if image_size is not None:
+        return transforms.Compose([transforms.Resize(image_size), transforms.ToTensor()])
+    return transforms.Compose([transforms.ToTensor()])
+
+
 def image_as_float(image):
     return image / 255
 

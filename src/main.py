@@ -67,10 +67,6 @@ def read_params_and_args():
     parser.add_argument('--create_boundaries', action='store_true')
     parser.add_argument('--create_tf_records', action='store_true')
 
-    # folders
-    parser.add_argument('--clean_midgard', action='store_true')
-    parser.add_argument('--refactor_folders', action='store_true')
-
     # evaluation
     parser.add_argument('--infer_on_val', action='store_true')
     parser.add_argument('--resize_for_fcn', action='store_true')
@@ -101,12 +97,7 @@ def read_params_and_args():
     parser.add_argument('--trials', type=int)
 
     arguments = parser.parse_args()
-
-    if arguments.clean_midgard:
-        parameters = None
-    else:
-        parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
-
+    parameters = read_params('../params.json')[arguments.dataset]  # parameters related to the wanted dataset
     return arguments, parameters
 
 
@@ -253,17 +244,8 @@ def main():
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
-    # clean midgard
-    if args.clean_midgard:
-        helper.clean_midgard(args)
-
-    elif args.refactor_folders:
-        paths = helper.compute_paths(args, params)
-        print(paths)
-        input()
-
     # investigating how dual_glow works
-    elif args.investigate_dual_glow:
+    if args.investigate_dual_glow:
         hps = models.init_hps_for_dual_glow(args, params)
         models.investigate_model(args, hps, write_tf_records=False)
 

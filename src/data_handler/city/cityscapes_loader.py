@@ -6,40 +6,18 @@ import os
 from PIL import Image
 
 from helper import read_image_ids
+import helper
 
 
 class CityDataset(data.Dataset):
-    def __init__(self, data_folder, img_size, remove_alpha, ret_type='for_train', fixed_cond=None):
-        """
-        Initializes a dataset to be given to a DataLoader.
-        :param data_folder: the folder of the dataset whose images are to be read. Please note that this constructor
-        expects the path relative to the 'data' folder whe all the data lie, so it automatically prepends the 'data/'
-        folder to the name of the folder given.
-
-        :param img_size: the desired image size to be transformed to. Resizing operation is ignored if the desired size
-        is exactly the same as the original size.
-
-        :param ret_type: could be 'for_train' or 'all'. If set to 'for_train', it returns only a batch of things that
-         are needed during training.
-
-        :param fixed_cond: list of real image paths whose segmentations are used as fixed conditions. If not specified,
-        random images will be taken from the dataset.
-
-        Image IDs are the pure image names which, once joined with the corresponding data folder, can be used to
-        retrieve both the real and segmentation images (and any other file corresponding to that ID).
-        """
+    def __init__(self, data_folder, img_size, fixed_cond=None):
         self.data_folder = data_folder
-        self.remove_alpha = remove_alpha
-        self.ret_type = ret_type
 
-        if img_size != [1024, 2048]:  # resize only if the desired size is different from the original size
-            self.transforms = transforms.Compose([transforms.Resize(img_size),
-                                                  transforms.ToTensor()])
-            self.boundary_transform = transforms.Compose([transforms.Resize(img_size),
-                                                          transforms.ToTensor()])
+        # resize only if the desired size is different from the original size
+        if img_size != [1024, 2048]:
+            self.transforms = helper.get_transform(img_size)
         else:
-            self.transforms = transforms.Compose([transforms.ToTensor()])
-            self.boundary_transform = transforms.Compose([transforms.ToTensor()])
+            self.transforms = helper.get_transform()
 
         # finding the path for real images
         if not fixed_cond:
@@ -48,7 +26,7 @@ class CityDataset(data.Dataset):
             print(f'In CityDataset [__init__]: using the fixed conditions...')
             self.real_img_paths = fixed_cond
 
-        # get list of (city, id) pairs
+        # get list of (city, id) pairs from real image paths - (city, id) will be used to retrieve the corresponding segmentation
         cities_and_ids = self.cities_and_ids()
 
         # finding the path for the segmentation images
@@ -74,7 +52,6 @@ class CityDataset(data.Dataset):
         but the actual files might not. In such a case, one should call the "create_boundary_maps" function which uses
         these boundary paths to save the boundary maps.
         If boundaries are not available, None will be returned in the __getitem__ function for the 'boundary' key.
-        :return:
         """
         if os.path.isfile(self.boundary_paths[0]):  # check if the first file in the paths exists
             return True
@@ -84,100 +61,25 @@ class CityDataset(data.Dataset):
         return len(self.real_img_paths)
 
     def __getitem__(self, index):
-        """
-        NOTE: the index has the full_path to the image itself.
-        :param index:
-        :return:
-        """
         real_path, segment_path, instance_path, boundary_path = \
             self.real_img_paths[index], self.seg_img_paths[index], self.instance_paths[index], self.boundary_paths[index]
 
+        # read and transform images
         real_img = self.transforms(Image.open(real_path))
         segment_img = self.transforms(Image.open(segment_path))
-        boundary = self.boundary_transform(Image.open(boundary_path)) if self.boundaries_exist() else None
-        # boundary = torch.from_numpy(np.ceil(boundary.numpy())) if boundary is not None else None  # ceiling values to 1
+        boundary = self.transforms(Image.open(boundary_path)) if self.boundaries_exist() else None
 
-        # removing the alpha channel by throwing away the fourth channels
-        if self.remove_alpha:
-            real_img = real_img[0:3, :, :]
-            segment_img = segment_img[0:3, :, :]
-            if boundary is not None:
-                boundary = boundary[0:3, :, :]
+        # removing the alpha channel (if it exists) by throwing away the fourth channels
+        real_img = helper.remove_alpha_channel(real_img)
+        segment_img = helper.remove_alpha_channel(segment_img)
+        if boundary is not None:
+            boundary = helper.remove_alpha_channel(boundary)
 
-        # =========== return only the required things for training (saves CPU memory)
-        if self.ret_type == 'for_train':
-            return {'real': real_img,
-                    'segment': segment_img,
-                    'boundary': boundary,
-                    'real_path': real_path,
-                    'segment_path': segment_path}
+        return {
+            'real': real_img,
+            'segment': segment_img,
+            'boundary': boundary,
+            'real_path': real_path,
+            'segment_path': segment_path
+        }
 
-        else:  # =========== otherwise, pass return everything
-            instance_map = self.transforms(Image.open(instance_path))
-            if self.remove_alpha:
-                instance_map = instance_map[0:3, :, :]
-
-            # getting object IDs with their repetitions in the image
-            json_path = segment_path[:-len('color.png')] + 'polygons.json'
-            id_repeats = None
-            # id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
-            #                                 h=segment_img.shape[1],
-            #                                 w=segment_img.shape[2])  # tensor of shape (34, h, w)
-            return {'real': real_img,
-                    'segment': segment_img,
-                    'instance': instance_map,
-                    'boundary': boundary,
-                    'real_path': real_path,
-                    'segment_path': segment_path,
-                    'instance_path': instance_path,
-                    'boundary_path': boundary_path,
-                    'id_repeats': id_repeats}
-
-
-def id_repeats_to_cond(id_repeats, h, w):
-    """
-    Transforms the list containing repetitions of object IDs to a tensor used as conditioning in the network.
-    :param id_repeats: The list containing the repetitions of the object IDs.
-    :param h
-    :param w
-    :return:
-    """
-    cond = torch.zeros((len(id_repeats), h, w))
-    for i in range(len(id_repeats)):
-        cond[i, :, :] = id_repeats[i]
-    return cond
-
-
-def info_from_json(file_path):
-    pass  # no longer works
-    # with open(file_path, 'r') as f:
-    #         data = json.load(f)
-    #
-    #     objects = data['objects']  # returns list of ('label', 'polygon')
-    #     # print(f'In [json_to_labels]: read the json file with {len(objects)} objects in it.')
-    #
-    #     all_ids = []  # all the object IDs in the image - might have repeats for instances of an object
-    #     id_repeats = [0] * 34
-    #
-    #     for obj in objects:
-    #         obj_name = assureSingleInstanceName(obj['label'])  # e.g. cargroup => car
-    #         obj_label = name2label[obj_name]  # Label contains ID, trainID, category and so on
-    #         obj_id = obj_label.id
-    #         obj_poly = obj['polygon']
-    #
-    #         if obj_id != -1:
-    #             id_repeats[obj_id] += 1
-    #
-    #             # if obj_id == 26 and obj_label.name == 'car':
-    #             #    print('found car')
-    #
-    #         # print(type(obj), type(obj_name))
-    #         # print(obj_name)
-    #         # print(obj_label)
-    #         # print(obj_id)
-    #         # print(obj_poly, '\n\n')
-    #         # input()
-    #
-    #     # print('In [json_to_labels]: id_repeats=', id_repeats)
-    #     # print('Total count:', sum(id_repeats))
-    #     return {'id_repeats': id_repeats}

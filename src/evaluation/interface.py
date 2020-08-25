@@ -97,16 +97,3 @@ def eval_fcn_all_temps(args, params):
 
     torch.cuda.empty_cache()  # very important
     print('In [eval_city_with_all_temps]: all done \n')
-
-
-def compute_val_bpd(args, params):
-    loader_params = {'batch_size': params['batch_size'], 'shuffle': False, 'num_workers': 0}
-    _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                  image_size=(params['img_size']),
-                                                  remove_alpha=True,  # removing the alpha channel
-                                                  loader_params=loader_params)
-
-    model = models.init_and_load(args, params, run_mode='infer')
-
-    mean, std = calc_val_loss(args, params, model, val_loader)
-    print(f'In [compute_val_bpd]: mean = {mean} - std = {std}')

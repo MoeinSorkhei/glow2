@@ -5,7 +5,7 @@ from .cityscapes_loader import *
 from globals import real_conds_abs_path, device
 
 
-def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_type='for_train'):
+def init_city_loader(data_folder, image_size, loader_params):
     """
     Initializes and returns a data loader based on the data_folder and dataset_name.
     :param remove_alpha:
@@ -18,13 +18,13 @@ def init_city_loader(data_folder, image_size, remove_alpha, loader_params, ret_t
     # train data loader
     train_df = {'real': data_folder['real'] + '/train',  # adjusting the paths for the train data folder
                 'segment': data_folder['segment'] + '/train'}
-    train_dataset = CityDataset(train_df, image_size, remove_alpha, ret_type=ret_type)
+    train_dataset = CityDataset(train_df, image_size)
     train_loader = data.DataLoader(train_dataset, **loader_params)
 
     # val data loader
     val_df = {'real': data_folder['real'] + '/val',  # adjusting the paths for the validation data folder
               'segment': data_folder['segment'] + '/val'}
-    val_dataset = CityDataset(val_df, image_size, remove_alpha, ret_type=ret_type)
+    val_dataset = CityDataset(val_df, image_size)
 
     loader_params['shuffle'] = False  # no need to shuffle for the val set
     val_loader = data.DataLoader(val_dataset, **loader_params)
@@ -37,23 +37,20 @@ def prepare_city_reverse_cond(args, params, run_mode='train'):
     samples_path = helper.compute_paths(args, params)['samples_path']
     save_path = samples_path if run_mode == 'train' else None  # no need for reverse_cond at inference time
     direction = args.direction
-    segmentations, id_repeats_batch, real_imgs, boundaries = create_cond(params,
-                                                                         fixed_conds=real_conds_abs_path,
-                                                                         save_path=save_path,
-                                                                         direction=direction)
-    # ======= only support for c_flow mode now
-    if direction == 'label2photo':
-        reverse_cond = {'segment': segmentations, 'boundary': boundaries}
-
-    elif direction == 'photo2label':  # 'photo2label'
-        reverse_cond = {'real_cond': real_imgs}
-    else:
-        raise NotImplementedError('Direction not implemented')
-    return reverse_cond
+    segmentations, _, real_imgs, boundaries = _create_cond(args, params,
+                                                           fixed_conds=real_conds_abs_path,
+                                                           save_path=save_path,
+                                                           direction=direction)
+    return {
+        'segment': segmentations,
+        'boundary': boundaries,
+        'real': real_imgs
+    }
 
 
-def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo'):
+def _create_cond(args, params, fixed_conds=None, save_path=None, direction='label2photo'):
     """
+    :param args:
     :param direction:
     :param params:
     :param fixed_conds:
@@ -73,46 +70,29 @@ def create_cond(params, fixed_conds=None, save_path=None, direction='label2photo
     train_df = {'segment': data_folder['segment'] + '/train',
                 'real': data_folder['real'] + '/train'}
 
-    city_dataset = CityDataset(train_df, img_size, remove_alpha=True, fixed_cond=fixed_conds)
-    print(f'In [create_cond]: created dataset of len {len(city_dataset)}')
+    city_dataset = CityDataset(train_df, img_size, fixed_cond=fixed_conds)
+    print(f'In [create_cond]: created dataset of len {len(city_dataset)} for conditions')
 
-    segs = [city_dataset[i]['segment'] for i in range(n_samples)]
-    reals = [city_dataset[i]['real'] for i in range(n_samples)]
-    b_maps = [city_dataset[i]['boundary'] for i in range(n_samples)]
+    segmentations = torch.stack([city_dataset[i]['segment'] for i in range(n_samples)], dim=0)
+    real_imgs = torch.stack([city_dataset[i]['real'] for i in range(n_samples)], dim=0)
+    boundaries = torch.stack([city_dataset[i]['boundary'] for i in range(n_samples)], dim=0)
     seg_paths = [city_dataset[i]['segment_path'] for i in range(n_samples)]
     real_paths = [city_dataset[i]['real_path'] for i in range(n_samples)]
+    id_repeats_batch = torch.zeros((n_samples, 34, img_size[0], img_size[1]))  # 34 different IDs - no longer used
 
-    n_channels = segs[0].shape[0]
-    segmentations = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
-    real_imgs = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
-    boundaries = torch.zeros((n_samples, n_channels, img_size[0], img_size[1]))
-    id_repeats_batch = torch.zeros((n_samples, 34, img_size[0], img_size[1]))  # 34 different IDs
-    # id_repeats_batch = None
-
-    for i in range(len(segs)):
-        segmentations[i] = segs[i]
-        real_imgs[i] = reals[i]
-        boundaries[i] = b_maps[i]
-
-    # for i in range(id_repeats_batch.shape[0]):
-    #     json_path = seg_paths[i][:-len('color.png')] + 'polygons.json'
-    #     id_repeats = id_repeats_to_cond(info_from_json(json_path)['id_repeats'],
-    #                                     h=img_size[0], w=img_size[1])  # tensor (34, h, w)
-    #     id_repeats_batch[i] = id_repeats
-
+    # save conditions
     if save_path:
         helper.make_dir_if_not_exists(save_path)
-        # seg_img_name = 'condition' if direction == 'label2photo' else 'real_imgs'
         utils.save_image(segmentations.clone(), f'{save_path}/segmentation.png', nrow=10)  # .clone(): very important
-
-        # real_img_name = 'real_imgs' if direction == 'label2photo' else 'condition'
         utils.save_image(real_imgs.clone(), f'{save_path}/real_img.png', nrow=10)
 
-        if direction == 'label2photo':
+        if direction == 'label2photo' or direction == 'bmap2label':
+            if args.do_ceil or direction == 'bmap2label':
+                boundaries = torch.ceil(boundaries).to(device)
             utils.save_image(boundaries.clone(), f'{save_path}/boundary.png', nrow=10)
-
         print(f'In [create_cond]: saved the condition and real images to: "{save_path}"')
 
+        # write paths
         with open(f'{save_path}/img_paths.txt', 'a') as f:
             f.write("==== SEGMENTATIONS PATHS \n")
             for item in seg_paths:
@@ -162,15 +142,3 @@ def create_boundary_maps(params):
             helper.save_one_by_one(boundaries, boundary_paths, save_path=None)  # saving to boundary_paths
         print(f'In [create_boundary_maps]: done for {loader_name}')
     print('In [create_boundary_maps]: all done')
-
-
-def recreate_boundary_map(instance_path, boundary_path):
-    from PIL import Image
-    from torchvision import transforms
-
-    trans = transforms.Compose([transforms.ToTensor()])
-    instance = trans(Image.open(instance_path)).unsqueeze(0).to(device)
-    boundary = helper.get_edges(instance)
-    print('boundary shape:', boundary.shape)
-    helper.save_one_by_one(boundary, [boundary_path], save_path=None)  # saving to boundary_paths
-    print(f'In [recreate_boundary_map]: save the recreated boundary to: "{boundary_path}"')

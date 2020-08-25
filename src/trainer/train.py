@@ -49,8 +49,8 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
                 return  # ============ terminate training if max steps reached
 
             # forward pass
-            img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
-            forward_output = forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
+            left_batch, right_batch, extra_cond_batch = data_handler.extract_batches(batch, args)
+            forward_output = forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_batch)
 
             # regularize left loss
             if train_configs['reg_factor'] is not None:

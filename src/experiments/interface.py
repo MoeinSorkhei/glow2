@@ -50,6 +50,7 @@ def infer_on_validation_set(args, params):
             seg_paths = batch['segment_path']
 
             # create reverse conditions and samples based on args.direction
+            raise NotImplementedError('This part needs refactoring')
             rev_cond = models.batch2revcond(args, img_batch, segment_batch, boundary_batch)
             samples = models.take_samples(args, params, model, rev_cond, n_samples=batch_size)
 
@@ -97,7 +98,7 @@ def sample_with_new_condition(args, params):
 
     # ========= get the original segmentation and real image
     orig_seg_batch, _, orig_real_batch, orig_bmap_batch = \
-        data_handler.create_cond(params, fixed_conds=[orig_real_name], save_path=None)  # (1, C, H, W)
+        data_handler._create_cond(params, fixed_conds=[orig_real_name], save_path=None)  # (1, C, H, W)
 
     # make b_maps None is not needed
     if not args.use_bmaps:
@@ -140,7 +141,7 @@ def sample_with_new_condition(args, params):
 
         # =========== apply the new condition to the desired style
         new_real_syn = model.reverse(x_a=new_seg_batch,  # new segmentation (condition)
-                                     b_map=new_bmap_batch,
+                                     extra_cond=new_bmap_batch,
                                      z_b_samples=z_real,  # desired style
                                      mode='new_condition')  # (1, C, H, W)
         utils.save_image(new_real_syn.clone(), f"{exp_path}/new_real_syn.png", nrow=1, padding=0)

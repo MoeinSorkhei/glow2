@@ -2,7 +2,6 @@ import torch
 from torchvision import utils
 
 import helper
-from data_handler import create_cond
 
 from models import sample_z, calc_z_shapes
 import models
@@ -17,11 +16,11 @@ def sample_c_flow_conditional(args, params, model):
     helper.make_dir_if_not_exists(trials_pth)
 
     segmentations, _, real_imgs = \
-        create_cond(params['n_samples'],
-                    params['data_folder'],
-                    params['img_size'],
-                    device,
-                    save_path=trials_pth)
+        _create_cond(params['n_samples'],
+                     params['data_folder'],
+                     params['img_size'],
+                     device,
+                     save_path=trials_pth)
 
     z_shapes = calc_z_shapes(params['channels'], params['img_size'], params['n_block'])
     # split into tensors of 5 img: better for visualization
@@ -103,9 +102,9 @@ def prep_for_sampling(args, params, img_name, additional_info):
     # ========== create condition and save it to experiment path
     # no need to save for new_cond type
     path_to_save = None if additional_info['exp_type'] == 'new_cond' else experiment_path
-    seg_batch, _, real_batch, boundary_batch = data_handler.create_cond(params,
-                                                                        fixed_conds=fixed_conds,
-                                                                        save_path=path_to_save)  # (1, C, H, W)
+    seg_batch, _, real_batch, boundary_batch = data_handler._create_cond(params,
+                                                                         fixed_conds=fixed_conds,
+                                                                         save_path=path_to_save)  # (1, C, H, W)
     # ========== duplicate condition for n_samples times (not used by all exp_modes)
     seg_batch_dup = seg_batch.repeat((params['n_samples'], 1, 1, 1))  # duplicated: (n_samples, C, H, W)
     boundary_dup = boundary_batch.repeat((params['n_samples'], 1, 1, 1))
@@ -131,7 +130,7 @@ def prep_for_sampling(args, params, img_name, additional_info):
         rev_cond = {'segment': seg_rev_cond, 'boundary': bmap_rev_cond}
 
     elif args.direction == 'photo2label':
-        rev_cond = {'real_cond': real_rev_cond}
+        rev_cond = {'real': real_rev_cond}
 
     else:
         raise NotImplementedError

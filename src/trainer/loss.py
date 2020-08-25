@@ -2,30 +2,35 @@ from math import log
 import torch
 import numpy as np
 
+import data_handler
 import models
-from .util import *
 from globals import device
 
 
-def forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch):
+def forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_batch):
     n_bins = 2. ** params['n_bits']
 
-    if args.model == 'c_flow' or 'improved' in args.model:
-        log_p_left, log_det_left, log_p_right, log_det_right = \
-             models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=boundary_batch)
-
-        loss_left, log_p_left, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
-        loss_right, log_p_right, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
-        loss = loss_left + loss_right
-        return {'loss': loss, 'loss_left': loss_left, 'loss_right': loss_right}
-
-    elif 'c_glow' in args.model:
-        z, nll = models.do_forward(args, params, model, img_batch, segment_batch, boundary_batch=None)
+    if 'c_glow' in args.model:
+        z, nll = model(x=noise_added(left_batch, n_bins),
+                       y=noise_added(right_batch, n_bins))
         loss = torch.mean(nll)
         return {'loss': loss, 'z': z}
 
     else:
-        raise NotImplementedError
+        left_glow_outs, right_glow_outs = model(x_a=noise_added(left_batch, n_bins),
+                                                x_b=noise_added(right_batch, n_bins),
+                                                extra_cond=extra_cond_batch)
+        log_p_left, log_det_left = left_glow_outs['log_p'].mean(), left_glow_outs['log_det'].mean()
+        log_p_right, log_det_right = right_glow_outs['log_p'].mean(), right_glow_outs['log_det'].mean()
+
+        loss_left, _, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
+        loss_right, _, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
+        loss = loss_left + loss_right
+        return {'loss': loss, 'loss_left': loss_left, 'loss_right': loss_right}
+
+
+def noise_added(batch, n_bins):  # add uniform noise
+    return batch + torch.rand_like(batch) / n_bins
 
 
 def calc_loss(log_p, logdet, image_size, n_bins):
@@ -60,9 +65,8 @@ def calc_val_loss(args, params, model, val_loader):
     with torch.no_grad():
         val_list = []
         for i_batch, batch in enumerate(val_loader):
-            # boundary_batch is None for datasets other than cityscapes
-            img_batch, segment_batch, boundary_batch = extract_batches(batch, args)
-            forward_output = forward_and_loss(args, params, model, img_batch, segment_batch, boundary_batch)
+            left_batch, right_batch, extra_cond_batch = data_handler.extract_batches(batch, args)
+            forward_output = forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_batch)
             loss = forward_output['loss']
             val_list.append(loss.item())
         return np.mean(val_list), np.std(val_list)

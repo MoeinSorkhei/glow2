@@ -68,12 +68,12 @@ class TwoGlows(nn.Module):
             conditions['coupling_cond'] = [list(reversed(cond)) for cond in list(reversed(conditions['coupling_cond']))]
         return conditions
 
-    def forward(self, x_a, x_b, b_map=None):  # x_a: segmentation
+    def forward(self, x_a, x_b, extra_cond=None):  # x_a: segmentation
         #  perform left glow forward
         left_glow_out = self.left_glow(x_a)
 
         # perform right glow forward
-        conditions = self.prep_conds(left_glow_out, b_map, direction='forward')
+        conditions = self.prep_conds(left_glow_out, extra_cond, direction='forward')
         right_glow_out = self.right_glow(x_b, conditions)
 
         # extract left outputs
@@ -94,9 +94,9 @@ class TwoGlows(nn.Module):
 
         return left_glow_outs, right_glow_outs
 
-    def reverse(self, x_a=None, z_b_samples=None, b_map=None):
+    def reverse(self, x_a=None, z_b_samples=None, extra_cond=None):
         left_glow_out = self.left_glow(x_a)  # left glow forward always needed before preparing conditions
-        conditions = self.prep_conds(left_glow_out, b_map, direction='reverse')
+        conditions = self.prep_conds(left_glow_out, extra_cond, direction='reverse')
         x_b_syn = self.right_glow.reverse(z_b_samples, conditions=conditions)  # sample x_b conditioned on x_a
         return x_b_syn
 

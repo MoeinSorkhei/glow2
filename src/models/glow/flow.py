@@ -26,10 +26,12 @@ class ZeroInitConv2d(nn.Module):
         self.scale = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
 
     def get_params(self):
-        return OrderedDict(
-            list(self.conv._parameters.items()) +
-            list(self._parameters.items())  # this only gives the scale param since only scale is defined as nn.Parameter
-        )
+        # self._parameters only gives the scale param since only scale is defined as nn.Parameter
+        return tuple(self.conv._parameters.values()) + tuple(self._parameters.values())
+        # return OrderedDict(
+        #     list(self.conv._parameters.items()) +
+        #     list(self._parameters.items())  # this only gives the scale param since only scale is defined as nn.Parameter
+        # )
 
     def forward(self, inp):
         # padding with additional 1 in each side to keep the spatial dimension unchanged after the convolution operation
@@ -43,8 +45,9 @@ class Flow(nn.Module):
     def __init__(self, inp_shape, cond_shape, configs):
         super().__init__()
         self.all_conditional = configs['all_conditional']
+        self.const_memory = configs['const_memory']
         n_filters = configs['n_filter'] if 'n_filter' in configs.keys() else 512
-        const_memory = configs['const_memory']
+        const_memory = configs['const_memory']  # could also use self.const_memory
 
         if self.all_conditional:
             self.act_norm = ActNorm(mode='conditional', const_memory=const_memory, cond_shape=cond_shape, inp_shape=inp_shape)
@@ -63,6 +66,13 @@ class Flow(nn.Module):
         coupling_out, coupling_logdet = self.coupling(w_out, coupling_cond)
         log_det = act_logdet + w_logdet + coupling_logdet
         return actnorm_out, w_out, coupling_out, log_det
+    #
+    # def forward(self, inp, act_cond, w_cond, coupling_cond):
+    #     # if self.const_memory:
+    #     params_lengths = (len(self.act_norm.params), len(self.inv_conv.params), len(self.coupling.params))
+    #     return FlowFunction.apply(inp, act_cond, w_cond, coupling_cond, self.inv_conv.buffers, params_lengths, *self.params)
+    #     # return FlowFunction.forward_func(inp, act_cond, w_cond, coupling_cond, self.inv_conv.buffers,
+    #     #                                  self.act_norm.params, self.inv_conv.params, self.coupling.params)
 
     def reverse(self, out, act_cond, w_cond, coupling_cond):
         inp = self.coupling.reverse(out, coupling_cond)
@@ -72,6 +82,33 @@ class Flow(nn.Module):
 
     def check_grad(self, inp, act_cond=None, w_cond=None, coupling_cond=None):
         return gradcheck(func=self.forward, inputs=(inp, act_cond, w_cond, coupling_cond), eps=1e-6)
+
+
+class FlowFunction(torch.autograd.Function):
+    @staticmethod
+    def forward_func(inp, act_cond, w_cond, coupling_cond, w_buffers, actnorm_params, w_params, coupling_params):
+        activations = []
+        out, act_logdet = ActNormFunction.apply(inp, act_cond, activations, *actnorm_params)
+        out, w_logdet = InvConvLUFunction.apply(out, w_cond, w_buffers, activations, *w_params)
+        out, coupling_logdet = CouplingFunction.apply(out, coupling_cond, activations, *coupling_params)
+        log_det = act_logdet + w_logdet + coupling_logdet
+        activations.append(out.data)
+        return out, log_det
+
+    @staticmethod
+    def forward(ctx, inp, act_cond, w_cond, coupling_cond, w_buffers, params_lengths, *params):
+        act_params_len, w_params_len, coupling_params_len = params_lengths
+        act_params = params[:act_params_len]
+        w_params = params[act_params_len:act_params_len + w_params_len]
+        coupling_params = params[act_params_len + w_params_len:]
+        return FlowFunction.forward_func(inp, act_cond, w_cond, coupling_cond, w_buffers, act_params, w_params, coupling_params)
+
+    @staticmethod
+    def backward(ctx, grad_out, grad_logdet):
+        with torch.no_grad():
+            pass  # reconstruct input
+        with torch.enable_grad():
+            pass  # call grad() function
 
 
 class AffineCoupling(nn.Module):
@@ -100,52 +137,150 @@ class AffineCoupling(nn.Module):
         self.net[2].weight.data.normal_(0, 0.05)
         self.net[2].bias.data.zero_()
 
-        self.params = tuple(self.net[0]._parameters.values()) + \
-                      tuple(self.net[2]._parameters.values()) + \
-                      tuple(self.net[4].get_params().values())
+        self.conv1_params = tuple(self.net[0]._parameters.values())
+        self.conv2_params = tuple(self.net[2]._parameters.values())
+        self.zero_conv_params = tuple(self.net[4].get_params())
+        self.params = tuple(self.conv1_params + self.conv2_params + self.zero_conv_params)
 
         if use_cond_net:
             self.use_cond_net = True
             self.cond_net = CouplingCondNet(cond_shape, inp_shape)  # without considering batch size dimension
-            self.params += self.cond_net.get_params()
+            self.cond_net_params = self.cond_net.get_params()
+            self.params += self.cond_net_params
         else:
             self.use_cond_net = False
+            self.cond_net_params = None
 
-    def compute_coupling_params(self, tensor, cond):
-        if cond is not None:  # conditional
-            cond_tensor = self.cond_net(cond) if self.use_cond_net else cond
-            inp_a_conditional = torch.cat(tensors=[tensor, cond_tensor], dim=1)  # concat channel-wise
-            log_s, t = self.net(inp_a_conditional).chunk(chunks=2, dim=1)
-        else:
-            log_s, t = self.net(tensor).chunk(chunks=2, dim=1)
-        s = torch.sigmoid(log_s + 2)
-        return s, t
-
-    def usual_forward(self, inp, cond=None):
-        inp_a, inp_b = inp.chunk(chunks=2, dim=1)  # chunk along the channel dimension
-        s, t = self.compute_coupling_params(inp_a, cond)
-        out_b = (inp_b + t) * s
-        log_det = torch.sum(torch.log(s).view(inp.shape[0], -1), 1)
-        return torch.cat(tensors=[inp_a, out_b], dim=1), log_det
-
-    def forward(self, inp, condition=None):
+    def forward(self, inp, activations, condition=None):
         if self.const_memory:
-            return CouplingFunction.apply(inp, condition, *self.params)
-        return self.usual_forward(inp, condition)
+            return CouplingFunction.apply(inp, activations, condition, *self.params)
+        return CouplingFunction.func('forward', inp, condition, self.conv1_params, self.conv2_params, self.zero_conv_params, self.cond_net_params)
 
     def reverse(self, output, cond=None):
-        out_a, out_b = output.chunk(chunks=2, dim=1)  # here we know that out_a = inp_a (see the forward fn)
-        s, t = self.compute_coupling_params(out_a, cond)
-        inp_b = (out_b / s) - t
-        return torch.cat(tensors=[out_a, inp_b], dim=1)
+        return CouplingFunction.func('reverse', output, cond, self.conv1_params, self.conv2_params, self.zero_conv_params, self.cond_net_params)
 
     def check_grads(self, inp, condition=None):
         if self.const_memory:
             return gradcheck(func=CouplingFunction.apply, inputs=(inp, condition, *self.params), eps=1e-6)
-        return gradcheck(func=self.usual_forward, inputs=(inp, condition), eps=1e-6)  # only wrt inp and condition
+        return gradcheck(func=self.forward, inputs=(inp, condition), eps=1e-6)  # only wrt inp and condition
+
+
+class PairedCouplingFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, activations, inp_left, inp_right, *params):
+        left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
+        left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
+        left_out, left_logdet = CouplingFunction.func(direction='forward',
+                                                      inp_or_out=inp_left,
+                                                      cond_inp=None,
+                                                      conv1_params=left_conv1_params,
+                                                      conv2_params=left_conv2_params,
+                                                      zero_conv_params=left_zero_conv_params,
+                                                      cond_net_params=None)
+
+        right_conv1_params, right_conv2_params, right_zero_conv_params = PairedCouplingFunction._extract_params(right_params, mode='single')
+        right_out, right_logdet = CouplingFunction.func(direction='forward',
+                                                        inp_or_out=inp_right,
+                                                        cond_inp=left_out,
+                                                        conv1_params=right_conv1_params,
+                                                        conv2_params=right_conv2_params,
+                                                        zero_conv_params=right_zero_conv_params,
+                                                        cond_net_params=cond_net_params)
+
+        ctx.save_for_backward(*params)
+        # ctx.activations = activations
+        ctx.left_out, ctx.right_out = left_out.data, right_out.data  # to be replaced by activations
+        return left_out, left_logdet, right_out, right_logdet
+
+    @staticmethod
+    def backward(ctx, grad_out_left, grad_logdet_left, grad_out_right, grad_logdet_right):
+        params = ctx.saved_tensors
+        left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
+        # activations = ctx.activations
+        left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
+        left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
+        right_conv1_params, right_conv2_params, right_zero_conv_params = PairedCouplingFunction._extract_params(right_params, mode='single')
+
+        left_out_a, left_out_b = left_out.chunk(chunks=2, dim=1)
+        left_inp_a = left_out_a
+        with torch.enable_grad():
+            left_net_out = CouplingFunction.perform_convolutions(left_inp_a, left_conv1_params, left_conv2_params, left_zero_conv_params)
+
+        with torch.no_grad():
+            inp_left = CouplingFunction.operation('reverse', left_out, left_net_out)
+            inp_left.requires_grad = True
+
+        right_out_a, right_out_b = right_out.chunk(chunks=2, dim=1)
+        right_inp_a = right_out_a
+        with torch.enable_grad():
+            left_out, left_logdet = CouplingFunction.operation('forward', inp_left, left_net_out)
+            cond_out = CouplingFunction.apply_cond_net(left_out, *cond_net_params)
+            right_net_out = CouplingFunction.perform_convolutions(torch.cat([right_inp_a, cond_out], dim=1),
+                                                                  right_conv1_params, right_conv2_params, right_zero_conv_params)
+        with torch.no_grad():
+            inp_right = CouplingFunction.operation('reverse', right_out, right_net_out)
+            inp_right.requires_grad = True
+
+        with torch.enable_grad():
+            right_out, right_logdet = CouplingFunction.operation('forward', inp_right, right_net_out)
+
+            left_grads = grad(outputs=(left_out, left_logdet, right_out, right_logdet),
+                              inputs=(inp_left, *left_params),
+                              grad_outputs=(grad_out_left, grad_logdet_left, grad_out_right, grad_logdet_right), retain_graph=True)
+            grad_inp_left = left_grads[0]
+            grad_left_params = left_grads[1:]
+
+            right_grads = grad(outputs=(right_out, right_logdet),
+                               inputs=(inp_right, *right_params, *cond_net_params),
+                               grad_outputs=(grad_out_right, grad_logdet_right), retain_graph=True)
+            grad_inp_right = right_grads[0]
+            grad_right_params = right_grads[1:1 + len(right_params)]
+            grad_cond_params = right_grads[1 + len(right_params):]
+            return (None, grad_inp_left, grad_inp_right, *(grad_left_params + grad_right_params + grad_cond_params))
+
+    @staticmethod
+    def _extract_params(params, mode):
+        if mode == 'paired':
+            left_params = params[:7]
+            right_params = params[7:14]
+            cond_net_params = params[14:]
+            return left_params, right_params, cond_net_params
+        else:  # 'single'
+            conv1_params = params[:2]
+            conv2_params = params[2:4]
+            zero_conv_params = params[4:7]
+            return conv1_params, conv2_params, zero_conv_params
 
 
 class CouplingFunction(torch.autograd.Function):
+    @staticmethod
+    def func(direction, inp_or_out, cond_inp, conv1_params, conv2_params, zero_conv_params, cond_net_params):
+        inp_a, inp_b = inp_or_out.chunk(chunks=2, dim=1)
+        is_conditional = True if cond_inp is not None else False
+
+        if is_conditional:
+            cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
+            net_input = torch.cat(tensors=[inp_a, cond_out], dim=1)
+        else:
+            net_input = inp_a
+
+        net_out = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params)
+        return CouplingFunction.operation(direction, inp_or_out, net_out)
+
+    @staticmethod
+    def operation(direction, inp_or_out, net_out):
+        part_a, part_b = inp_or_out.chunk(chunks=2, dim=1)  # chunk along the channel dimension
+        log_s, t = net_out.chunk(chunks=2, dim=1)
+        s = torch.sigmoid(log_s + 2)
+
+        if direction == 'forward':
+            out_b = (part_b + t) * s
+            log_det = torch.sum(torch.log(s).view(inp_or_out.shape[0], -1), 1)
+            return torch.cat(tensors=[part_a, out_b], dim=1), log_det
+        else:
+            inp_b = (part_b / s) - t
+            return torch.cat(tensors=[part_a, inp_b], dim=1)
+
     @staticmethod
     def perform_convolutions(x1, conv1_params, conv2_params, zero_conv_params):
         # sequential net operations
@@ -160,21 +295,6 @@ class CouplingFunction(torch.autograd.Function):
         return out
 
     @staticmethod
-    def forward_func(x1, x2, fx1, gx1):
-        y1 = x1
-        s = torch.sigmoid(fx1 + 2)
-        y2 = s * (x2 + gx1)
-        logdet = torch.sum(torch.log(s).view(x1.shape[0], -1), 1)  # shape[0]: batch size
-        return y1, y2, logdet
-
-    @staticmethod
-    def reverse_func(y1, y2, fx1, gx1):
-        x1 = y1
-        s = torch.sigmoid(fx1 + 2)
-        x2 = (y2 / s) - gx1
-        return x1, x2
-
-    @staticmethod
     def apply_cond_net(cond_inp, *params):
         conv1_params, conv2_params = params[:2], params[2:]
         cond_out = F.conv2d(cond_inp, weight=conv1_params[0], bias=conv1_params[1], padding=1)
@@ -184,84 +304,85 @@ class CouplingFunction(torch.autograd.Function):
         return cond_out
 
     @staticmethod
-    def forward(ctx, x, cond_inp, *params):
+    def forward(ctx, inp, activations, cond_inp, *params):
         conv1_params = params[:2]  # weight, bias
         conv2_params = params[2:4]  # weight, bias
         zero_conv_params = params[4:7]  # weight, bias, parameter
 
-        conditional = True if cond_inp is not None else False
-        if conditional:
-            cond_net_params = params[7:]  # length 4: two weights and two biases for 2 convolutions
-            cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
-
-        with torch.no_grad():
-            x1, x2 = x.chunk(chunks=2, dim=1)
-            net_input = torch.cat(tensors=[x1, cond_out], dim=1) if conditional else x1
-            fx1, gx1 = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params).chunk(chunks=2, dim=1)
-            y1, y2, logdet = CouplingFunction.forward_func(x1, x2, fx1, gx1)
-            y = torch.cat(tensors=[y1, y2], dim=1)
+        is_conditional = True if cond_inp is not None else False
+        with torch.no_grad():  # no_grad is probably not needed
+            cond_net_params = params[7:] if is_conditional else None
+            out, logdet = CouplingFunction.func('forward', inp, cond_inp, conv1_params, conv2_params, zero_conv_params, cond_net_params)
 
         ctx.conv1_params = conv1_params
         ctx.conv2_params = conv2_params
         ctx.zero_conv_params = zero_conv_params
-        if conditional:
-            ctx.cond_net_params = cond_net_params
+        # if is_conditional:
+        ctx.cond_net_params = cond_net_params
         ctx.cond_inp = cond_inp
-        ctx.output = y
-
-        return y, logdet
+        # ctx.output = out
+        ctx.activations = activations
+        return out, logdet
 
     @staticmethod
     def backward(ctx, grad_y, grad_logdet):
-        y = ctx.output
+        # y = ctx.output
+        activations = ctx.activations
         cond_inp = ctx.cond_inp
         conv1_params, conv2_params, zero_conv_params = ctx.conv1_params, ctx.conv2_params, ctx.zero_conv_params
-        conditional = True if cond_inp is not None else False
+        cond_net_params = ctx.cond_net_params
+        is_conditional = True if cond_inp is not None else False
 
-        if conditional:
-            cond_net_params = ctx.cond_net_params
+        y = activations.pop()
 
         y1, y2 = y.chunk(chunks=2, dim=1)
         dy1, dy2 = grad_y.chunk(chunks=2, dim=1)
 
         with torch.enable_grad():  # so it creates the graph for the NN() operation and possibly con net
-            x1 = y1
-            x1.requires_grad = True
-            if conditional:
-                cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
+            inp_a = y1
+            inp_a.requires_grad = True
 
-            net_input = torch.cat(tensors=[x1, cond_out], dim=1) if conditional else x1
-            fgx1 = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params)
-            fx1, gx1 = fgx1.chunk(chunks=2, dim=1)
+            if is_conditional:
+                cond_out = CouplingFunction.apply_cond_net(cond_inp, *cond_net_params)
+                net_input = torch.cat(tensors=[inp_a, cond_out], dim=1)
+            else:
+                net_input = inp_a
+
+            net_out = CouplingFunction.perform_convolutions(net_input, conv1_params, conv2_params, zero_conv_params)
+            fx1, gx1 = net_out.chunk(chunks=2, dim=1)
 
         with torch.no_grad():  # no grad for reconstructing input
-            _, x2 = CouplingFunction.reverse_func(y1, y2, fx1, gx1)  # reconstruct input
-            x2.requires_grad = True
+            _, inp_b = CouplingFunction.operation('reverse', y, net_out).chunk(chunks=2, dim=1)
+            inp_b.requires_grad = True
+
+            reconstructed = torch.cat([inp_a, inp_b], dim=1)
+            activations.append(reconstructed.data)
+
             s = torch.sigmoid(fx1 + 2)
             d_sig_fx1 = torch.sigmoid(fx1 + 2) * (1 - torch.sigmoid(fx1 + 2))  # derivative of sigmoid
 
         with torch.enable_grad():  # compute grads
-            CouplingFunction.forward_func(x1, x2, fx1, gx1)  # re-create computational graph
+            CouplingFunction.operation('forward', torch.cat([inp_a, inp_b], dim=1), torch.cat([fx1, gx1], dim=1))  # re-create computational graph
             dg = s * dy2
             dx2 = s * dy2
             ds_part1 = (1 / s) * grad_logdet  # grad for s coming determinant
-            ds_part2 = (x2 + gx1) * dy2  # grad for s coming from y2
+            ds_part2 = (inp_b + gx1) * dy2  # grad for s coming from y2
             df = d_sig_fx1 * (ds_part1 + ds_part2)
 
             # concat f and g grads and compute grads for input and net params
             dfg = torch.cat([df, dg], dim=1)
-            dx1 = dy1 + grad(outputs=fgx1, inputs=x1, grad_outputs=dfg, retain_graph=True)[0]
-            dwfg = grad(outputs=fgx1, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=dfg, retain_graph=True)
+            dx1 = dy1 + grad(outputs=net_out, inputs=inp_a, grad_outputs=dfg, retain_graph=True)[0]
+            dwfg = grad(outputs=net_out, inputs=tuple(conv1_params + conv2_params + zero_conv_params), grad_outputs=dfg, retain_graph=True)
 
             # final gradients
             grad_x = torch.cat([dx1, dx2], dim=1)
             grad_params = dwfg
 
-            if conditional:
-                grad_cond_inp = grad(outputs=fgx1, inputs=cond_inp, grad_outputs=dfg, retain_graph=True)[0]
-                grad_cond_net_params = grad(outputs=fgx1, inputs=cond_net_params, grad_outputs=dfg, retain_graph=True)
+            if is_conditional:
+                grad_cond_inp = grad(outputs=net_out, inputs=cond_inp, grad_outputs=dfg, retain_graph=True)[0]
+                grad_cond_net_params = grad(outputs=net_out, inputs=cond_net_params, grad_outputs=dfg, retain_graph=True)
                 grad_params += grad_cond_net_params
             else:
                 grad_cond_inp = None
 
-        return (grad_x, grad_cond_inp) + grad_params  # append to tuple
+        return (grad_x, None, grad_cond_inp) + grad_params  # append to tuple

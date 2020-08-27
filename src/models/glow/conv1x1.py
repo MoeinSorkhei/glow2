@@ -229,6 +229,73 @@ class InvConv1x1LU(nn.Module):
         return gradcheck(func=self.usual_forward, inputs=(inp, condition), eps=1e-6)
 
 
+class PairedInvConv1x1Function(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, activations, inp_left, inp_right, left_buffers, right_buffers, *params):
+        inp_channels = inp_right.shape[1]
+        left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
+        left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
+        left_out, left_logdet = InvConvLUFunction.forward_func(inp_left, left_weight, left_s_vector)
+
+        right_weight, _, _, _, right_s_vector = InvConvLUFunction.calc_conditional_weight(inp_channels, left_out, right_buffers, *cond_net_params)
+        right_out, right_logdet = InvConvLUFunction.forward_func(inp_right, right_weight, right_s_vector)
+
+        ctx.save_for_backward(*params)
+        ctx.left_buffers, ctx.right_buffers = left_buffers, right_buffers
+        # ctx.activations = activations
+        ctx.left_out = left_out.data  # to be replaced by activations
+        ctx.right_out = right_out.data
+        ctx.inp_channels = inp_channels
+        return left_out, left_logdet, right_out, right_logdet
+
+    @staticmethod
+    def backward(ctx, grad_left_out, grad_left_logdet, grad_right_out, grad_right_logdet):
+        params = ctx.saved_tensors
+        left_buffers, right_buffers = ctx.left_buffers, ctx.right_buffers
+        left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
+        # activations = ctx.activations
+        inp_channels = ctx.inp_channels
+
+        left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
+        with torch.enable_grad():
+            left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
+
+        with torch.no_grad():
+            inp_left = InvConvLUFunction.reverse_func(left_out, left_weight)
+            inp_left.requires_grad = True
+
+        with torch.enable_grad():
+            left_out, left_logdet = InvConvLUFunction.forward_func(inp_left, left_weight, left_s_vector)
+            right_weight, _, _, _, right_s_vector = InvConvLUFunction.calc_conditional_weight(inp_channels, left_out, right_buffers, *cond_net_params)
+        with torch.no_grad():
+            inp_right = InvConvLUFunction.reverse_func(right_out, right_weight)
+            inp_right.requires_grad = True
+
+        with torch.enable_grad():
+            right_out, right_logdet = InvConvLUFunction.forward_func(inp_right, right_weight, right_s_vector)
+            grad_inp_left = grad(outputs=left_out, inputs=inp_left, grad_outputs=grad_left_out, retain_graph=True)[0] + \
+                            grad(outputs=right_out, inputs=inp_left, grad_outputs=grad_right_out, retain_graph=True)[0] + \
+                            grad(outputs=right_logdet, inputs=inp_left, grad_outputs=grad_right_logdet, retain_graph=True)[0]
+
+            grad_left_w_l = grad(outputs=left_out, inputs=left_w_l, grad_outputs=grad_left_out, retain_graph=True)[0]
+            grad_left_w_u = grad(outputs=left_out, inputs=left_w_u, grad_outputs=grad_left_out, retain_graph=True)[0]
+            grad_left_w_s = grad(outputs=left_out, inputs=left_s_vector, grad_outputs=grad_left_out, retain_graph=True)[0] + \
+                            grad(outputs=left_logdet, inputs=left_s_vector, grad_outputs=grad_left_logdet, retain_graph=True)[0]
+
+            grad_inp_right = grad(outputs=right_out, inputs=inp_right, grad_outputs=grad_right_out, retain_graph=True)[0]
+
+            grad_cond_params_wrt_right_out = grad(outputs=right_out, inputs=cond_net_params, grad_outputs=grad_right_out, retain_graph=True)
+            grad_cond_params_wrt_right_logdet = grad(outputs=right_logdet, inputs=cond_net_params, grad_outputs=grad_right_logdet, retain_graph=True)
+            grad_cond_params = tuple([sum(x) for x in zip(grad_cond_params_wrt_right_out, grad_cond_params_wrt_right_logdet)])
+            return (None, grad_inp_left, grad_inp_right, None, None, *(grad_left_w_l, grad_left_w_u, grad_left_w_s, *grad_cond_params))
+
+    @staticmethod
+    def _extract_params(params):
+        left_w_l, left_w_u, left_w_s = params[:3]
+        cond_net_params = params[3:]
+        return left_w_l, left_w_u, left_w_s, cond_net_params
+
+
 class InvConvLUFunction(torch.autograd.Function):
     @staticmethod
     def forward_func(inp, weight, s_vector):

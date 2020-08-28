@@ -111,6 +111,22 @@ class FlowFunction(torch.autograd.Function):
             pass  # call grad() function
 
 
+class PairedFlow(torch.nn.Module):
+    def __init__(self, cond_shape, inp_shape, configs):
+        super().__init__()
+        self.paired_actnorm = PairedActNorm(cond_shape, inp_shape)
+        self.paired_inv_conv = PairedInvConv1x1(cond_shape, inp_shape)
+        self.paired_coupling = PairedCoupling(cond_shape, inp_shape, configs['n_filters'])
+
+    def forward(self, activations, inp_left, inp_right):
+        left_out, left_act_logdet, right_out, right_act_logdet = self.paired_actnorm(activations, inp_left, inp_right)
+        left_out, left_w_logdet, right_out, right_w_logdet = self.paired_inv_conv(activations, left_out, right_out)
+        left_out, left_coupling_logdet, right_out, right_coupling_logdet = self.paired_coupling(activations, left_out, right_out)
+        left_logdet = left_act_logdet + left_w_logdet + left_coupling_logdet
+        right_logdet = right_act_logdet + right_w_logdet + right_coupling_logdet
+        return left_out, left_logdet, right_out, right_logdet
+
+
 class AffineCoupling(nn.Module):
     def __init__(self, cond_shape, inp_shape, n_filters, const_memory, use_cond_net):
         super().__init__()
@@ -163,6 +179,22 @@ class AffineCoupling(nn.Module):
         if self.const_memory:
             return gradcheck(func=CouplingFunction.apply, inputs=(inp, condition, *self.params), eps=1e-6)
         return gradcheck(func=self.forward, inputs=(inp, condition), eps=1e-6)  # only wrt inp and condition
+
+
+class PairedCoupling(torch.nn.Module):
+    def __init__(self, cond_shape, inp_shape, n_filters):
+        super().__init__()
+        self.left_coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=None, n_filters=n_filters, const_memory=True, use_cond_net=False)
+        self.right_coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, n_filters=n_filters, const_memory=True, use_cond_net=True)
+
+    def forward(self, activations, inp_left, inp_right):
+        return PairedCouplingFunction.apply(activations, inp_left, inp_right, *(self.left_coupling.params + self.right_coupling.params))
+
+    def check_grads(self, inp_left, inp_right):
+        out_left, _, out_right, _ = self.forward({}, inp_left, inp_right)
+        activations = {'left': [out_left.data], 'right': [out_right.data]}
+        return gradcheck(func=PairedCouplingFunction.apply,
+                         inputs=(activations, inp_left, inp_right, *(self.left_coupling.params + self.right_coupling.params)))
 
 
 class PairedCouplingFunction(torch.autograd.Function):

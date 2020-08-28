@@ -182,7 +182,7 @@ class InvConv1x1LU(nn.Module):
         if self.mode == 'conditional':
             matrices_flattened = torch.cat([torch.flatten(w_l), torch.flatten(w_u), logabs(w_s)])
             self.cond_net = WCondNet(cond_shape, inp_shape, do_lu=True, initial_bias=matrices_flattened)
-            self.params = self.cond_net.conv_net.get_params() + self.cond_net.linear_net.get_params()
+            self.params = self.cond_net.conv_net.get_params() + self.cond_net.linear_net.get_params()  # cond_net params
         else:
             # learnable parameters
             self.w_l = nn.Parameter(w_l)
@@ -227,6 +227,27 @@ class InvConv1x1LU(nn.Module):
         if self.const_memory:
             return gradcheck(func=InvConvLUFunction.apply, inputs=(inp, condition, self.buffers, *self.params), eps=1e-6)
         return gradcheck(func=self.usual_forward, inputs=(inp, condition), eps=1e-6)
+
+
+class PairedInvConv1x1(torch.nn.Module):
+    def __init__(self, cond_shape, inp_shape):
+        super().__init__()
+        inp_channels = inp_shape[0]
+        self.left_inv_conv = InvConv1x1LU(mode='unconditional', in_channel=inp_channels, const_memory=True)
+        self.right_inv_conv = InvConv1x1LU(mode='conditional', in_channel=inp_channels, const_memory=True, cond_shape=cond_shape, inp_shape=inp_shape)
+
+    def forward(self, activations, inp_left, inp_right):
+        return PairedInvConv1x1Function.apply(activations, inp_left, inp_right,
+                                              self.left_inv_conv.buffers, self.right_inv_conv.buffers,
+                                              *(self.left_inv_conv.params + self.right_inv_conv.params))
+
+    def check_grads(self, inp_left, inp_right):
+        out_left, _, out_right, _ = self.forward({}, inp_left, inp_right)
+        activations = {'left': [out_left.data], 'right': [out_right.data]}
+        return gradcheck(func=PairedInvConv1x1Function.apply,
+                         inputs=(activations, inp_left, inp_right,
+                                 self.left_inv_conv.buffers, self.right_inv_conv.buffers,
+                                 *(self.left_inv_conv.params + self.right_inv_conv.params)))
 
 
 class PairedInvConv1x1Function(torch.autograd.Function):

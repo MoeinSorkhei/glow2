@@ -8,6 +8,7 @@ from collections import OrderedDict
 from .actnorm import *
 from .conv1x1 import *
 from .cond_net import CouplingCondNet
+from .utils import *
 from globals import device
 
 
@@ -175,7 +176,7 @@ class PairedCoupling(torch.nn.Module):
 
 class PairedCouplingFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, activations, inp_left, inp_right, *params):
+    def forward(ctx, backprop_info, inp_left, inp_right, *params):
         left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
         left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
         left_out, left_logdet = CouplingFunction.func(direction='forward',
@@ -196,27 +197,46 @@ class PairedCouplingFunction(torch.autograd.Function):
                                                         cond_net_params=cond_net_params)
 
         ctx.save_for_backward(*params)
-        # ctx.activations = activations
-        ctx.left_out, ctx.right_out = left_out.data, right_out.data  # to be replaced by activations
+        ctx.backprop_info = backprop_info
+        # ctx.left_out, ctx.right_out = left_out.data, right_out.data  # to be replaced by activations
         return left_out, left_logdet, right_out, right_logdet
 
     @staticmethod
     def backward(ctx, grad_out_left, grad_logdet_left, grad_out_right, grad_logdet_right):
         params = ctx.saved_tensors
-        left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
-        # activations = ctx.activations
+        # left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
+        backprop_info = ctx.backprop_info
+        left_out, right_out = backprop_info['left_activations'].pop(), backprop_info['right_activations'].pop()
+
+        # unsqueeze output and concat with z_out if this coupling lies at the end of Block
+        if backprop_info['current_i_flow'] in backprop_info['marginal_flows_inds']:
+            with torch.no_grad():
+                i_block = backprop_info['marginal_flows_inds'].index(backprop_info['current_i_flow'])
+                z_out_left = backprop_info['z_outs_left'][i_block]
+                z_out_right = backprop_info['z_outs_right'][i_block]
+                # unsqueeze and concat
+                left_out, right_out = unsqueeze_tensor(left_out), unsqueeze_tensor(right_out)
+                left_out = torch.cat([left_out, z_out_left], dim=1)
+                right_out = torch.cat([right_out, z_out_right], dim=1)
+
+        # decrease flow index
+        ctx.backprop_info['current_i_flow'] -= 1
+
         left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
         left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
         right_conv1_params, right_conv2_params, right_zero_conv_params = PairedCouplingFunction._extract_params(right_params, mode='single')
 
         left_out_a, left_out_b = left_out.chunk(chunks=2, dim=1)
         left_inp_a = left_out_a
+
         with torch.enable_grad():
             left_net_out = CouplingFunction.perform_convolutions(left_inp_a, left_conv1_params, left_conv2_params, left_zero_conv_params)
 
+        # reconstruct left input
         with torch.no_grad():
             inp_left = CouplingFunction.operation('reverse', left_out, left_net_out)
             inp_left.requires_grad = True
+            backprop_info['left_activations'].append(inp_left.data)
 
         right_out_a, right_out_b = right_out.chunk(chunks=2, dim=1)
         right_inp_a = right_out_a
@@ -225,9 +245,11 @@ class PairedCouplingFunction(torch.autograd.Function):
             cond_out = CouplingFunction.apply_cond_net(left_out, *cond_net_params)
             right_net_out = CouplingFunction.perform_convolutions(torch.cat([right_inp_a, cond_out], dim=1),
                                                                   right_conv1_params, right_conv2_params, right_zero_conv_params)
+        # reconstruct right input
         with torch.no_grad():
             inp_right = CouplingFunction.operation('reverse', right_out, right_net_out)
             inp_right.requires_grad = True
+            backprop_info['right_activations'].append(inp_right.data)
 
         with torch.enable_grad():
             right_out, right_logdet = CouplingFunction.operation('forward', inp_right, right_net_out)

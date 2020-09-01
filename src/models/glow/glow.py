@@ -1,5 +1,6 @@
 from torch import nn
 from torch.autograd import gradcheck
+import numpy as np
 
 from .block import Block, PairedBlock
 from .utils import *
@@ -90,6 +91,7 @@ class PairedGLow(nn.Module):
         super().__init__()
         # self.all_conditional = configs['all_conditional']
         self.n_blocks = n_blocks
+        self.n_flows = n_flows
         self.paired_blocks = nn.ModuleList()
 
         # making None -> [None, None, ..., None]
@@ -104,11 +106,12 @@ class PairedGLow(nn.Module):
                                                   inp_shape=input_shapes[i],
                                                   do_split=do_split, configs=configs))
 
-    def forward(self, activations, inp_left, inp_right):
+    def forward(self, back_prop_info, inp_left, inp_right):
         total_logdet_left = total_logdet_right = 0
         log_p_sum_left = log_p_sum_right = 0
         z_outs_left, z_outs_right = [], []
         out_left, out_right = inp_left, inp_right  # initialize output with the input
+        # back_prop_info = {}  # shared by all layers for backprop
 
         for i_block, paired_block in enumerate(self.paired_blocks):
             # squeeze in the beginning of Block
@@ -116,9 +119,9 @@ class PairedGLow(nn.Module):
 
             # apply Flows
             for i_flow, paired_flow in enumerate(paired_block.paired_flows):
-                out_left, act_logdet_left, out_right, act_logdet_right = paired_flow.paired_actnorm(activations, out_left, out_right)
-                out_left, w_logdet_left, out_right, w_logdet_right = paired_flow.paired_inv_conv(activations, out_left, out_right)
-                out_left, coupling_logdet_left, out_right, coupling_logdet_right = paired_flow.paired_coupling(activations, out_left, out_right)
+                out_left, act_logdet_left, out_right, act_logdet_right = paired_flow.paired_actnorm(back_prop_info, out_left, out_right)
+                out_left, w_logdet_left, out_right, w_logdet_right = paired_flow.paired_inv_conv(back_prop_info, out_left, out_right)
+                out_left, coupling_logdet_left, out_right, coupling_logdet_right = paired_flow.paired_coupling(back_prop_info, out_left, out_right)
                 total_logdet_left += (act_logdet_left + w_logdet_left + coupling_logdet_left)
                 total_logdet_right += (act_logdet_right + w_logdet_right + coupling_logdet_right)
             
@@ -130,6 +133,15 @@ class PairedGLow(nn.Module):
             z_outs_left.append(z_new_left)
             z_outs_right.append(z_new_right)
 
+        # prepare items for backprop
+        back_prop_info.update({
+            'left_activations': [out_left.data],
+            'right_activations': [out_right.data],
+            'z_outs_left': [z_outs_left[i].data for i in range(len(z_outs_left) - 1)],
+            'z_outs_right': [z_outs_right[i].data for i in range(len(z_outs_right) - 1)],
+            'marginal_flows_inds': [cumulative_flows - 1 for cumulative_flows in np.cumsum(self.n_flows)[:-1]],
+            'current_i_flow': sum(self.n_flows) - 1
+        })
         return z_outs_left, z_outs_right, log_p_sum_left, log_p_sum_right, total_logdet_left, total_logdet_right
 
 

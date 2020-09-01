@@ -84,54 +84,54 @@ class PairedActNorm(torch.nn.Module):
 
 class PairedActNormFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, activations, inp_left, inp_right, *params):
-        ctx.save_for_backward(*params)
-        # ctx.activations = activations
+    def forward(ctx, backprop_info, inp_left, inp_right, *params):
         left_loc, left_scale, cond_net_params = PairedActNormFunction._extract_params(params)
         out_left, logdet_left = ActNormFunction.forward_func(inp_left, left_loc, left_scale)
         right_loc, right_scale = ActNormFunction.compute_loc_and_scale(out_left, *cond_net_params)
         out_right, logdet_right = ActNormFunction.forward_func(inp_right, right_loc, right_scale)
 
-        ctx.out_left = out_left.data
-        ctx.out_right = out_right.data
+        ctx.save_for_backward(*params)
+        ctx.backprop_info = backprop_info
+        # ctx.out_left = out_left.data
+        # ctx.out_right = out_right.data
         return out_left, logdet_left, out_right, logdet_right
 
     @staticmethod
     def backward(ctx, grad_out_left, grad_logdet_left, grad_out_right, grad_logdet_right):
         params = ctx.saved_tensors
-        # activations = ctx.activations
+        backprop_info = ctx.backprop_info
+        left_out, right_out = backprop_info['left_activations'].pop(), backprop_info['right_activations'].pop()
+        # out_left, out_right = ctx.out_left, ctx.out_right
         left_loc, left_scale, cond_net_params = PairedActNormFunction._extract_params(params)
-        # out_left = activations['left'].pop()
-        # out_right = activations['right'].pop()
-        out_left, out_right = ctx.out_left, ctx.out_right
 
         # reconstruct left input
         with torch.no_grad():
-            inp_left = ActNormFunction.reverse_func(out_left, left_loc, left_scale)
-            # activations['left'].append(inp_left.data)
+            inp_left = ActNormFunction.reverse_func(left_out, left_loc, left_scale)
             inp_left.requires_grad = True
+            backprop_info['left_activations'].append(inp_left.data)
 
         with torch.enable_grad():
-            out_left, logdet_left = ActNormFunction.forward_func(inp_left, left_loc, left_scale)
-            right_loc, right_scale = ActNormFunction.compute_loc_and_scale(out_left, *cond_net_params)
+            left_out, logdet_left = ActNormFunction.forward_func(inp_left, left_loc, left_scale)
+            right_loc, right_scale = ActNormFunction.compute_loc_and_scale(left_out, *cond_net_params)
 
+        # reconstruct right input
         with torch.no_grad():
-            inp_right = ActNormFunction.reverse_func(out_right, right_loc, right_scale)
-            # activations['right'].append(inp_right.data)
+            inp_right = ActNormFunction.reverse_func(right_out, right_loc, right_scale)
             inp_right.requires_grad = True
+            backprop_info['right_activations'].append(inp_right.data)
 
         with torch.enable_grad():
-            out_right, logdet_right = ActNormFunction.forward_func(inp_right, right_loc, right_scale)
-            grad_inp_left = grad(outputs=out_left, inputs=inp_left, grad_outputs=grad_out_left, retain_graph=True)[0] + \
-                            grad(outputs=out_right, inputs=inp_left, grad_outputs=grad_out_right, retain_graph=True)[0] + \
+            right_out, logdet_right = ActNormFunction.forward_func(inp_right, right_loc, right_scale)
+            grad_inp_left = grad(outputs=left_out, inputs=inp_left, grad_outputs=grad_out_left, retain_graph=True)[0] + \
+                            grad(outputs=right_out, inputs=inp_left, grad_outputs=grad_out_right, retain_graph=True)[0] + \
                             grad(outputs=logdet_right, inputs=inp_left, grad_outputs=grad_logdet_right, retain_graph=True)[0]
-            grad_inp_right = grad(outputs=out_right, inputs=inp_right, grad_outputs=grad_out_right, retain_graph=True)[0]
+            grad_inp_right = grad(outputs=right_out, inputs=inp_right, grad_outputs=grad_out_right, retain_graph=True)[0]
 
-            grad_loc_left = grad(outputs=out_left, inputs=left_loc, grad_outputs=grad_out_left, retain_graph=True)[0]
-            grad_scale_left = grad(outputs=out_left, inputs=left_scale, grad_outputs=grad_out_left, retain_graph=True)[0] + \
+            grad_loc_left = grad(outputs=left_out, inputs=left_loc, grad_outputs=grad_out_left, retain_graph=True)[0]
+            grad_scale_left = grad(outputs=left_out, inputs=left_scale, grad_outputs=grad_out_left, retain_graph=True)[0] + \
                               grad(outputs=logdet_left, inputs=left_scale, grad_outputs=grad_logdet_left, retain_graph=True)[0]
 
-            grad_cond_params_wrt_out_right = grad(outputs=out_right, inputs=cond_net_params, grad_outputs=grad_out_right, retain_graph=True)
+            grad_cond_params_wrt_out_right = grad(outputs=right_out, inputs=cond_net_params, grad_outputs=grad_out_right, retain_graph=True)
             grad_cond_params_wrt_logdet_right = grad(outputs=logdet_right, inputs=cond_net_params, grad_outputs=grad_logdet_right, retain_graph=True)
             grad_cond_params = tuple([sum(x) for x in zip(grad_cond_params_wrt_out_right, grad_cond_params_wrt_logdet_right)])
             return (None, grad_inp_left, grad_inp_right, grad_loc_left, grad_scale_left, *grad_cond_params)

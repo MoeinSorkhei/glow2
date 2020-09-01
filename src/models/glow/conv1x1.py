@@ -254,7 +254,7 @@ class PairedInvConv1x1(torch.nn.Module):
 
 class PairedInvConv1x1Function(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, activations, inp_left, inp_right, left_buffers, right_buffers, *params):
+    def forward(ctx, backprop_info, inp_left, inp_right, left_buffers, right_buffers, *params):
         inp_channels = inp_right.shape[1]
         left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
         left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
@@ -265,9 +265,9 @@ class PairedInvConv1x1Function(torch.autograd.Function):
 
         ctx.save_for_backward(*params)
         ctx.left_buffers, ctx.right_buffers = left_buffers, right_buffers
-        # ctx.activations = activations
-        ctx.left_out = left_out.data  # to be replaced by activations
-        ctx.right_out = right_out.data
+        ctx.backprop_info = backprop_info
+        # ctx.left_out = left_out.data  # to be replaced by activations
+        # ctx.right_out = right_out.data
         ctx.inp_channels = inp_channels
         return left_out, left_logdet, right_out, right_logdet
 
@@ -275,24 +275,31 @@ class PairedInvConv1x1Function(torch.autograd.Function):
     def backward(ctx, grad_left_out, grad_left_logdet, grad_right_out, grad_right_logdet):
         params = ctx.saved_tensors
         left_buffers, right_buffers = ctx.left_buffers, ctx.right_buffers
-        left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
-        # activations = ctx.activations
+        # left_out, right_out = ctx.left_out, ctx.right_out  # to be replaced by activations
         inp_channels = ctx.inp_channels
+        backprop_info = ctx.backprop_info
+        left_out, right_out = backprop_info['left_activations'].pop(), backprop_info['right_activations'].pop()
 
         left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
         with torch.enable_grad():
             left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
 
+        # reconstruct inp_left
         with torch.no_grad():
             inp_left = InvConvLUFunction.reverse_func(left_out, left_weight)
             inp_left.requires_grad = True
+            backprop_info['left_activations'].append(inp_left.data)
 
+        # calc weight for right inv_conv based on left inv_conv output
         with torch.enable_grad():
             left_out, left_logdet = InvConvLUFunction.forward_func(inp_left, left_weight, left_s_vector)
             right_weight, _, _, _, right_s_vector = InvConvLUFunction.calc_conditional_weight(inp_channels, left_out, right_buffers, *cond_net_params)
+
+        # reconstruct inp_right
         with torch.no_grad():
             inp_right = InvConvLUFunction.reverse_func(right_out, right_weight)
             inp_right.requires_grad = True
+            backprop_info['right_activations'].append(inp_right.data)
 
         with torch.enable_grad():
             right_out, right_logdet = InvConvLUFunction.forward_func(inp_right, right_weight, right_s_vector)

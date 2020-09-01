@@ -85,15 +85,20 @@ class PairedActNorm(torch.nn.Module):
 class PairedActNormFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, backprop_info, inp_left, inp_right, *params):
-        left_loc, left_scale, cond_net_params = PairedActNormFunction._extract_params(params)
-        out_left, logdet_left = ActNormFunction.forward_func(inp_left, left_loc, left_scale)
-        right_loc, right_scale = ActNormFunction.compute_loc_and_scale(out_left, *cond_net_params)
-        out_right, logdet_right = ActNormFunction.forward_func(inp_right, right_loc, right_scale)
+        with torch.no_grad():
+            left_loc, left_scale, cond_net_params = PairedActNormFunction._extract_params(params)
+            out_left, logdet_left = ActNormFunction.forward_func(inp_left, left_loc, left_scale)
+            right_loc, right_scale = ActNormFunction.compute_loc_and_scale(out_left, *cond_net_params)
+            out_right, logdet_right = ActNormFunction.forward_func(inp_right, right_loc, right_scale)
+
+        # del left_loc, left_scale
+        # del right_loc, right_scale
 
         ctx.save_for_backward(*params)
         ctx.backprop_info = backprop_info
         # ctx.out_left = out_left.data
         # ctx.out_right = out_right.data
+        # return out_left, logdet_left, out_right, logdet_right
         return out_left, logdet_left, out_right, logdet_right
 
     @staticmethod
@@ -134,6 +139,13 @@ class PairedActNormFunction(torch.autograd.Function):
             grad_cond_params_wrt_out_right = grad(outputs=right_out, inputs=cond_net_params, grad_outputs=grad_out_right, retain_graph=True)
             grad_cond_params_wrt_logdet_right = grad(outputs=logdet_right, inputs=cond_net_params, grad_outputs=grad_logdet_right, retain_graph=True)
             grad_cond_params = tuple([sum(x) for x in zip(grad_cond_params_wrt_out_right, grad_cond_params_wrt_logdet_right)])
+
+            # left_out.detach_(), logdet_left.detach_()
+            # right_out.detach_(), logdet_right.detach_(), right_loc.detach(), right_scale.detach()
+            # del left_out, logdet_left
+            # del right_out, logdet_right, right_loc, right_scale
+            # del inp_left, inp_right
+
             return (None, grad_inp_left, grad_inp_right, grad_loc_left, grad_scale_left, *grad_cond_params)
 
     @staticmethod

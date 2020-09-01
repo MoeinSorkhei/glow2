@@ -255,13 +255,14 @@ class PairedInvConv1x1(torch.nn.Module):
 class PairedInvConv1x1Function(torch.autograd.Function):
     @staticmethod
     def forward(ctx, backprop_info, inp_left, inp_right, left_buffers, right_buffers, *params):
-        inp_channels = inp_right.shape[1]
-        left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
-        left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
-        left_out, left_logdet = InvConvLUFunction.forward_func(inp_left, left_weight, left_s_vector)
+        with torch.no_grad():
+            inp_channels = inp_right.shape[1]
+            left_w_l, left_w_u, left_s_vector, cond_net_params = PairedInvConv1x1Function._extract_params(params)
+            left_weight = InvConvLUFunction.calc_weight(left_w_l, left_w_u, left_s_vector, left_buffers)
+            left_out, left_logdet = InvConvLUFunction.forward_func(inp_left, left_weight, left_s_vector)
 
-        right_weight, _, _, _, right_s_vector = InvConvLUFunction.calc_conditional_weight(inp_channels, left_out, right_buffers, *cond_net_params)
-        right_out, right_logdet = InvConvLUFunction.forward_func(inp_right, right_weight, right_s_vector)
+            right_weight, _, _, _, right_s_vector = InvConvLUFunction.calc_conditional_weight(inp_channels, left_out, right_buffers, *cond_net_params)
+            right_out, right_logdet = InvConvLUFunction.forward_func(inp_right, right_weight, right_s_vector)
 
         ctx.save_for_backward(*params)
         ctx.left_buffers, ctx.right_buffers = left_buffers, right_buffers

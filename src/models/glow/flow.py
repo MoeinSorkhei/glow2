@@ -177,24 +177,25 @@ class PairedCoupling(torch.nn.Module):
 class PairedCouplingFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, backprop_info, inp_left, inp_right, *params):
-        left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
-        left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
-        left_out, left_logdet = CouplingFunction.func(direction='forward',
-                                                      inp_or_out=inp_left,
-                                                      cond_inp=None,
-                                                      conv1_params=left_conv1_params,
-                                                      conv2_params=left_conv2_params,
-                                                      zero_conv_params=left_zero_conv_params,
-                                                      cond_net_params=None)
+        with torch.no_grad():
+            left_params, right_params, cond_net_params = PairedCouplingFunction._extract_params(params, mode='paired')
+            left_conv1_params, left_conv2_params, left_zero_conv_params = PairedCouplingFunction._extract_params(left_params, mode='single')
+            left_out, left_logdet = CouplingFunction.func(direction='forward',
+                                                          inp_or_out=inp_left,
+                                                          cond_inp=None,
+                                                          conv1_params=left_conv1_params,
+                                                          conv2_params=left_conv2_params,
+                                                          zero_conv_params=left_zero_conv_params,
+                                                          cond_net_params=None)
 
-        right_conv1_params, right_conv2_params, right_zero_conv_params = PairedCouplingFunction._extract_params(right_params, mode='single')
-        right_out, right_logdet = CouplingFunction.func(direction='forward',
-                                                        inp_or_out=inp_right,
-                                                        cond_inp=left_out,
-                                                        conv1_params=right_conv1_params,
-                                                        conv2_params=right_conv2_params,
-                                                        zero_conv_params=right_zero_conv_params,
-                                                        cond_net_params=cond_net_params)
+            right_conv1_params, right_conv2_params, right_zero_conv_params = PairedCouplingFunction._extract_params(right_params, mode='single')
+            right_out, right_logdet = CouplingFunction.func(direction='forward',
+                                                            inp_or_out=inp_right,
+                                                            cond_inp=left_out,
+                                                            conv1_params=right_conv1_params,
+                                                            conv2_params=right_conv2_params,
+                                                            zero_conv_params=right_zero_conv_params,
+                                                            cond_net_params=cond_net_params)
 
         ctx.save_for_backward(*params)
         ctx.backprop_info = backprop_info

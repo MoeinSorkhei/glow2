@@ -1,7 +1,7 @@
 from torch import nn
 from torch.autograd import gradcheck
 
-from .block import Block
+from .block import Block, PairedBlock
 from .utils import *
 
 
@@ -83,6 +83,54 @@ class Glow(nn.Module):
                                           conditions=conds)
             inp = block_reverse
         return inp
+
+
+class PairedGLow(nn.Module):
+    def __init__(self, n_blocks, n_flows, cond_shapes, input_shapes, configs):
+        super().__init__()
+        # self.all_conditional = configs['all_conditional']
+        self.n_blocks = n_blocks
+        self.paired_blocks = nn.ModuleList()
+
+        # making None -> [None, None, ..., None]
+        if cond_shapes is None:
+            cond_shapes = [None] * n_blocks
+
+        for i in range(n_blocks):
+            do_split = False if i == (n_blocks - 1) else True  # last Block does not have split
+            # create Block
+            self.paired_blocks.append(PairedBlock(n_flow=n_flows[i],
+                                                  cond_shape=cond_shapes[i],
+                                                  inp_shape=input_shapes[i],
+                                                  do_split=do_split, configs=configs))
+
+    def forward(self, activations, inp_left, inp_right):
+        total_logdet_left = total_logdet_right = 0
+        log_p_sum_left = log_p_sum_right = 0
+        z_outs_left, z_outs_right = [], []
+        out_left, out_right = inp_left, inp_right  # initialize output with the input
+
+        for i_block, paired_block in enumerate(self.paired_blocks):
+            # squeeze in the beginning of Block
+            out_left, out_right = squeeze_tensor(out_left), squeeze_tensor(out_right)
+
+            # apply Flows
+            for i_flow, paired_flow in enumerate(paired_block.paired_flows):
+                out_left, act_logdet_left, out_right, act_logdet_right = paired_flow.paired_actnorm(activations, out_left, out_right)
+                out_left, w_logdet_left, out_right, w_logdet_right = paired_flow.paired_inv_conv(activations, out_left, out_right)
+                out_left, coupling_logdet_left, out_right, coupling_logdet_right = paired_flow.paired_coupling(activations, out_left, out_right)
+                total_logdet_left += (act_logdet_left + w_logdet_left + coupling_logdet_left)
+                total_logdet_right += (act_logdet_right + w_logdet_right + coupling_logdet_right)
+            
+            # split after all Flows in a Block
+            out_left, z_new_left, log_p_left = paired_block.possibly_split(out_left, 'left')
+            out_right, z_new_right, log_p_right = paired_block.possibly_split(out_right, 'right')
+            log_p_sum_left += log_p_left
+            log_p_sum_right += log_p_right
+            z_outs_left.append(z_new_left)
+            z_outs_right.append(z_new_right)
+
+        return z_outs_left, z_outs_right, log_p_sum_left, log_p_sum_right, total_logdet_left, total_logdet_right
 
 
 def init_glow(n_blocks, n_flows, input_shapes, cond_shapes, configs):

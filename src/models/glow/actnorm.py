@@ -65,6 +65,7 @@ class PairedActNorm(torch.nn.Module):
         inp_channels = inp_shape[0]  # inp_shape is (C, H, W)
         self.left_actnorm = ActNorm(mode='unconditional', const_memory=True, in_channel=inp_channels, cond_shape=None, inp_shape=None)
         self.right_actnorm = ActNorm(mode='conditional', const_memory=True, in_channel=inp_channels, cond_shape=cond_shape, inp_shape=inp_shape)
+        self.params = self.left_actnorm.params + self.right_actnorm.params
 
     def possibly_initialize_params(self, inp_left, inp_right):
         self.left_actnorm.possibly_initialize_params(inp_left)
@@ -72,13 +73,13 @@ class PairedActNorm(torch.nn.Module):
 
     def forward(self, activations, inp_left, inp_right):
         self.possibly_initialize_params(inp_left, inp_right)
-        return PairedActNormFunction.apply(activations, inp_left, inp_right, *(self.left_actnorm.params + self.right_actnorm.params))
+        return PairedActNormFunction.apply(activations, inp_left, inp_right, *self.params)
 
     def check_grads(self, inp_left, inp_right):
         out_left, _, out_right, _ = self.forward({}, inp_left, inp_right)
         activations = {'left': [out_left.data], 'right': [out_right.data]}
         return gradcheck(func=PairedActNormFunction.apply,
-                         inputs=(activations, inp_left, inp_right, *(self.left_actnorm.params + self.right_actnorm.params)))
+                         inputs=(activations, inp_left, inp_right, *self.params))
 
 
 class PairedActNormFunction(torch.autograd.Function):

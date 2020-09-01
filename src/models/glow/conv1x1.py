@@ -235,6 +235,8 @@ class PairedInvConv1x1(torch.nn.Module):
         inp_channels = inp_shape[0]
         self.left_inv_conv = InvConv1x1LU(mode='unconditional', in_channel=inp_channels, const_memory=True)
         self.right_inv_conv = InvConv1x1LU(mode='conditional', in_channel=inp_channels, const_memory=True, cond_shape=cond_shape, inp_shape=inp_shape)
+        self.params = self.left_inv_conv.params + self.right_inv_conv.params
+        self.buffers = (self.left_inv_conv.buffers, self.right_inv_conv.buffers)  # tuple of tuples
 
     def forward(self, activations, inp_left, inp_right):
         return PairedInvConv1x1Function.apply(activations, inp_left, inp_right,

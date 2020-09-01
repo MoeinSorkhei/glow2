@@ -7,7 +7,7 @@ from torch.utils import checkpoint
 import numpy as np
 from collections import OrderedDict
 
-from .flow import Flow, ZeroInitConv2d
+from .flow import Flow, ZeroInitConv2d, PairedFlow
 from globals import device
 from .utils import *
 
@@ -152,3 +152,59 @@ class Block(nn.Module):
 
     def check_grad(self, inp, conditions=None):
         return gradcheck(func=self.forward, inputs=(inp, conditions, True), eps=1e-6)
+
+
+def compute_gaussian_channels(inp_shape, do_split):  # regardless of cond_shape, since this is based on Block outputs
+    if do_split:
+        gaussian_in_channels = inp_shape[0] // 2
+        gaussian_out_channels = inp_shape[0]
+    else:
+        gaussian_in_channels = inp_shape[0]
+        gaussian_out_channels = inp_shape[0] * 2
+    return gaussian_in_channels, gaussian_out_channels
+
+
+class PairedBlock(nn.Module):
+    def __init__(self, n_flow, cond_shape, inp_shape, do_split, configs):
+        super().__init__()
+        self.do_split = do_split
+        self.configs = configs
+
+        self.paired_flows = nn.ModuleList()
+        for i in range(n_flow):
+            self.paired_flows.append(PairedFlow(cond_shape, inp_shape, configs))
+
+        in_channels, out_channels = compute_gaussian_channels(inp_shape, do_split)
+        self.left_gaussian = ZeroInitConv2d(in_channels, out_channels)
+        self.right_gaussian = ZeroInitConv2d(in_channels, out_channels)
+
+    def possibly_split(self, out, left_or_right):
+        b_size = out.shape[0]
+        gaussian = self.left_gaussian if left_or_right == 'left' else self.right_gaussian
+
+        if self.do_split:
+            out, z_new = out.chunk(chunks=2, dim=1)
+            mean, log_sd = gaussian(out).chunk(chunks=2, dim=1)
+            log_p = gaussian_log_p(z_new, mean, log_sd)
+            log_p = log_p.view(b_size, -1).sum(1)
+        else:
+            zeros = torch.zeros_like(out)
+            mean, log_sd = gaussian(zeros).chunk(chunks=2, dim=1)
+            log_p = gaussian_log_p(out, mean, log_sd)
+            log_p = log_p.view(b_size, -1).sum(1)
+            z_new = out
+        return out, z_new, log_p
+
+    def forward_not_to_be_used(self, activations, inp_left, inp_right):
+        left_out, right_out = squeeze_tensor(inp_left), squeeze_tensor(inp_right)
+        left_total_logdet = right_total_logdet = 0
+
+        for i in range(len(self.paired_flows)):
+            left_out, left_logdet, right_out, right_logdet = self.paired_flows[i](activations, left_out, right_out)
+            left_total_logdet += left_logdet
+            right_total_logdet += right_logdet
+
+        left_out, left_z_new, left_log_p = self.possibly_split(left_out, 'left')
+        right_out, right_z_new, right_log_p = self.possibly_split(right_out, 'right')
+        return left_out, left_total_logdet, left_log_p, left_z_new, right_out, right_total_logdet, right_log_p, right_z_new
+

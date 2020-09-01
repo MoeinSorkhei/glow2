@@ -84,49 +84,6 @@ class Flow(nn.Module):
         return gradcheck(func=self.forward, inputs=(inp, act_cond, w_cond, coupling_cond), eps=1e-6)
 
 
-class FlowFunction(torch.autograd.Function):
-    @staticmethod
-    def forward_func(inp, act_cond, w_cond, coupling_cond, w_buffers, actnorm_params, w_params, coupling_params):
-        activations = []
-        out, act_logdet = ActNormFunction.apply(inp, act_cond, activations, *actnorm_params)
-        out, w_logdet = InvConvLUFunction.apply(out, w_cond, w_buffers, activations, *w_params)
-        out, coupling_logdet = CouplingFunction.apply(out, coupling_cond, activations, *coupling_params)
-        log_det = act_logdet + w_logdet + coupling_logdet
-        activations.append(out.data)
-        return out, log_det
-
-    @staticmethod
-    def forward(ctx, inp, act_cond, w_cond, coupling_cond, w_buffers, params_lengths, *params):
-        act_params_len, w_params_len, coupling_params_len = params_lengths
-        act_params = params[:act_params_len]
-        w_params = params[act_params_len:act_params_len + w_params_len]
-        coupling_params = params[act_params_len + w_params_len:]
-        return FlowFunction.forward_func(inp, act_cond, w_cond, coupling_cond, w_buffers, act_params, w_params, coupling_params)
-
-    @staticmethod
-    def backward(ctx, grad_out, grad_logdet):
-        with torch.no_grad():
-            pass  # reconstruct input
-        with torch.enable_grad():
-            pass  # call grad() function
-
-
-class PairedFlow(torch.nn.Module):
-    def __init__(self, cond_shape, inp_shape, configs):
-        super().__init__()
-        self.paired_actnorm = PairedActNorm(cond_shape, inp_shape)
-        self.paired_inv_conv = PairedInvConv1x1(cond_shape, inp_shape)
-        self.paired_coupling = PairedCoupling(cond_shape, inp_shape, configs['n_filters'])
-
-    def forward(self, activations, inp_left, inp_right):
-        left_out, left_act_logdet, right_out, right_act_logdet = self.paired_actnorm(activations, inp_left, inp_right)
-        left_out, left_w_logdet, right_out, right_w_logdet = self.paired_inv_conv(activations, left_out, right_out)
-        left_out, left_coupling_logdet, right_out, right_coupling_logdet = self.paired_coupling(activations, left_out, right_out)
-        left_logdet = left_act_logdet + left_w_logdet + left_coupling_logdet
-        right_logdet = right_act_logdet + right_w_logdet + right_coupling_logdet
-        return left_out, left_logdet, right_out, right_logdet
-
-
 class AffineCoupling(nn.Module):
     def __init__(self, cond_shape, inp_shape, n_filters, const_memory, use_cond_net):
         super().__init__()
@@ -181,11 +138,30 @@ class AffineCoupling(nn.Module):
         return gradcheck(func=self.forward, inputs=(inp, condition), eps=1e-6)  # only wrt inp and condition
 
 
+class PairedFlow(torch.nn.Module):
+    def __init__(self, cond_shape, inp_shape, configs):
+        super().__init__()
+        self.paired_actnorm = PairedActNorm(cond_shape, inp_shape)
+        self.paired_inv_conv = PairedInvConv1x1(cond_shape, inp_shape)
+        self.paired_coupling = PairedCoupling(cond_shape, inp_shape, configs['n_filters'])
+        self.params = self.paired_actnorm.params + self.paired_inv_conv.params + self.paired_coupling.params
+        self.buffers = self.paired_inv_conv.buffers
+
+    def simple_forward_not_used(self, activations, inp_left, inp_right):
+        left_out, left_act_logdet, right_out, right_act_logdet = self.paired_actnorm(activations, inp_left, inp_right)
+        left_out, left_w_logdet, right_out, right_w_logdet = self.paired_inv_conv(activations, left_out, right_out)
+        left_out, left_coupling_logdet, right_out, right_coupling_logdet = self.paired_coupling(activations, left_out, right_out)
+        left_logdet = left_act_logdet + left_w_logdet + left_coupling_logdet
+        right_logdet = right_act_logdet + right_w_logdet + right_coupling_logdet
+        return left_out, left_logdet, right_out, right_logdet
+
+
 class PairedCoupling(torch.nn.Module):
     def __init__(self, cond_shape, inp_shape, n_filters):
         super().__init__()
         self.left_coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=None, n_filters=n_filters, const_memory=True, use_cond_net=False)
         self.right_coupling = AffineCoupling(inp_shape=inp_shape, cond_shape=cond_shape, n_filters=n_filters, const_memory=True, use_cond_net=True)
+        self.params = self.left_coupling.params + self.right_coupling.params
 
     def forward(self, activations, inp_left, inp_right):
         return PairedCouplingFunction.apply(activations, inp_left, inp_right, *(self.left_coupling.params + self.right_coupling.params))

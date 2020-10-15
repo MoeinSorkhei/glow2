@@ -94,10 +94,10 @@ class TwoGlows(nn.Module):
 
         return left_glow_outs, right_glow_outs
 
-    def reverse(self, x_a=None, z_b_samples=None, extra_cond=None):
+    def reverse(self, x_a=None, z_b_samples=None, extra_cond=None, reconstruct=False):
         left_glow_out = self.left_glow(x_a)  # left glow forward always needed before preparing conditions
         conditions = self.prep_conds(left_glow_out, extra_cond, direction='reverse')
-        x_b_syn = self.right_glow.reverse(z_b_samples, conditions=conditions)  # sample x_b conditioned on x_a
+        x_b_syn = self.right_glow.reverse(z_b_samples, reconstruct=reconstruct, conditions=conditions)  # sample x_b conditioned on x_a
         return x_b_syn
 
     def new_condition(self, x_a, z_b_samples):

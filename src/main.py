@@ -6,6 +6,7 @@ import helper
 import models
 import evaluation
 import data_handler
+import secondary
 
 import argparse
 import torch
@@ -25,6 +26,7 @@ def read_params_and_args():
     parser.add_argument('--do_ceil', action='store_true')  # flooring b_maps
     parser.add_argument('--do_lu', action='store_true')
     parser.add_argument('--grad_checkpoint', action='store_true')
+    parser.add_argument('--local', action='store_true')
 
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
@@ -68,13 +70,14 @@ def read_params_and_args():
     parser.add_argument('--create_tf_records', action='store_true')
 
     # evaluation
-    parser.add_argument('--infer_on_val', action='store_true')
+    parser.add_argument('--infer_on_set', action='store_true')
     parser.add_argument('--resize_for_fcn', action='store_true')
     parser.add_argument('--infer_and_evaluate_c_glow', action='store_true')
     parser.add_argument('--infer_and_evaluate_dual_glow', action='store_true')
     parser.add_argument('--infer_dual_glow', action='store_true')
     parser.add_argument('--sampling_round', type=int)
     parser.add_argument('--all_sampling_rounds', action='store_true')
+    parser.add_argument('--split_set', type=str)
 
     parser.add_argument('--eval_complete', action='store_true')
     parser.add_argument('--eval_fcn', action='store_true')
@@ -200,14 +203,14 @@ def run_evaluation(args, params):
 
 
 def run_experiments(args, params):
-    if args.exp and args.infer_on_val:
+    if args.exp and args.infer_on_set:
         if 'dual_glow' in args.model:
             models.infer_dual_glow(args, params)
         else:
             if args.all_sampling_rounds:
                 experiments.infer_all_rounds(args, params)
             else:
-                experiments.infer_on_validation_set(args, params)
+                experiments.infer_on_set(args, params)
 
     elif args.exp and args.resize_for_fcn:
         helper.resize_for_fcn(args, params)
@@ -244,8 +247,11 @@ def main():
     args, params = read_params_and_args()
     params = adjust_params(args, params)
 
+    if args.local:
+        secondary.main(args, params)
+
     # investigating how dual_glow works
-    if args.investigate_dual_glow:
+    elif args.investigate_dual_glow:
         hps = models.init_hps_for_dual_glow(args, params)
         models.investigate_model(args, hps, write_tf_records=False)
 

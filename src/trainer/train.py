@@ -1,5 +1,5 @@
 from torchvision import utils
-
+import time
 import data_handler
 from data_handler import transient
 import helper
@@ -27,6 +27,8 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
     # getting data loaders
     train_loader, val_loader = data_handler.init_data_loaders(args, params)
 
+    # compute_val_bpd(args, params, model, val_loader)
+
     # adjusting optim step
     optim_step = last_optim_step + 1 if resume else 0
     max_optim_steps = params['iter']
@@ -48,6 +50,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
                 print(f'In [train]: reaching max_step or lr is zero. Terminating...')
                 return  # ============ terminate training if max steps reached
 
+            begin_time = time.time()
             # forward pass
             left_batch, right_batch, extra_cond_batch = data_handler.extract_batches(batch, args)
             forward_output = forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_batch)
@@ -96,3 +99,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
                 print("In [train]: Checkpoint saved at iteration", optim_step, '\n')
 
             optim_step += 1
+            end_time = time.time()
+            print(f'Iteration took: {round(end_time - begin_time, 2)}')
+            helper.show_memory_usage()
+            print('\n')

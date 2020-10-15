@@ -75,7 +75,7 @@ new_cond_reals = {
     'orig_img0': base_real_path + "/aachen/aachen_000002_000019_leftImg8bit.png",
     'cond_imgs0': [base_real_path + "/jena/jena_000011_000019_leftImg8bit.png"],
 
-    'orig_img1': base_real_path + "/aachen/aachen_000010_000019_leftImg8bit.png",
+    'orig_img1': base_real_path + "/aachen/aachen_000010_000019_leftImg8bit.png",  # this
     'cond_imgs1': [base_real_path + "/jena/jena_000011_000019_leftImg8bit.png"],
 
     'orig_img': base_real_path + "/jena/jena_000066_000019_leftImg8bit.png",

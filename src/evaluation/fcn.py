@@ -170,7 +170,7 @@ def eval_segmentations_with_temp(synthesized_dir, reference_dir, base_data_folde
         hist = eval_single_segmentation(syn_seg_path, ref_img_path, base_data_folder)
         hist_perframe += hist
 
-        if i % 50 == 0:
+        if i % 10 == 0:
             print(f'In [evaluate_segmentations_with_temp]: evaluation for {i} images: done')
 
     third_party.get_score_and_print(hist_perframe, cs.classes, verbose=True,

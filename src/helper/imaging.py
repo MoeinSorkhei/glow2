@@ -130,7 +130,7 @@ def resize_imgs(path_to_load, path_to_save, h=256, w=256, package='pil'):
 
 
 def remove_alpha_channel(image_or_image_batch):
-    if image_or_image_batch.shape == 4:  # with batch size
+    if len(image_or_image_batch.shape) == 4:  # with batch size
         return image_or_image_batch[:, 0:3, :, :]
     return image_or_image_batch[0:3, :, :]  # single image
 
@@ -155,4 +155,46 @@ def resize_for_fcn(args, params):
 
     resize_imgs(load_path, save_path, package='scipy')
 
+
+def get_pair(dataset_name, direction, a_file, path_to_b):
+    # only for cityscapes label2photo now
+    # path_to_b: path to data split (e.g. train) where the image b exists
+    assert dataset_name == 'cityscapes' and direction == 'label2photo'
+    city, a_pure_name = city_and_pure_name(a_file)
+    b_pure_name = a_pure_name.replace('_gtFine_color.png', '_leftImg8bit.png')
+    b_file = os.path.join(path_to_b, city, b_pure_name)
+    return b_file
+
+
+def combine_image_pairs(base_path_a, base_path_b, combined_path):
+    # base_path_a and base_path_b should have sub-folders named train and val
+    from .generic import read_params
+    from .paths import files_with_suffix, city_and_pure_name
+    # params = read_params('')
+    # only for cityscapes now
+    # base_path_a = ''
+    # base_path_b = ''
+
+    for split in ['train', 'val']:
+        print('=============== Doing for split:', split)
+        split_path_to_a = os.path.join(base_path_a, split)
+        split_path_to_b = os.path.join(base_path_b, split)
+        a_files = files_with_suffix(split_path_to_a, suffix='_color.png')  # suffix = '_leftImg8bit.png'
+
+        for i, a_file in enumerate(a_files):
+            b_file = get_pair(dataset_name='cityscapes', direction='label2photo', a_file=a_file, path_to_b=split_path_to_b)
+            trans = get_transform()
+            a_image = remove_alpha_channel(trans(Image.open(a_file)))
+            b_image = remove_alpha_channel(trans(Image.open(b_file)))
+
+            combined = torch.cat([a_image, b_image], dim=2)  # cat in width dimension
+            combined_name = pure_name(a_file).replace('_gtFine_color.png', '_combined.png')
+
+            save_path = os.path.join(combined_path, split, combined_name)
+            make_dir_if_not_exists(os.path.join(combined_path, split))
+            utils.save_image(tensor=combined.clone(), fp=save_path, nrow=1, padding=0)
+
+            print('Saved to:', save_path)
+            if i % 50 == 0:
+                print('Done for image:', i, '\n')
 

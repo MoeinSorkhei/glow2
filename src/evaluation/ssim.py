@@ -60,11 +60,12 @@ def compute_ssim_old(args, params):
         print(f'In [compute_ssim]: ssim score appended to ssim.txt')
 
 
-def compute_ssim(syn_dir, ref_dir):
+def compute_ssim(file_paths, ref_dir):
     ssim_vals = []
-    file_paths = helper.absolute_paths(syn_dir)  # the absolute paths of all synthesized images
 
     for i, filepath in enumerate(file_paths):
+        # if not filepath.endswith('_leftImg8bit.png'):  # only consider files that end like this
+        #     pass
         syn_image = np.array(Image.open(filepath).resize((2048, 1024)))  # resize to original size, (H, W, C) order
         ref_file = helper.get_file_with_name(ref_dir, helper.pure_name(filepath))
         ref_image = np.array(Image.open(ref_file))[:, :, :3]  # 1024x2048 with int values, removed alpha

@@ -47,24 +47,24 @@ def take_samples(args, params, model, reverse_cond, n_samples=None):
         return sampled_images
 
 
-def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
-    """
-    Takes batches of data and arranges them as reverse condition based on the args.
-    :param args:
-    :param img_batch:
-    :param segment_batch:
-    :param boundary_batch:
-    :return:
-    """
-    if args.direction == 'label2photox':
-        reverse_cond = {'segment': segment_batch, 'boundary': boundary_batch}
-
-    elif args.direction == 'photo2label':  # 'photo2label'
-        reverse_cond = {'real': img_batch}
-
-    else:
-        raise NotImplementedError('Direction not implemented')
-    return reverse_cond
+# def batch2revcond(args, img_batch, segment_batch, boundary_batch):  # only used in cityscapes experiments
+#     """
+#     Takes batches of data and arranges them as reverse condition based on the args.
+#     :param args:
+#     :param img_batch:
+#     :param segment_batch:
+#     :param boundary_batch:
+#     :return:
+#     """
+#     if args.direction == 'label2photo':
+#         reverse_cond = {'segment': segment_batch, 'boundary': boundary_batch}
+#
+#     elif args.direction == 'photo2label':  # 'photo2label'
+#         reverse_cond = {'real': img_batch}
+#
+#     else:
+#         raise NotImplementedError('Direction not implemented')
+#     return reverse_cond
 
 
 def verify_invertibility(args, params):
@@ -80,12 +80,6 @@ def init_model_configs(args):
     right_configs = {'all_conditional': True, 'split_type': 'regular', 'do_lu': False, 'condition': 'left', 'grad_checkpoint': False}  # default condition from left glow
 
     if 'improved' in args.model:
-        # if 'regular' in args.model:
-        #     left_configs['split_type'], right_configs['split_type'] = 'regular', 'regular'
-        # else:
-        #     left_configs['split_type'], right_configs['split_type'] = 'special', 'special'
-        #     left_configs['split_sections'], right_configs['split_sections'] = [3, 9], [3, 9]
-
         if args.do_lu:
             left_configs['do_lu'] = True
             right_configs['do_lu'] = True

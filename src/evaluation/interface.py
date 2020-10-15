@@ -17,7 +17,7 @@ def evaluate_fcn(args, params):
     else:
         all_paths = helper.compute_paths(args, params)
 
-    syn_dir = extend_val_path(all_paths['val_path'], args.sampling_round)  # val_imgs_1, val_imgs_2, ...
+    syn_dir = extend_path(all_paths['val_path'], args.sampling_round)  # val_imgs_1, val_imgs_2, ...
     eval_dir = all_paths['eval_path']
     print(f'In [evaluate_city_fcn]: results will be read from: "{syn_dir}"')
 
@@ -42,12 +42,22 @@ def eval_ssim(args, params):
         ref_dir = os.path.join(params['data_folder']['real'], 'val')
     else:
         ref_dir = os.path.join(params['data_folder']['segment'], 'val')
-    syn_dir = helper.extend_val_path(helper.compute_paths(args, params)['val_path'], args.sampling_round)
+    if args.model == 'pix2pix':
+        syn_dir = f'/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/pix2pix/label2photo/eval_{args.sampling_round}/val_imgs/pix2pix_cityscapes_label2photo/test_46/images'
+        ssim_file = f'/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/pix2pix/label2photo/ssim.txt'
+        file_paths = helper.files_with_suffix(syn_dir, '_leftImg8bit.png')
+
+        # print(syn_dir)
+        # print('len file paths:', len(file_paths))
+        # print('is dir:', os.path.isdir('/Midgard/home/sorkhei/glow2/checkpoints/cityscapes/256x256/pix2pix/label2photo'))
+    else:
+        syn_dir = helper.extend_path(helper.compute_paths(args, params)['val_path'], args.sampling_round)
+        ssim_file = os.path.join(helper.compute_paths(args, params)['eval_path'], 'ssim.txt')
+        file_paths = helper.absolute_paths(syn_dir)  # the absolute paths of all synthesized images
 
     # get the score
-    ssim_score = compute_ssim(syn_dir, ref_dir)
+    ssim_score = compute_ssim(file_paths, ref_dir)
 
-    ssim_file = os.path.join(helper.compute_paths(args, params)['eval_path'], 'ssim.txt')
     with open(ssim_file, 'a') as file:
         file.write(f'Round {args.sampling_round}: {ssim_score}\n')
 
@@ -76,7 +86,7 @@ def eval_fcn_all_temps(args, params):
         params['temperature'] = temp
 
         # inference
-        experiments.infer_on_validation_set(args, params)
+        experiments.infer_on_set(args, params)
         torch.cuda.empty_cache()  # very important
         print('In [eval_city_with_all_temps]: inference done \n')
 

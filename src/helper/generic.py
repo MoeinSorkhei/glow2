@@ -48,3 +48,11 @@ def print_info(args, params, model, which_info='all'):
               f'n_flow: {params["n_flow"]} \n'
               f'n_block: {params["n_block"]} \n'
               f'{"=" * 50}\n')
+
+
+def read_file_to_list(filename):
+    lines = []
+    if os.path.isfile(filename):
+        with open(filename) as f:
+            lines = f.read().splitlines()
+    return lines

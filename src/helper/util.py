@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import nvidia_smi
 
 from globals import device
 
@@ -70,3 +71,17 @@ def load_checkpoint(path_to_load, optim_step, model, optimizer, resume_train=Tru
     if optimizer is not None:
         return model.to(device), optimizer, loss, lr
     return model.to(device), None, loss, lr
+
+
+def show_memory_usage():
+    nvidia_smi.nvmlInit()
+    handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)  # GPU number
+    mem_res = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+    # print('=' * 50)
+    # print(f'mem: {mem_res.used / (1024 ** 3)} (GiB)')  # usage in GiB
+    print(f'mem usage: {100 * (mem_res.used / mem_res.total):.3f}%')  # percentage
+    # print('=' * 50)
+
+
+def tensor_size(tensor):
+    return tensor.element_size() * tensor.nelement()

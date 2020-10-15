@@ -4,8 +4,6 @@ import os
 
 def compute_paths(args, params, additional_info=None):
     assert args.model != 'glow' and additional_info is None  # these cases not implemented yet
-    if args.model == 'c_flow':
-        return compute_paths_old(args, params)
 
     dataset = args.dataset
     direction = args.direction
@@ -24,6 +22,7 @@ def compute_paths(args, params, additional_info=None):
     # path for evaluation
     eval_path = os.path.join(infer_path, 'eval', f'temp={temp}')
     val_path = os.path.join(eval_path, 'val_imgs')  # where inferred val images are stored inside the eval folder
+    train_vis_path = os.path.join(eval_path, 'train_vis')
 
     # checkpoints path
     checkpoints_base_dir = f'{params["checkpoints_path"]}'
@@ -33,6 +32,7 @@ def compute_paths(args, params, additional_info=None):
         'samples_path': samples_path,
         'eval_path': eval_path,
         'val_path': val_path,
+        'train_vis': train_vis_path,
         'checkpoints_path': checkpoints_path
     }
 
@@ -51,7 +51,7 @@ def _scientific(float_num):
     raise NotImplementedError('In [scientific]: Conversion from float to scientific str needed.')
 
 
-def extend_val_path(val_path, number):
+def extend_path(val_path, number):
     return f'{val_path}_{number}'
 
 
@@ -113,6 +113,13 @@ def absolute_paths(directory):
 
 def pure_name(path):
     return os.path.split(path)[1]
+
+
+def city_and_pure_name(filepath):
+    return filepath.split(os.path.sep)[-2], pure_name(filepath)
+    # splits = filepath.split(os.path.sep)
+    # city = splits[-2]
+    # name = pure_name(filepath)
 
 
 def replace_suffix(name, direction):

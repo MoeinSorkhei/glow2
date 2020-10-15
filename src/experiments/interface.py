@@ -11,21 +11,24 @@ from globals import device, new_cond_reals
 from helper import load_checkpoint
 
 
-def infer_on_validation_set(args, params):
+def infer_on_set(args, params, split_set='val'):
     """
     The model name and paths should be equivalent to the name used in the resize_for_fcn function
     in evaluation.third_party.prepare.py module.
+    :param split_set:
     :param args:
     :param params:
     :return:
     """
     with torch.no_grad():
         paths = helper.compute_paths(args, params)
-        checkpt_path, val_path = paths['checkpoints_path'], paths['val_path']
-        val_path = helper.extend_val_path(val_path, args.sampling_round)
+        checkpt_path, val_path, train_vis_path = paths['checkpoints_path'], paths['val_path'], paths['train_vis']
 
-        print(f'In [infer_on_validation_set]:\n====== checkpt_path: "{checkpt_path}" \n====== val_path: "{val_path}" \n')
-        helper.make_dir_if_not_exists(val_path)
+        save_path = val_path if split_set == 'val' else train_vis_path
+        save_path = helper.extend_path(save_path, args.sampling_round)
+
+        print(f'In [infer_on_validation_set]:\n====== checkpt_path: "{checkpt_path}" \n====== save_path: "{save_path}" \n')
+        helper.make_dir_if_not_exists(save_path)
 
         # init and load model
         model = models.init_and_load(args, params, run_mode='infer')
@@ -34,40 +37,42 @@ def infer_on_validation_set(args, params):
         # validation loader
         batch_size = params['batch_size']
         loader_params = {'batch_size': batch_size, 'shuffle': False, 'num_workers': 0}
-        _, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
-                                                      image_size=(params['img_size']),
-                                                      remove_alpha=True,  # removing the alpha channel
-                                                      loader_params=loader_params)
-        print('In [infer_on_validation_set]: loaded val_loader of len:', len(val_loader))
+        train_loader, val_loader = data_handler.init_city_loader(data_folder=params['data_folder'],
+                                                                 image_size=(params['img_size']),
+                                                                 loader_params=loader_params)
+        loader = val_loader if split_set == 'val' else train_loader
+        print('In [infer_on_validation_set]: using loader of len:', len(loader))
 
         # inference on validation set
-        print('In [infer_on_validation_set]: starting inference on validation set')
-        for i_batch, batch in enumerate(val_loader):
+        print(f'In [infer_on_validation_set]: starting inference on {split_set} set')
+        for i_batch, batch in enumerate(loader):
             img_batch = batch['real'].to(device)
             segment_batch = batch['segment'].to(device)
             boundary_batch = batch['boundary'].to(device) if args.use_bmaps else None
             real_paths = batch['real_path']  # list: used to save samples with the same name as original images
             seg_paths = batch['segment_path']
 
-            # create reverse conditions and samples based on args.direction
-            raise NotImplementedError('This part needs refactoring')
-            rev_cond = models.batch2revcond(args, img_batch, segment_batch, boundary_batch)
-            samples = models.take_samples(args, params, model, rev_cond, n_samples=batch_size)
+            if args.direction == 'label2photo':
+                reverse_cond = {'segment': segment_batch, 'boundary': boundary_batch}
+            elif args.direction == 'photo2label':  # 'photo2label'
+                reverse_cond = {'real': img_batch}
 
+            # sampling from model
+            # using batch.shape[0] is safer than batch_size since the last batch may be different in size
+            samples = models.take_samples(args, params, model, reverse_cond, n_samples=segment_batch.shape[0])
             # save inferred images separately
             paths_list = real_paths if args.direction == 'label2photo' else seg_paths
-            helper.save_one_by_one(samples, paths_list, val_path)
+            helper.save_one_by_one(samples, paths_list, save_path)
 
-            if i_batch > 0 and i_batch % 20 == 0:
-                print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(val_loader)} batches')
-        print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {val_path} \n')
+            print(f'In [infer_on_validation_set]: done for the {i_batch}th batch out of {len(loader)} batches (batch size: {segment_batch.shape[0]})')
+        print(f'In [infer_on_validation_set]: all done. Inferred images could be found at: {save_path} \n')
 
 
 def infer_all_rounds(args, params):
     for sampling_round in [1, 2, 3]:
         print(f'In [infer_all_rounds]: doing for round: {sampling_round}')
         args.sampling_round = sampling_round
-        infer_on_validation_set(args, params)
+        infer_on_set(args, params, split_set=args.split_set)
         print(f'In [infer_all_rounds]: done for round: {sampling_round}\n\n')
 
 
@@ -82,6 +87,23 @@ def sample_trained_c_flow(args, params):
 
     if args.syn_segs:
         syn_new_segmentations(args, params, model)
+
+
+def transfer_content(args, params, content_file, condition_file, new_cond_file, file_path):
+    from PIL import Image
+    trans = helper.get_transform()
+    content_image_batch = helper.remove_alpha_channel(trans(Image.open(content_file))).unsqueeze(0)
+    cond_image_batch = helper.remove_alpha_channel(trans(Image.open(condition_file))).unsqueeze(0)
+    new_cond_image_batch = helper.remove_alpha_channel(trans(Image.open(new_cond_file))).unsqueeze(0)
+
+    model = models.init_model(args, params)
+    model = helper.load_checkpoint(path_to_load='../checkpoints', optim_step=136000, model=model, optimizer=None, resume_train=False)[0]
+
+    z_outs = model(x_a=cond_image_batch.clone(), x_b=content_image_batch.clone())[1]['z_outs']
+    new_image = model.reverse(x_a=new_cond_image_batch.clone(), z_b_samples=z_outs, reconstruct=True)
+
+    utils.save_image(new_image[0].clone(), file_path, nrow=1, padding=0)
+    print('saved the result at:', file_path)
 
 
 def sample_with_new_condition(args, params):

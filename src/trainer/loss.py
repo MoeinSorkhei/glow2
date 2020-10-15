@@ -25,7 +25,7 @@ def forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_ba
 
         loss_left, _, _ = calc_loss(log_p_left, log_det_left, params['img_size'], n_bins)
         loss_right, _, _ = calc_loss(log_p_right, log_det_right, params['img_size'], n_bins)
-        loss = loss_left + loss_right
+        loss = args.reg_factor * loss_left + loss_right
         return {'loss': loss, 'loss_left': loss_left, 'loss_right': loss_right}
 
 
@@ -58,15 +58,24 @@ def calc_loss(log_p, logdet, image_size, n_bins):
     )
 
 
+def compute_val_bpd(args, params, model, val_loader):
+    val_loss_mean, loss_right_mean = calc_val_loss(args, params, model, val_loader)
+    print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)} - loss_right_mean: {round(loss_right_mean, 3)}')
+    print('waiting for input')
+    input()
+
+
 def calc_val_loss(args, params, model, val_loader):
     print(f'In [calc_val_loss]: computing validation loss for data loader of len: {len(val_loader)} '
           f'and batch size: {params["batch_size"]}')
 
     with torch.no_grad():
-        val_list = []
+        val_list, loss_right_list = [], []
         for i_batch, batch in enumerate(val_loader):
             left_batch, right_batch, extra_cond_batch = data_handler.extract_batches(batch, args)
             forward_output = forward_and_loss(args, params, model, left_batch, right_batch, extra_cond_batch)
-            loss = forward_output['loss']
+            loss, loss_left, loss_right = forward_output['loss'], forward_output['loss_left'], forward_output['loss_right']
             val_list.append(loss.item())
-        return np.mean(val_list), np.std(val_list)
+            loss_right_list.append(loss_right.item())
+        # return np.mean(val_list), np.std(val_list)
+        return np.mean(val_list), np.mean(loss_right_list)

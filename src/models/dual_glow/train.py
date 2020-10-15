@@ -46,6 +46,22 @@ def take_sample(model, conditions, save_dir, mode, direction=None, iteration=Non
         print(f'In [take_sample]: sample saved to: "{path}"')
 
 
+def compute_conditional_bpd(model, iteration, hps):
+    test_results = []
+    print('Computing validation loss...')
+
+    for _ in range(hps.val_its):  # one loop over all all validation examples
+        test_results += [model.test()]
+
+    test_results = np.mean(np.asarray(test_results), axis=0)  # get the mean of val loss
+    val_loss = round(test_results[0], 3)
+    print(f'Step {iteration} - validation loss: {val_loss}')
+
+    print('local_loss, bits_x_u, bits_x_o, bits_y:', test_results, 'conditional BPD:', round(test_results[1], 3))
+    print('waiting for input')
+    input()
+
+
 def run_model(mode, args, params, hps, sess, model, conditions, tracker):
     sess.graph.finalize()
 
@@ -53,7 +69,7 @@ def run_model(mode, args, params, hps, sess, model, conditions, tracker):
     if mode == 'infer':
         # val_path = helper.compute_paths(args, params)['val_path']
         paths = helper.compute_paths(args, params)
-        val_path = helper.extend_val_path(paths['val_path'], args.sampling_round)
+        val_path = helper.extend_path(paths['val_path'], args.sampling_round)
         helper.make_dir_if_not_exists(val_path)
 
         take_sample(model, conditions, val_path, mode, direction=args.direction, iteration=None)
@@ -66,6 +82,8 @@ def run_model(mode, args, params, hps, sess, model, conditions, tracker):
         samples_path = paths['samples_path']
         helper.make_dir_if_not_exists(checkpoint_path)
         helper.make_dir_if_not_exists(samples_path)
+
+        # compute_conditional_bpd(model, args.last_optim_step, hps)
 
         iteration = 0 if not args.resume_train else args.last_optim_step + 1
         while iteration <= hps.train_its:

@@ -1,5 +1,8 @@
 from torchvision import utils
+import torch
 import time
+import sys
+import math
 import data_handler
 from data_handler import transient
 import helper
@@ -13,10 +16,11 @@ def init_train_configs(args):
 
 
 def adjust_lr(current_lr, initial_lr, step, epoch_steps):
-    curr_epoch = step // epoch_steps  # epoch_steps is the number of steps to complete an epoch
-    if curr_epoch > 100:  # decay linearly to 0 from epoch 100 to epoch 200
-        extra_epochs = curr_epoch - 100
-        decay = initial_lr * (extra_epochs / 100)
+    curr_epoch = math.ceil(step / epoch_steps)  # epoch_steps is the number of steps to complete an epoch
+    threshold = 100  # linearly decay after threshold
+    if curr_epoch > threshold:
+        extra_epochs = curr_epoch - threshold
+        decay = initial_lr * (extra_epochs / threshold)
         current_lr = initial_lr - decay
 
     print(f'In [adjust_lr]: step: {step}, curr_epoch: {curr_epoch}, lr: {current_lr}')
@@ -27,10 +31,8 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
     # getting data loaders
     train_loader, val_loader = data_handler.init_data_loaders(args, params)
 
-    # compute_val_bpd(args, params, model, val_loader)
-
     # adjusting optim step
-    optim_step = last_optim_step + 1 if resume else 0
+    optim_step = last_optim_step + 1 if resume else 1
     max_optim_steps = params['iter']
     paths = helper.compute_paths(args, params)
 
@@ -40,13 +42,13 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
     # optimization loop
     while optim_step < max_optim_steps:
         # after each epoch, adjust learning rate accordingly
-        current_lr = adjust_lr(current_lr, initial_lr=params['lr'], step=optim_step, epoch_steps=len(train_loader) // params['batch_size'])
+        current_lr = adjust_lr(current_lr, initial_lr=params['lr'], step=optim_step, epoch_steps=len(train_loader))  # now only supports with batch size 1
         for param_group in optimizer.param_groups:
             param_group['lr'] = current_lr
         print(f'In [train]: optimizer learning rate adjusted to: {current_lr}\n')
 
         for i_batch, batch in enumerate(train_loader):
-            if optim_step > max_optim_steps or current_lr == 0:
+            if optim_step > max_optim_steps:
                 print(f'In [train]: reaching max_step or lr is zero. Terminating...')
                 return  # ============ terminate training if max steps reached
 
@@ -73,7 +75,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
             print(f'In [train]: Step: {optim_step} => loss: {loss.item():.3f}')
 
             # validation loss
-            if params['monitor_val'] and optim_step % params['val_freq'] == 0:
+            if (params['monitor_val'] and optim_step % params['val_freq'] == 0) or current_lr == 0:
                 val_loss_mean, _ = calc_val_loss(args, params, model, val_loader)
                 metrics['val_loss'] = val_loss_mean
                 print(f'====== In [train]: val_loss mean: {round(val_loss_mean, 3)}')
@@ -84,7 +86,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
                     comet_tracker.track_metric(key, round(value.item(), 3), optim_step)
 
             # saving samples
-            if optim_step % params['sample_freq'] == 0:
+            if (optim_step % params['sample_freq'] == 0) or current_lr == 0:
                 samples_path = paths['samples_path']
                 helper.make_dir_if_not_exists(samples_path)
                 sampled_images = models.take_samples(args, params, model, reverse_cond)
@@ -92,7 +94,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
                 print(f'\nIn [train]: Sample saved at iteration {optim_step} to: \n"{samples_path}"\n')
 
             # saving checkpoint
-            if optim_step > 0 and optim_step % params['checkpoint_freq'] == 0:
+            if (optim_step > 0 and optim_step % params['checkpoint_freq'] == 0) or current_lr == 0:
                 checkpoints_path = paths['checkpoints_path']
                 helper.make_dir_if_not_exists(checkpoints_path)
                 helper.save_checkpoint(checkpoints_path, optim_step, model, optimizer, loss, current_lr)
@@ -103,3 +105,7 @@ def train(args, params, train_configs, model, optimizer, current_lr, comet_track
             print(f'Iteration took: {round(end_time - begin_time, 2)}')
             helper.show_memory_usage()
             print('\n')
+
+            if current_lr == 0:
+                print('In [train]: current_lr = 0, terminating the training...')
+                sys.exit(0)

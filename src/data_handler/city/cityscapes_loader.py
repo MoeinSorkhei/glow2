@@ -10,7 +10,7 @@ import helper
 
 
 class CityDataset(data.Dataset):
-    def __init__(self, data_folder, img_size, fixed_cond=None):
+    def __init__(self, data_folder, img_size, fixed_cond=None, limited=False):
         self.data_folder = data_folder
 
         # resize only if the desired size is different from the original size
@@ -25,6 +25,9 @@ class CityDataset(data.Dataset):
         else:
             print(f'In CityDataset [__init__]: using the fixed conditions...')
             self.real_img_paths = fixed_cond
+
+        if limited:  # for debugging
+            self.real_img_paths = self.real_img_paths[:10]
 
         # get list of (city, id) pairs from real image paths - (city, id) will be used to retrieve the corresponding segmentation
         cities_and_ids = self.cities_and_ids()

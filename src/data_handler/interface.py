@@ -43,11 +43,16 @@ def extract_batches(batch, args):
             raise NotImplementedError
 
     elif args.dataset == 'maps':
-        img_batch = batch['photo'].to(device)
-        segment_batch = batch['the_map'].to(device)
-        boundary_batch = None
-        raise NotImplementedError('Should refactor this part')
+        photo_batch = batch['photo'].to(device)
+        map_batch = batch['the_map'].to(device)
+        extra_cond_batch = None
 
+        if args.dataset == 'map2photo':
+            left_batch = map_batch
+            right_batch = photo_batch
+        else:
+            left_batch = photo_batch
+            right_batch = map_batch
     else:
         raise NotImplementedError
     return left_batch, right_batch, extra_cond_batch
@@ -60,7 +65,8 @@ def init_data_loaders(args, params):
         train_loader, \
             val_loader = city.init_city_loader(data_folder=params['data_folder'],
                                                image_size=(params['img_size']),
-                                               loader_params=loader_params)
+                                               loader_params=loader_params,
+                                               limited=args.limited)
     elif args.dataset == 'maps':
         train_loader, val_loader = maps.init_maps_loaders(args, params)
 

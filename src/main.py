@@ -7,6 +7,7 @@ import models
 import evaluation
 import data_handler
 import secondary
+import local_experiments
 
 import argparse
 import torch
@@ -26,11 +27,18 @@ def read_params_and_args():
     parser.add_argument('--do_ceil', action='store_true')  # flooring b_maps
     parser.add_argument('--do_lu', action='store_true')
     parser.add_argument('--grad_checkpoint', action='store_true')
-    parser.add_argument('--local', action='store_true')
+    parser.add_argument('--limited', action='store_true')  # limit dataset for debugging
+
+    parser.add_argument('--local', action='store_true')  # local experiments
+    parser.add_argument('--run', type=str)
+    parser.add_argument('--image_name', type=str)
+    # parser.add_argument('--transfer', action='store_true')  # content transfer local
+    # parser.add_argument('--sketch2photo', action='store_true')
 
     parser.add_argument('--last_optim_step', type=int)
     parser.add_argument('--sample_freq', type=int)
     parser.add_argument('--checkpoint_freq', type=int)
+    parser.add_argument('--val_freq', type=int)
     parser.add_argument('--prev_exp_id', type=str)
     parser.add_argument('--max_step', type=int)
     parser.add_argument('--n_samples', type=int)
@@ -134,6 +142,9 @@ def adjust_params(args, params):
 
     if args.checkpoint_freq is not None:
         params['checkpoint_freq'] = args.checkpoint_freq
+
+    if args.val_freq is not None:
+        params['val_freq'] = args.val_freq
 
     if args.no_validation:
         params['monitor_val'] = False
@@ -248,7 +259,7 @@ def main():
     params = adjust_params(args, params)
 
     if args.local:
-        secondary.main(args, params)
+        local_experiments.main(args, params)
 
     # investigating how dual_glow works
     elif args.investigate_dual_glow:

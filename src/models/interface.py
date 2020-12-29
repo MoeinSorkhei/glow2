@@ -111,7 +111,7 @@ def init_model(args, params):
     else:
         raise NotImplementedError
 
-    print('In [init_model]: init model done')
+    print(f'In [init_model]: init model done. Model is on: {device}')
     helper.print_info(args, params, model, which_info='model')
     return model.to(device)
 

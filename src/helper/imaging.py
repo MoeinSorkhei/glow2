@@ -59,7 +59,7 @@ def save_one_by_one(imgs_batch, paths_list, save_path):
         utils.save_image(tensor, full_path, nrow=1, padding=0)
 
 
-def save_one_by_one2(imgs_batch, paths_list):
+def save_one_by_one_old(imgs_batch, paths_list):
     bsize = imgs_batch.shape[0]
     for i in range(bsize):
         tensor = imgs_batch[i].unsqueeze(dim=0)  # make it a batch of size 1 so we can save it
@@ -135,9 +135,12 @@ def remove_alpha_channel(image_or_image_batch):
     return image_or_image_batch[0:3, :, :]  # single image
 
 
-def get_transform(image_size=None):
+def get_transform(image_size=None, only_crop=False):
     if image_size is not None:
-        return transforms.Compose([transforms.Resize(image_size), transforms.ToTensor()])
+        if only_crop:  # crop to give size
+            return transforms.Compose([transforms.CenterCrop(image_size), transforms.ToTensor()])
+        else:  # resize
+            return transforms.Compose([transforms.Resize(image_size), transforms.ToTensor()])
     return transforms.Compose([transforms.ToTensor()])
 
 

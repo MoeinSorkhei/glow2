@@ -5,26 +5,17 @@ from .cityscapes_loader import *
 from globals import real_conds_abs_path, device
 
 
-def init_city_loader(data_folder, image_size, loader_params):
-    """
-    Initializes and returns a data loader based on the data_folder and dataset_name.
-    :param remove_alpha:
-    :param image_size:
-    :param data_folder: the folder to read the images from
-    :param loader_params: a dictionary containing the DataLoader parameters such batch_size and so on.
-    :param ret_type
-    :return: the initialized data loader
-    """
+def init_city_loader(data_folder, image_size, loader_params, limited):
     # train data loader
     train_df = {'real': data_folder['real'] + '/train',  # adjusting the paths for the train data folder
                 'segment': data_folder['segment'] + '/train'}
-    train_dataset = CityDataset(train_df, image_size)
+    train_dataset = CityDataset(train_df, image_size, limited=limited)
     train_loader = data.DataLoader(train_dataset, **loader_params)
 
     # val data loader
     val_df = {'real': data_folder['real'] + '/val',  # adjusting the paths for the validation data folder
               'segment': data_folder['segment'] + '/val'}
-    val_dataset = CityDataset(val_df, image_size)
+    val_dataset = CityDataset(val_df, image_size, limited=limited)
 
     loader_params['shuffle'] = False  # no need to shuffle for the val set
     val_loader = data.DataLoader(val_dataset, **loader_params)

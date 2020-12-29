@@ -1,14 +1,10 @@
 import os
+from PIL import Image
 
-import torch
-from torchvision import utils
-
-import data_handler
-import helper
-import models
 from .cityscapes import *
 from globals import device, new_cond_reals
 from helper import load_checkpoint
+import helper
 
 
 def infer_on_set(args, params, split_set='val'):
@@ -90,7 +86,6 @@ def sample_trained_c_flow(args, params):
 
 
 def transfer_content(args, params, content_file, condition_file, new_cond_file, file_path):
-    from PIL import Image
     trans = helper.get_transform()
     content_image_batch = helper.remove_alpha_channel(trans(Image.open(content_file))).unsqueeze(0)
     cond_image_batch = helper.remove_alpha_channel(trans(Image.open(condition_file))).unsqueeze(0)
@@ -104,6 +99,24 @@ def transfer_content(args, params, content_file, condition_file, new_cond_file, 
 
     utils.save_image(new_image[0].clone(), file_path, nrow=1, padding=0)
     print('saved the result at:', file_path)
+
+
+def take_multiple_samples(model, n_blocks, temperature, n_samples, img_size, image_path, paths_list):
+    trans = helper.get_transform(image_size=img_size)
+    with torch.no_grad():
+        print(f'image_path: {image_path}')
+        repeated_condition = helper.remove_alpha_channel(trans(Image.open(image_path))).unsqueeze(0).repeat(n_samples, 1, 1, 1).to(device)
+        print(f'repeated shape: {repeated_condition.shape}')
+
+        z_samples = sample_z(n_samples=n_samples, temperature=temperature, channels=3,
+                             img_size=img_size, n_block=n_blocks, split_type=model.split_type)  # it is on device
+
+        print('Samples taken, now doing reverse...')
+        samples = model.reverse(x_a=repeated_condition, z_b_samples=z_samples).cpu().data
+
+        helper.save_one_by_one(samples, paths_list, save_path=None)  # all absolute paths in paths_list
+        print(f'Saved to: {paths_list}')
+        print('All done')
 
 
 def sample_with_new_condition(args, params):

@@ -157,7 +157,7 @@ def sample_c_flow(args, params, model):  # with the specified temperature
 
         # ========== take samples from the model
         samples = models.take_samples(args, params, model, rev_cond)  # (n_samples, C, H, W)
-        helper.save_one_by_one2(samples, save_paths)
+        helper.save_one_by_one_old(samples, save_paths)
         print(f'In [sample_c_flow]: for images: {img_pure_name}: done {"=" * 50}\n\n')
 
 

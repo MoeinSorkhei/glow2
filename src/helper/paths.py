@@ -24,6 +24,8 @@ def compute_paths(args, params, additional_info=None):
     val_path = os.path.join(eval_path, 'val_imgs')  # where inferred val images are stored inside the eval folder
     train_vis_path = os.path.join(eval_path, 'train_vis')
 
+    diverse_path = os.path.join(infer_path, 'diverse')
+
     # checkpoints path
     checkpoints_base_dir = f'{params["checkpoints_path"]}'
     checkpoints_path = os.path.join(checkpoints_base_dir, dataset, image_size, model, direction)
@@ -33,7 +35,8 @@ def compute_paths(args, params, additional_info=None):
         'eval_path': eval_path,
         'val_path': val_path,
         'train_vis': train_vis_path,
-        'checkpoints_path': checkpoints_path
+        'checkpoints_path': checkpoints_path,
+        'diverse_path': diverse_path
     }
 
 

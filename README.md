@@ -27,8 +27,8 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 </pre>
 
 <p align="middle">
-  <img src="figs/high_res/diverse/jena_000066_000019/segment.png" width="473" />
-  <img src="figs/high_res/diverse/jena_000066_000019/sample_3.png" width="473" />
+  <img src="figs/high_res/diverse/jena_000066_000019/segment.png" width="450" />
+  <img src="figs/high_res/diverse/jena_000066_000019/sample_3.png" width="450" />
 
   <img src="figs/high_res/diverse/aachen_000058_000019/segment.png" width="473" />
   <img src="figs/high_res/diverse/aachen_000058_000019/sample_5.png" width="473" />

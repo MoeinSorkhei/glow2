@@ -69,11 +69,13 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 </pre>
 
 <p align="middle">
-  <img src="figs/content_transfer/example_1/content.png" width="230" />
-  <img src="figs/content_transfer/example_1/structure.png" width="230" />
-  <img src="figs/content_transfer/example_1/result.png" width="230" />
-  <img src="figs/content_transfer/example_1/ground_truth.png" width="230" />
+  <img src="figs/content_transfer/example_1/content.png" width="150" />
+  <img src="figs/content_transfer/example_1/structure.png" width="150" />
+  <img src="figs/content_transfer/example_1/result.png" width="150" />
+  <img src="figs/content_transfer/example_1/ground_truth.png" width="150" />
+</p>
 
+<p align="middle">
   <img src="figs/content_transfer/example_2/content.png" width="230" />
   <img src="figs/content_transfer/example_2/structure.png" width="230" />
   <img src="figs/content_transfer/example_2/result.png" width="230" />

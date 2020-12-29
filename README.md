@@ -52,7 +52,7 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 
 ## Visual examples of content transfer
 <pre>
-     Desired content            Desired structure           Content applied to           Ground-truth for
+      Desired content            Desired structure          Content applied to           Ground-truth for
                                                                structure                    structure
 </pre>
 

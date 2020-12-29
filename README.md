@@ -21,7 +21,7 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 
 
 
-## Visual samples in 512x1024 resolution
+## Visual samples in 512x1024 resolution (please zoom to see more details)
 <pre>
                           Condition                        Synthesized
 </pre>
@@ -62,7 +62,7 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 </p>
 
 
-## Visual examples of content transfer
+## Visual examples of content transfer (please zoom to see more details)
 Images from left to right: Desired content - Desired structure - Content applied to structure - Ground-truth for structure
 
 <p align="middle">

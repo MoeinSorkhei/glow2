@@ -23,30 +23,42 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 
 ## Visual samples in 512x1024 resolution
 <pre>
-                          Condition                                               Synthesized
+                     Condition      Synthesized
 </pre>
 
 <p align="middle">
-  <img src="figs/high_res/diverse/jena_000066_000019/segment.png" width="450" />
-  <img src="figs/high_res/diverse/jena_000066_000019/sample_3.png" width="450" />
+  <img src="figs/high_res/diverse/jena_000066_000019/segment.png" width="300" />
+  <img src="figs/high_res/diverse/jena_000066_000019/sample_3.png" width="300" />
+</p>
 
+<p align="middle">
   <img src="figs/high_res/diverse/aachen_000058_000019/segment.png" width="300" />
   <img src="figs/high_res/diverse/aachen_000058_000019/sample_5.png" width="300" />
-  
-  <img src="figs/high_res/single/aachen_000011_000019/segment.png" width="473" />
-  <img src="figs/high_res/single/aachen_000011_000019/sample_3.png" width="473" />
-  
-  <img src="figs/high_res/single/aachen_000096_000019/segment.png" width="473" />
-  <img src="figs/high_res/single/aachen_000096_000019/sample_6.png" width="473" />
+</p>
 
-  <img src="figs/high_res/single/aachen_000156_000019/segment.png" width="473" />
-  <img src="figs/high_res/single/aachen_000156_000019/sample_6.png" width="473" />
+<p align="middle">
+  <img src="figs/high_res/single/aachen_000011_000019/segment.png" width="300" />
+  <img src="figs/high_res/single/aachen_000011_000019/sample_3.png" width="300" />
+</p>
 
-  <img src="figs/high_res/single/aachen_000160_000019/segment.png" width="473" />
-  <img src="figs/high_res/single/aachen_000160_000019/sample_9.png" width="473" />
-  
-  <img src="figs/high_res/single/jena_000078_000019/segment.png" width="473" />
-  <img src="figs/high_res/single/jena_000078_000019/sample_3.png" width="473" />
+<p align="middle">
+  <img src="figs/high_res/single/aachen_000096_000019/segment.png" width="300" />
+  <img src="figs/high_res/single/aachen_000096_000019/sample_6.png" width="300" />
+</p>
+
+<p align="middle">
+  <img src="figs/high_res/single/aachen_000156_000019/segment.png" width="300" />
+  <img src="figs/high_res/single/aachen_000156_000019/sample_6.png" width="300" />
+</p>
+
+<p align="middle">
+  <img src="figs/high_res/single/aachen_000160_000019/segment.png" width="300" />
+  <img src="figs/high_res/single/aachen_000160_000019/sample_9.png" width="300" />
+</p>
+
+<p align="middle">
+  <img src="figs/high_res/single/jena_000078_000019/segment.png" width="300" />
+  <img src="figs/high_res/single/jena_000078_000019/sample_3.png" width="300" />
 </p>
 
 

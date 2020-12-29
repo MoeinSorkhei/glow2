@@ -3,12 +3,42 @@ This repo contains the implementation of *Full-Glow: Fully conditional Glow for 
 [https://arxiv.org/abs/2012.05846](https://arxiv.org/abs/2012.05846).
 
 Full-Glow extends on previous Glow-based models for conditional image generation by applying conditioning to all Glow operations 
-using appropriate conditioning networks. It was applied to the [Cityscapes](https://www.cityscapes-dataset.com/) dataset (label &#8594; photo) for synthesizing street scene images.
+using appropriate conditioning networks. It was applied to the [Cityscapes](https://www.cityscapes-dataset.com/) dataset (label &#8594; photo) for synthesizing street-scene images.
+
+----------
+## Visual samples in 512x1024 resolution
+<pre>
+                      Condition                                               Synthesized
+</pre>
+<p float="left">
+  <img src="figs/high_res/diverse/jena_000066_000019/segment.png" width="473" />
+  <img src="figs/high_res/diverse/jena_000066_000019/sample_3.png" width="473" />
+
+  <img src="figs/high_res/diverse/aachen_000058_000019/segment.png" width="473" />
+  <img src="figs/high_res/diverse/aachen_000058_000019/sample_5.png" width="473" />
+  
+  <img src="figs/high_res/single/aachen_000011_000019/segment.png" width="473" />
+  <img src="figs/high_res/single/aachen_000011_000019/sample_3.png" width="473" />
+  
+  <img src="figs/high_res/single/aachen_000096_000019/segment.png" width="473" />
+  <img src="figs/high_res/single/aachen_000096_000019/sample_6.png" width="473" />
+
+  <img src="figs/high_res/single/aachen_000156_000019/segment.png" width="473" />
+  <img src="figs/high_res/single/aachen_000156_000019/sample_6.png" width="473" />
+
+  <img src="figs/high_res/single/aachen_000160_000019/segment.png" width="473" />
+  <img src="figs/high_res/single/aachen_000160_000019/sample_9.png" width="473" />
+  
+  <img src="figs/high_res/single/jena_000078_000019/segment.png" width="473" />
+  <img src="figs/high_res/single/jena_000078_000019/sample_3.png" width="473" />
+
+</p>
 
 
+----------
 ## Quantitative results
 Full-Glow was evaluated quantitatively against previous Glow-based models ([C-Glow](https://arxiv.org/abs/1905.13288) and [DUAL-Glow](https://pitt.edu/~sjh95/teaching/related_papers/dual_glow.pdf)) along with the GAN-based model [pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) using the [PSPNet](https://github.com/hszhao/semseg)
-classifier. With each trained model, we did inference on the Cityscapes validation set 3 times and calculated the scores.
+classifier. With each trained model, we did inference on the Cityscapes validation set 3 times and calculated the PSP scores.
 
 | Model          | Conditional BPD &#8595; | Mean pixel acc. &#8593; | Mean class acc. &#8593; | Mean class IoU  &#8593; |
 | -------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- |

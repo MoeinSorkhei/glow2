@@ -23,7 +23,7 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 
 ## Visual samples in 512x1024 resolution
 <pre>
-                     Condition      Synthesized
+                                 Condition                      Synthesized
 </pre>
 
 <p align="middle">

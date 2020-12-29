@@ -63,10 +63,7 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 
 
 ## Visual examples of content transfer
-<pre>
-          Desired content            Desired structure          Content applied to           Ground-truth for
-                                                                     structure                   structure
-</pre>
+Images from left to right: Desired content - Desired structure - Content applied to structure - Ground-truth for structure
 
 <p align="middle">
   <img src="figs/content_transfer/example_1/content.png" width="150" />
@@ -76,13 +73,15 @@ classifier. With each trained model, we did inference on the Cityscapes validati
 </p>
 
 <p align="middle">
-  <img src="figs/content_transfer/example_2/content.png" width="230" />
-  <img src="figs/content_transfer/example_2/structure.png" width="230" />
-  <img src="figs/content_transfer/example_2/result.png" width="230" />
-  <img src="figs/content_transfer/example_2/ground_truth.png" width="230" />
-  
-  <img src="figs/content_transfer/example_3/content.png" width="230" />
-  <img src="figs/content_transfer/example_3/structure.png" width="230" />
-  <img src="figs/content_transfer/example_3/result.png" width="230" />
-  <img src="figs/content_transfer/example_3/ground_truth.png" width="230" />
+  <img src="figs/content_transfer/example_2/content.png" width="150" />
+  <img src="figs/content_transfer/example_2/structure.png" width="150" />
+  <img src="figs/content_transfer/example_2/result.png" width="150" />
+  <img src="figs/content_transfer/example_2/ground_truth.png" width="150" />
+</p>
+
+<p align="middle">
+  <img src="figs/content_transfer/example_3/content.png" width="150" />
+  <img src="figs/content_transfer/example_3/structure.png" width="150" />
+  <img src="figs/content_transfer/example_3/result.png" width="150" />
+  <img src="figs/content_transfer/example_3/ground_truth.png" width="150" />
 </p>

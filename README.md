@@ -85,3 +85,7 @@ Images from left to right: Desired content - Desired structure - Content applied
   <img src="figs/content_transfer/example_3/result.png" width="150" />
   <img src="figs/content_transfer/example_3/ground_truth.png" width="150" />
 </p>
+
+
+## Notes
+- My implementation of the baseline Glow borrows heavily from Kim Seonghyeon's helpful implementation: https://github.com/rosinality/glow-pytorch

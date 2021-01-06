@@ -86,13 +86,27 @@ Images from left to right: Desired content - Desired structure - Content applied
   <img src="figs/content_transfer/example_3/ground_truth.png" width="150" />
 </p>
 
+## Samples generated on the [maps](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/datasets/download_pix2pix_dataset.sh) dataset
+<pre>Top row: Condition, Bottom row: synthesized </pre>
+<p align="middle">
+  <img src="figs/maps/map.png" />
+   <img src="figs/maps/256x256_map2photo_186000.png" />
+</p>
+
+<pre>Top row: Condition, Bottom row: synthesized </pre>
+<p align="middle">
+  <img src="figs/maps/photo.png" />
+   <img src="figs/maps/512x512_photo2map_108505.png" />
+</p>
+
 
 ## Training
-To train a model on Cityscapes, one can run:  
+To train a model on e.g. Cityscapes, one can run:  
 `python3 main.py --model improved_so_large_longer --img_size 512 1024 --dataset cityscapes --direction label2photo 
    --n_block 4 --n_flow 8 8 8 8 --do_lu --reg_factor 0.0001 --grad_checkpoint`  
 ### Arguments
-- `--model` indicates the name of the model  
+- `--model` indicates the name of the model 
+- `--dataset` determines which dataset to choose. Dataloaders for the Cityscapes, MNIST, and maps datasets are already implemented here
 - `--do_lu` enables the use of LU decomposition which has a noticeable effect on training time  
 - `--reg_factor` indicates the regularizer applied to the right-hand side of the objective function  
 - `--grad_checkpoint` enables use of [gradient checkpointing](https://github.com/cybertronai/gradient-checkpointing) which is needed here for training on larger images

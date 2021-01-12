@@ -105,19 +105,22 @@ To train a model on e.g. Cityscapes, one can run:
 `python3 main.py --model improved_so_large_longer --img_size 512 1024 --dataset cityscapes --direction label2photo 
    --n_block 4 --n_flow 8 8 8 8 --do_lu --reg_factor 0.0001 --grad_checkpoint`  
 ### Arguments
-- `--model` indicates the name of the model 
+- `--model` indicates the name of the model (should have 'improved' in the name to enable training Full-Glow)
 - `--dataset` determines which dataset to choose. Dataloaders for the Cityscapes, MNIST, and maps datasets are already implemented here
 - `--do_lu` enables the use of LU decomposition which has a noticeable effect on training time  
 - `--reg_factor` indicates the regularizer applied to the right-hand side of the objective function  
 - `--grad_checkpoint` enables use of [gradient checkpointing](https://github.com/cybertronai/gradient-checkpointing) which is needed here for training on larger images
 
-## Packages
+## Description of packages in the project
 - `data_handler` contains implementation of data loaders for different datasets
 - `evaluation` contains code for evaluating the models
 - `experiments` has code for experiments such as content transfer and sampling
 - `helper` contains implementation of helper functions for dealing with files, directories, saving/loading checkpoints etc.
 - `models` contains implementation of Full-Glow, DUAL-Glow, and C-Glow
 - `trainer` has implementation of the training loop and loss function
+
+## Checkpoints
+Checkpoints for all the Cityscapes models trained in this project (including C-Glow and DUAL-Glow) can be found here: https://kth.box.com/s/h3r9jt5pq8itrnkp0t2qy11pui7u6dmc
 
 
 ## Notes

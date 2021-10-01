@@ -125,3 +125,16 @@ Checkpoints for all the Cityscapes models trained in this project (including C-G
 
 ## Notes
 - My implementation of the baseline Glow borrows heavily from Kim Seonghyeon's helpful implementation: https://github.com/rosinality/glow-pytorch
+
+## Citation
+If you use our code or build on our method, please cite our paper:
+```
+@inproceedings{sorkhei2021full,
+  author={Sorkhei, Moein and Henter, Gustav Eje and Kjellstr{\"o}m, Hedvig},
+  title={Full-{G}low: {F}ully conditional {G}low for more realistic image generation},
+  booktitle={Proceedings of the DAGM German Conference on Pattern Recognition (GCPR)},
+  volume={43},
+  month={Oct.},
+  year={2021}
+}
+```

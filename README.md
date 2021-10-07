@@ -1,6 +1,6 @@
 # Full-Glow
 This repo contains the implementation of *Full-Glow: Fully conditional Glow for more realistic image generation*:
-[https://arxiv.org/abs/2012.05846](https://arxiv.org/abs/2012.05846).
+[https://arxiv.org/abs/2012.05846](https://arxiv.org/abs/2012.05846). A short presentation of the work could be seen [here](https://www.youtube.com/watch?v=lbvYIJIczjU).
 
 Full-Glow extends on previous Glow-based models for conditional image generation by applying conditioning to all Glow operations 
 using appropriate conditioning networks. It was applied to the [Cityscapes](https://www.cityscapes-dataset.com/) dataset (label &#8594; photo) for synthesizing street-scene images.
